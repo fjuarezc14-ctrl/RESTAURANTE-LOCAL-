@@ -1,0 +1,19 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Instalar dependencias del sistema para Prisma
+RUN apk add --no-cache openssl
+
+COPY package.json ./
+RUN npm install
+
+# Copiar el schema de Prisma para generar el cliente
+COPY prisma ./prisma
+RUN npx prisma generate
+
+COPY . .
+
+EXPOSE 3010
+
+CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]

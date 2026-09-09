@@ -1,0 +1,239 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// USUARIOS Y ROLES
+// ============================================================
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  rol       String   // "Administrador", "Cajero", "Mozo", "Cocinero"
+  pin       String
+  permisos  String[] // ["Dashboard", "Salon", "Cocina", "Barra", "Caja", ...]
+  activo    Boolean  @default(true)
+  creadoEn  DateTime @default(now())
+}
+
+// ============================================================
+// CLIENTES CON CRÉDITO
+// ============================================================
+model Cliente {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  tipoDoc     String   @default("DNI") // "DNI" | "RUC"
+  numDoc      String?
+  telefono    String?
+  direccion   String?
+  esTrabajador Boolean @default(false) // true si es personal interno
+  usuarioId   Int?     // Si esTrabajador, referencia al Usuario
+  activo      Boolean  @default(true)
+  creadoEn    DateTime @default(now())
+
+  AbonosCredito AbonoCredito[]
+}
+
+// ============================================================
+// ABONOS A CRÉDITOS
+// ============================================================
+model AbonoCredito {
+  id          Int      @id @default(autoincrement())
+  cliente     Cliente  @relation(fields: [clienteId], references: [id])
+  clienteId   Int
+  monto       Float
+  metodoPago  String   @default("Efectivo") // "Efectivo" | "Tarjeta" | "Yape" | "Mixto"
+  montoEfectivo Float  @default(0)
+  montoTarjeta  Float  @default(0)
+  montoYape     Float  @default(0)
+  registradoPor String
+  nota        String?
+  creadoEn    DateTime @default(now())
+
+  @@index([clienteId])
+  @@index([creadoEn])
+}
+
+// ============================================================
+// CARTA / PRODUCTOS
+// ============================================================
+model Producto {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  categoria String   // "Pollos a la Brasa", "Parrillas y Cortes", "Porciones y Piqueos", "Parrilladas Mixtas", "Platos Criollos", "Tallarines Verdes", "Ensaladas", "Guarniciones", "Combos", "Bebidas y Refrescos", "Cervezas", "Bar y Cocteles", "Postres"
+  precio    Float
+  tipoStock String   @default("ilimitado") // "ilimitado" | "limitado"
+  stock     Int      @default(0)
+  activo    Boolean  @default(true)
+  requiereGuarnicion Boolean @default(false)
+  opcionesConfig String? // JSON con pasos de opciones/combos: [{"name": "...", "key": "...", "options": [...]}]
+  creadoEn  DateTime @default(now())
+  
+  ItemPedido ItemPedido[]
+}
+
+// ============================================================
+// MESAS Y PEDIDOS
+// ============================================================
+model Mesa {
+  id      Int      @id @default(autoincrement())
+  numero  Int      @unique
+  estado  String   @default("Libre") // "Libre", "Cocina", "Servido"
+  
+  Pedidos Pedido[]
+}
+
+model Pedido {
+  id        Int          @id @default(autoincrement())
+  mesa      Mesa?        @relation(fields: [mesaId], references: [id], onDelete: SetNull)
+  mesaId    Int?         // Opcional: null para pedidos de delivery
+  mesero    String
+  estado          String       @default("Cocina") // "Cocina", "Servido", "Cobrado", "Cancelado"
+  estadoEnsalada  String       @default("No Aplica") // "Pendiente", "Listo", "No Aplica"
+  total           Float
+  adicional       Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+
+  // --- Delivery / PedidosYa ---
+  tipoEntrega      String    @default("salon")  // "salon" | "llevar"
+  codigoPedidosYa  String?                      // "FG-4821"
+
+  // --- Auditoría de cancelación ---
+  canceladoPor   String?
+  motivoCancela  String?
+  canceladoEn    DateTime?
+
+  items  ItemPedido[]
+  Venta  Venta?
+
+  @@index([mesaId, estado])
+  @@index([createdAt])
+  @@index([estado])
+}
+
+model ItemPedido {
+  id         Int      @id @default(autoincrement())
+  pedido     Pedido   @relation(fields: [pedidoId], references: [id])
+  pedidoId   Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+  productoId Int
+  nombre     String   // Guardamos el nombre al momento de la venta
+  precio     Float
+  cantidad   Int
+  historial  Boolean  @default(false)
+  entregado  Boolean  @default(false)
+  notas      String?
+
+  @@index([pedidoId])
+  @@index([productoId])
+}
+
+// ============================================================
+// VENTAS / CAJA
+// ============================================================
+model Venta {
+  id              Int      @id @default(autoincrement())
+  pedido          Pedido   @relation(fields: [pedidoId], references: [id])
+  pedidoId        Int      @unique
+  tipoComprobante String   // "Boleta", "Factura", "Ticket"
+  numDocumento    String?  // DNI o RUC del cliente
+  nombreCliente   String?
+  clienteDireccion String?
+  total           Float
+  igv             Float
+  subtotal        Float
+  metodoPago      String   @default("Efectivo") // "Efectivo", "Tarjeta", "Yape", "PedidosYa", "Crédito", "Mixto"
+  montoEfectivo   Float    @default(0)
+  montoTarjeta    Float    @default(0)
+  montoYape       Float    @default(0)
+  montoCredito    Float    @default(0) // Monto cargado a crédito
+  clienteCreditoId Int?    // Cliente al que se le cargó el crédito
+  estadoNubefact  String   @default("PENDIENTE") // Obsoleto (usar estadoSunat en su lugar)
+  estadoSunat     String   @default("PENDIENTE")
+  serie           String?  // "F001" o "B001"
+  numero          Int?     // Número correlativo asignado
+  urlPdf          String?  // Enlace del PDF del comprobante
+  urlXml          String?  // Enlace del XML del comprobante
+  // --- Ofertas / Descuentos ---
+  ofertaDescripcion  String?  // Nombre de la oferta aplicada, si hubo
+  descuentoAplicado  Float    @default(0) // Monto total descontado en esta venta
+  // --- Anulación / Devolución ---
+  anulado            Boolean   @default(false)
+  motivoAnulacion    String?
+  anuladoPor         String?
+  anuladoEn          DateTime?
+  montoOriginal      Float?    // Guarda el monto cobrado originalmente antes de ser devuelto
+  createdAt          DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([estadoSunat])
+  @@index([metodoPago])
+}
+
+// ============================================================
+// COMPRAS / GASTOS (RCE - SUNAT)
+// ============================================================
+model Compra {
+  id             Int       @id @default(autoincrement())
+  fecha          DateTime  @default(now())
+  proveedor      String
+  ruc            String?
+  tipoDocumento  String    @default("Factura") // "Factura", "Boleta", "Nota de Crédito", "Nota de Débito"
+  serieNumero    String?
+  baseImponible  Float
+  igv            Float
+  total          Float
+  xmlData        String?
+  origenCarga    String    @default("manual") // "xml", "manual", "sunat"
+  categoria      String?   // "Insumos y Alimentos", "Bebidas", "Gas y Carbón", "Limpieza e Higiene", "Personal", "Otros"
+  fechaEmision   DateTime? // Fecha real de la factura emitida por el proveedor
+  urlPdf         String?   // URL de descarga del PDF desde apisunat.pe
+  urlXml         String?   // URL de descarga del XML desde apisunat.pe
+  metodoPago     String    @default("Efectivo") // "Efectivo", "Tarjeta", "Yape", "Crédito", "Mixto"
+  creadoEn       DateTime  @default(now())
+
+  @@index([fecha])
+  @@index([fechaEmision])
+}
+
+// ============================================================
+// OFERTAS POR TEMPORADA
+// ============================================================
+model Oferta {
+  id              Int      @id @default(autoincrement())
+  nombre          String   // "Día del Maestro - 20% Bebidas"
+  descripcion     String?
+  tipoDescuento   String   // "porcentaje" | "monto_fijo"
+  valorDescuento  Float    // ej. 20.0 para 20%, o 5.0 para S/5 fijo
+  categorias      String[] // Categorías afectadas, ej. ["Bebidas y Refrescos"]
+  activa          Boolean  @default(false)
+  fechaInicio     DateTime?
+  fechaFin        DateTime?
+  creadoPor       String
+  creadoEn        DateTime @default(now())
+}
+
+// ============================================================
+// CONFIGURACIÓN DINÁMICA DE LA EMPRESA
+// ============================================================
+model EmpresaConfig {
+  id           Int      @id @default(autoincrement())
+  name         String   @default("Valetec Gourmet")
+  brandShort   String   @default("VALETEC GOURMET")
+  tagline      String   @default("Sistema Gastronómico & Punto de Venta")
+  legalName    String   @default("VALETEC GOURMET S.A.C.")
+  ruc          String   @default("20600000001")
+  address      String   @default("Av. Principal 123")
+  phone        String   @default("987-654-321")
+  email        String   @default("contacto@valetecgourmet.pe")
+  ticketFooter String   @default("¡Gracias por su preferencia! · VALETEC GOURMET")
+  tipoNegocio  String   @default("restaurante") // "polleria" | "restaurante" | "bar" | "pizzeria" | "cafeteria"
+  barraCategorias String[] @default(["Bebidas y Refrescos", "Cervezas", "Bar y Cocteles", "Postres", "Bebidas"])
+  updatedAt    DateTime @updatedAt
+}

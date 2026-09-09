@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  --color-brand-primary: #06b6d4;
+  --color-brand-dark: #0f172a;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-100 antialiased font-sans;
+  }
+}
+
+@layer components {
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+  /* Scrollbar siempre visible en tablas horizontales */
+  .table-scroll { overflow-x: auto; overflow-y: visible; }
+  .table-scroll::-webkit-scrollbar { width: 6px; height: 8px; }
+  .table-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+  .table-scroll::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
+  .table-scroll::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+  .sidebar-item { @apply transition-all duration-200 rounded-xl mx-3 my-1; }
+  .sidebar-item:hover { @apply bg-white/10 text-white; }
+  .sidebar-active { @apply !bg-sky-500 !text-slate-950 !font-black shadow-lg shadow-sky-500/20; }
+
+  /* Rejilla de mesas responsive adaptativa */
+  .grid-mesas-dinamico {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+  @media (min-width: 640px) {
+    .grid-mesas-dinamico {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    }
+  }
+  @media (min-width: 1024px) {
+    .grid-mesas-dinamico {
+      grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    }
+  }
+}
+
+@layer utilities {
+  .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+  .animate-fade-in { animation: fadeIn 0.2s ease-out; }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+}

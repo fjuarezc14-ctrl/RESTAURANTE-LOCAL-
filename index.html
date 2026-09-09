@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VALETEC GOURMET - Sistema POS</title>
+    <script>
+      (function() {
+        function generateUUID() {
+          return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, function(c) {
+            var r = (typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(1))[0] : Math.floor(Math.random() * 256));
+            return (+c ^ (r & (15 >> (+c / 4)))).toString(16);
+          });
+        }
+        var targets = [typeof globalThis !== 'undefined' ? globalThis : null, typeof window !== 'undefined' ? window : null, typeof self !== 'undefined' ? self : null];
+        targets.forEach(function(t) {
+          if (t) {
+            if (!t.crypto) t.crypto = {};
+            if (typeof t.crypto.randomUUID !== 'function') {
+              try { Object.defineProperty(t.crypto, 'randomUUID', { value: generateUUID, configurable: true, writable: true }); } catch(e) { t.crypto.randomUUID = generateUUID; }
+            }
+          }
+        });
+        if (typeof Crypto !== 'undefined' && Crypto.prototype && typeof Crypto.prototype.randomUUID !== 'function') {
+          try { Object.defineProperty(Crypto.prototype, 'randomUUID', { value: generateUUID, configurable: true, writable: true }); } catch(e) {}
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
