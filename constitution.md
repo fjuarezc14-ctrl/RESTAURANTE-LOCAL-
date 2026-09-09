@@ -25,5 +25,13 @@
 
 ## 5. Control de Versiones 
 * Los mensajes de commit deben seguir la convención internacional "Conventional Commits".
-* Utiliza prefijos claros para cada cambio (ej. feat: agrega módulo de biometría, fix: corrige envío doble de WhatsApp, docs: actualiza manual de usuario).
+* Utiliza prefijos claros para cada cambio (ej. `feat: agrega módulo de biometría`, `fix: corrige envío doble de WhatsApp`, `docs: actualiza manual de usuario`).
 * Escribe los mensajes de commit de forma clara, directa y en tiempo presente.
+* **REGLA OBLIGATORIA E INQUEBRANTABLE - PROHIBIDO PUSH A MAIN**: En ningún momento ni bajo ninguna circunstancia el agente ejecutará `git push` hacia la rama `main` (ni a repositorios remotos) sin la orden y autorización explícita y directa del usuario.
+
+## 6. Stack Tecnológico Oficial
+* **Frontend**: React 19, Vite, Tailwind CSS v4, Lucide React, React Router 7.
+* **Backend**: Node.js (Express), Prisma ORM.
+* **Base de Datos**: PostgreSQL (consultas gestionadas con Prisma ORM parametrizado).
+* **Contenedores**: Docker & Docker Compose.
+

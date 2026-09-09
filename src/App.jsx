@@ -54,10 +54,6 @@ const LoginGate = ({ onLoginSuccess }) => {
     setPin(prev => prev.slice(0, -1));
   };
 
-  const handleClear = () => {
-    setPin('');
-  };
-
   const handleSubmit = async () => {
     if (pin.length !== 4) {
       setError('El PIN debe tener 4 dígitos');
@@ -155,12 +151,7 @@ const LoginGate = ({ onLoginSuccess }) => {
                 {num}
               </button>
             ))}
-            <button 
-              onClick={handleClear}
-              className="aspect-square bg-slate-800/30 hover:bg-slate-800 text-slate-400 hover:text-white font-bold text-xs rounded-2xl transition-all active:scale-95 flex items-center justify-center uppercase tracking-wider border border-slate-800"
-            >
-              Borrar
-            </button>
+            <div className="aspect-square pointer-events-none" />
             <button 
               onClick={() => handleKeyPress(0)}
               className="aspect-square bg-slate-800/80 hover:bg-slate-750 hover:border-cyan-400/50 text-white font-black text-2xl rounded-2xl border border-slate-700/80 transition-all active:scale-90 flex items-center justify-center shadow-md hover:shadow-cyan-400/20"
@@ -171,8 +162,9 @@ const LoginGate = ({ onLoginSuccess }) => {
               onClick={handleBackspace}
               className="aspect-square bg-slate-800/30 hover:bg-slate-800 text-slate-400 hover:text-white font-bold text-xs rounded-2xl transition-all active:scale-95 flex items-center justify-center uppercase tracking-wider border border-slate-800"
             >
-              Del
+              Borrar
             </button>
+
           </div>
         </div>
 
