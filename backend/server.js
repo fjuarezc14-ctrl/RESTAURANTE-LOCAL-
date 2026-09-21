@@ -1807,6 +1807,12 @@ app.post('/api/pedidos/llevar', async (req, res) => {
     let grandTotal = finalMetodoPago === 'Cortesía' ? 0.00 : (totalConDescuento + shippingFee);
     const descuentoFinal = finalMetodoPago === 'Cortesía' ? itemsBruto : descuentoMonto;
 
+    // Validar crédito antes de crear el pedido para no dejar comandas huérfanas sin venta
+    const tieneCredito = finalMetodoPago === 'Crédito' || (finalMetodoPago === 'Mixto' && parseFloat(montoCredito || 0) > 0);
+    if (tieneCredito && !clienteCreditoId) {
+      return res.status(400).json({ error: 'Debe seleccionar un cliente para registrar la venta a crédito.' });
+    }
+
     const expandedItems = await expandPedidoItemsForDb(items);
     const finalEstadoEnsalada = await evaluarEstadoEnsalada(items);
 
@@ -1837,7 +1843,7 @@ app.post('/api/pedidos/llevar', async (req, res) => {
     for (const item of items) {
       await prisma.producto.updateMany({
         where: { id: parseInt(item.id), tipoStock: 'limitado' },
-        data: { stock: { decrement: parseInt(item.cant) } },
+        data: { stock: { decrement: parseInt(item.cant || item.cantidad || 1) } },
       });
     }
 
@@ -1877,11 +1883,12 @@ app.post('/api/pedidos/llevar', async (req, res) => {
 
     // Calcular correlativo para apisunat.pe si es Boleta o Factura
     const finalTipoComprobante = tipoComprobante || 'Ticket';
-    const { serie, numero } = await obtenerSiguienteSerieYNumero(finalTipoComprobante);
-
     const initEstadoSunat = (finalTipoComprobante === 'Boleta' || finalTipoComprobante === 'Factura') ? 'PENDIENTE' : 'NO_APLICA';
 
-    let venta = await prisma.venta.create({
+    // Correlativo y venta en la misma transacción para que el bloqueo por serie sea efectivo
+    let venta = await prisma.$transaction(async (tx) => {
+      const { serie, numero } = await obtenerSiguienteSerieYNumero(finalTipoComprobante, tx);
+      return tx.venta.create({
       data: {
         pedidoId: pedido.id,
         tipoComprobante: finalTipoComprobante,
@@ -1904,6 +1911,7 @@ app.post('/api/pedidos/llevar', async (req, res) => {
         descuentoAplicado: descuentoFinal,
         ofertaDescripcion: descuentoFinal > 0 ? (descuentoDescripcion || `Descuento manual ${descPct}%`) : null,
       },
+      });
     });
 
     let apisunatResponse = null;
@@ -2897,6 +2905,7 @@ app.patch('/api/ventas/:ventaId/datos-cliente', async (req, res) => {
           const isFactura = tipoComprobante === 'Factura';
           const serieDefault = isFactura ? (process.env.SERIE_FACTURA || 'F001') : (process.env.SERIE_BOLETA || 'B001');
           const minCorrelativo = isFactura ? 2 : 0; // Factura inicia en F001-0003, Boleta en B001-0001
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${serieDefault}))`;
 
           const ultimaVenta = await tx.venta.findFirst({
             where: { tipoComprobante, serie: serieDefault, numero: { not: null } },
@@ -4315,6 +4324,11 @@ async function obtenerSiguienteSerieYNumero(tipoComprobante, txPrisma = prisma) 
   const minCorrelativo = isFactura
     ? parseInt(process.env.ULTIMO_CORRELATIVO_FACTURA || '2')
     : parseInt(process.env.ULTIMO_CORRELATIVO_BOLETA || '0');
+
+  // Bloqueo por serie hasta el fin de la transacción: evita correlativos duplicados en cobros simultáneos
+  if (txPrisma !== prisma) {
+    await txPrisma.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${serieDefault}))`;
+  }
 
   const ultimaVenta = await txPrisma.venta.findFirst({
     where: { tipoComprobante, serie: serieDefault, numero: { not: null } },
