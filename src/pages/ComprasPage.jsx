@@ -580,6 +580,8 @@ export default function ComprasPage() {
 
     const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
     const marca = (COMPANY_CONFIG.brandShort || 'EMPRESA').replace(/\s+/g, '_');
     a.download = `Control_Caja_Borrador_${fechaDesde}_${marca}.xls`;
     a.click();
