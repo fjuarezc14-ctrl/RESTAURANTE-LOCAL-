@@ -2,7 +2,7 @@
 # ============================================================
 # GENERA EL INSTALADOR WINDOWS: installer/dist/ValetecPOS-Setup-<version>.exe
 # Requisitos (Linux): node, npm, curl, unzip, docker (para NSIS)
-# Uso: ./installer/build.sh
+# Uso: ./installer/build.sh [cliente]   (cliente = carpeta en installer/clientes/, ej. la-carreta)
 # ============================================================
 set -euo pipefail
 
@@ -17,6 +17,14 @@ CACHE="$INST/cache"
 STAGE="$INST/build/stage"
 OUT="$INST/dist"
 VERSION="$(node -p "require('$REPO/package.json').version")"
+CLIENTE="${1:-}"
+CLIENTE_DIR="$INST/clientes/$CLIENTE"
+if [ -n "$CLIENTE" ] && [ ! -f "$CLIENTE_DIR/cliente.json" ]; then
+  echo "❌ No existe $CLIENTE_DIR/cliente.json"; exit 1
+fi
+SUFIJO="${CLIENTE:+-$CLIENTE}"
+LOGO="public/logo.png"
+[ -n "$CLIENTE" ] && [ -f "$CLIENTE_DIR/logo.png" ] && LOGO="installer/clientes/$CLIENTE/logo.png"
 
 mkdir -p "$CACHE" "$OUT"
 
@@ -48,6 +56,12 @@ rm -rf "$STAGE/pgsql/share/doc"
 echo "🏗️  Compilando frontend..."
 (cd "$REPO" && npm ci --silent && npx vite build --logLevel warn)
 cp -r "$REPO/dist" "$STAGE/app/dist"
+# Marca del cliente: el logo reemplaza al genérico (mismo nombre de archivo) y el título de la pestaña
+if [ -n "$CLIENTE" ]; then
+  for f in "$STAGE/app/dist/logo.png" "$STAGE"/app/dist/assets/logo-*.png; do cp "$REPO/$LOGO" "$f"; done
+  NOMBRE="$(node -p "require('$CLIENTE_DIR/cliente.json').empresa.name")"
+  sed -i "s#<title>.*</title>#<title>$NOMBRE - Sistema POS</title>#" "$STAGE/app/dist/index.html"
+fi
 
 # 4. Backend con motores de Prisma para Windows
 echo "📦 Empaquetando backend..."
@@ -73,6 +87,32 @@ cp "$INST/setup/setup.js" "$INST/setup/uninstall.js" "$STAGE/setup/"
 cp "$CACHE/winsw.exe" "$STAGE/setup/ValetecPOS-App.exe"
 cp "$CACHE/vc_redist.x64.exe" "$STAGE/setup/"
 
+# Usuarios del cliente con PINs aleatorios. Se guardan en pins.local.json (fuera de git) y se
+# reutilizan en cada build para que las credenciales entregadas no cambien.
+if [ -n "$CLIENTE" ]; then
+  node - "$CLIENTE_DIR" "$STAGE/setup/cliente.json" "$OUT/CREDENCIALES$SUFIJO.txt" <<'NODE'
+const fs = require('fs'), crypto = require('crypto');
+const [dir, outJson, outTxt] = process.argv.slice(2);
+const cliente = JSON.parse(fs.readFileSync(`${dir}/cliente.json`, 'utf8'));
+const pinsFile = `${dir}/pins.local.json`;
+const pins = fs.existsSync(pinsFile) ? JSON.parse(fs.readFileSync(pinsFile, 'utf8')) : {};
+const usados = new Set(Object.values(pins));
+const trivial = (p) => /^(\d)\1{3}$/.test(p) || '0123456789'.includes(p) || '9876543210'.includes(p);
+for (const u of cliente.usuarios) {
+  while (!pins[u.nombre]) {
+    const p = String(crypto.randomInt(1000, 10000));
+    if (!usados.has(p) && !trivial(p)) { pins[u.nombre] = p; usados.add(p); }
+  }
+  u.pin = pins[u.nombre];
+}
+fs.writeFileSync(pinsFile, JSON.stringify(pins, null, 2));
+fs.writeFileSync(outJson, JSON.stringify(cliente, null, 2));
+const filas = cliente.usuarios.map((u) => `  ${u.nombre.padEnd(16)} ${u.rol.padEnd(14)} PIN: ${u.pin}`);
+fs.writeFileSync(outTxt, [`CREDENCIALES INICIALES - ${cliente.empresa.name}`, '', ...filas, '',
+  'Cambia los PINs y los nombres en el menú Usuarios después de instalar.', ''].join('\r\n'));
+NODE
+fi
+
 # 6. Ofuscación del código propio (solo en la copia empaquetada, el repo no se toca)
 echo "🔒 Ofuscando código..."
 OBF="npx --yes javascript-obfuscator@$OBFUSCATOR_VERSION"
@@ -91,11 +131,11 @@ done
 echo "🔨 Generando instalador..."
 docker run --rm -v "$REPO:/w" -w /w debian:stable-slim sh -c "
   apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nsis imagemagick >/dev/null 2>&1 &&
-  convert public/logo.png -resize 256x256 -background none -gravity center -extent 256x256 \
+  convert $LOGO -resize 256x256 -background none -gravity center -extent 256x256 \
     -define icon:auto-resize=256,64,48,32,16 installer/build/stage/setup/icon.ico &&
   makensis -V2 -DSTAGE=/w/installer/build/stage -DVERSION=$VERSION \
-    -DOUTFILE=/w/installer/dist/ValetecPOS-Setup-$VERSION.exe installer/valetec.nsi &&
+    -DOUTFILE=/w/installer/dist/ValetecPOS-Setup-$VERSION$SUFIJO.exe installer/valetec.nsi &&
   chown $(id -u):$(id -g) installer/build/stage/setup/icon.ico installer/dist/*.exe"
 
-ls -lh "$OUT/ValetecPOS-Setup-$VERSION.exe"
+ls -lh "$OUT/ValetecPOS-Setup-$VERSION$SUFIJO.exe"
 echo "✅ Instalador listo."

@@ -16,6 +16,7 @@ const BACKEND_DIR = path.join(ROOT, 'app', 'backend');
 const LOGS_DIR = path.join(ROOT, 'logs');
 const ENV_FILE = path.join(BACKEND_DIR, '.env');
 const NODE_EXE = process.execPath;
+const CLIENTE_JSON = path.join(__dirname, 'cliente.json'); // datos y PINs del cliente (solo si el build fue de un cliente)
 
 const PG_PORT = 5446;
 const APP_PORT = 5188;
@@ -184,10 +185,16 @@ async function main() {
   // 5. Datos iniciales solo si la base está vacía (nunca borra ventas existentes)
   const usuarios = parseInt(psql(password, 'SELECT count(*) FROM "Usuario"', DB_NAME), 10);
   const ventas = parseInt(psql(password, 'SELECT count(*) FROM "Venta"', DB_NAME), 10);
+  const hayCliente = fs.existsSync(CLIENTE_JSON);
   if (usuarios === 0 && ventas === 0) {
-    log('Base vacía: creando administrador (PIN 1234), 12 mesas y configuración inicial...');
-    run(NODE_EXE, [path.join(BACKEND_DIR, 'prisma', 'seed-clean.js')], { cwd: BACKEND_DIR, env: prismaEnv });
+    log('Base vacía: creando usuarios, 12 mesas y configuración inicial de la empresa...');
+    run(NODE_EXE, [path.join(BACKEND_DIR, 'prisma', 'seed-clean.js')], {
+      cwd: BACKEND_DIR,
+      env: { ...prismaEnv, ...(hayCliente ? { SEED_CLIENTE_JSON: CLIENTE_JSON } : {}) },
+    });
   }
+  // Los PINs no deben quedar en disco después de crear los usuarios
+  fs.rmSync(CLIENTE_JSON, { force: true });
 
   // 6. Servicio de la aplicación (se reinstala para tomar la nueva versión)
   const winsw = path.join(__dirname, `${APP_SERVICE}.exe`);
@@ -220,7 +227,9 @@ async function main() {
     `Caja (esta PC):   ${urls[0]}`,
     ...urls.slice(1).map((u) => `Celulares mozos:  ${u}`),
     '',
-    'PIN inicial del administrador: 1234 (cámbialo en Usuarios)',
+    hayCliente
+      ? 'PINs de acceso: según las credenciales entregadas por VT VALETEC'
+      : 'PIN inicial del administrador: 1234 (cámbialo en Usuarios)',
     '',
   ].join(os.EOL));
 

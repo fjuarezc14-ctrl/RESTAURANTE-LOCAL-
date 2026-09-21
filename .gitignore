@@ -9,3 +9,4 @@ scratch/
 installer/cache/
 installer/build/
 installer/dist/
+installer/clientes/*/pins.local.json

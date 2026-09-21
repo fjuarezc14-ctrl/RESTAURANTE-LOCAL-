@@ -1,0 +1,18 @@
+{
+  "empresa": {
+    "name": "La Carreta Chifa Pollería",
+    "brandShort": "LA CARRETA",
+    "tagline": "Chifa Pollería",
+    "legalName": "LA CARRETA CHIFA POLLERÍA",
+    "tipoNegocio": "polleria",
+    "ticketFooter": "¡Gracias por su preferencia! · LA CARRETA"
+  },
+  "usuarios": [
+    { "nombre": "Administrador", "rol": "Administrador" },
+    { "nombre": "Cajero", "rol": "Cajero" },
+    { "nombre": "Mozo 1", "rol": "Mozo" },
+    { "nombre": "Mozo 2", "rol": "Mozo" },
+    { "nombre": "Mozo 3", "rol": "Mozo" },
+    { "nombre": "Cocina", "rol": "Cocinero" }
+  ]
+}
