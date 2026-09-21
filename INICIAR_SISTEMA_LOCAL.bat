@@ -82,8 +82,17 @@ if "%opt%"=="1" (
     exit /b 0
 )
 if "%opt%"=="2" (
+    echo.
+    echo  [!] ATENCION: esto BORRA todas las ventas, pedidos, compras, clientes y la carta.
+    set "confirm="
+    set /p "confirm= Escribe BORRAR para continuar: "
+    if /i not "!confirm!"=="BORRAR" (
+        echo Operacion cancelada.
+        pause
+        exit /b 0
+    )
     echo Inicializando base de datos limpia...
-    docker exec restaurante-local-backend-1 npm run db:setup
+    docker exec restaurante-local-backend-1 npx prisma migrate deploy
     docker exec restaurante-local-backend-1 npm run db:seed:clean
     echo Listo. Presiona una tecla para continuar...
     pause >nul
