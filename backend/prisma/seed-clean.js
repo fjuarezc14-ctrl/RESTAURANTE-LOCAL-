@@ -44,6 +44,8 @@ async function main() {
       activo: true,
     }
   });
+  // Sincronizar la secuencia del id: al insertar id=1 explícito, el siguiente empleado chocaría con id=1
+  await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"Usuario"', 'id'), (SELECT MAX(id) FROM "Usuario"))`);
 
   // 3. Mesas del Salón iniciales (12 mesas libres)
   console.log('🪑 Configurando 12 mesas en salón...');
