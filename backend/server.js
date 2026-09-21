@@ -1,9 +1,11 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const company = require('./config/company');
-require('dotenv').config();
 
 const app = express();
 const prisma = new PrismaClient();
@@ -4664,4 +4666,18 @@ async function procesarVentasPendientes() {
 
 // Iniciar worker de reintentos cada 5 minutos (300000ms)
 setInterval(procesarVentasPendientes, 300000);
+
+// ============================================================
+// FRONTEND COMPILADO (INSTALADOR WINDOWS)
+// Si existe la carpeta dist, el backend sirve la app en el mismo puerto.
+// En Docker/desarrollo no existe y Vite sirve el frontend.
+// ============================================================
+const FRONTEND_DIST = process.env.FRONTEND_DIST || path.join(__dirname, '..', 'dist');
+if (fs.existsSync(path.join(FRONTEND_DIST, 'index.html'))) {
+  app.use(express.static(FRONTEND_DIST));
+  app.get(/^\/(?!api\/).*/, (req, res) => {
+    res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
+  });
+  console.log(`🖥️ Sirviendo frontend desde ${FRONTEND_DIST}`);
+}
 

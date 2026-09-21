@@ -6,3 +6,6 @@ dist/
 scratch/
 .DS_Store
 *.log
+installer/cache/
+installer/build/
+installer/dist/
