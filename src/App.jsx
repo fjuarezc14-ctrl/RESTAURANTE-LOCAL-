@@ -39,6 +39,7 @@ const ProtectedRoute = ({ children, permission, currentUser }) => {
 // === LOGIN GATE (PANTALLA DE BLOQUEO PREMIUM POR PIN) ===
 const LoginGate = ({ onLoginSuccess }) => {
   const { empresa } = useCompany();
+  const [brandMain, brandHighlight] = splitBrand(empresa.brandShort);
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
@@ -96,13 +97,13 @@ const LoginGate = ({ onLoginSuccess }) => {
               <img 
                 src={logoUrl} 
                 className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 rounded-2xl border-2 border-slate-700/60 object-contain bg-white/95 p-2 shadow-2xl shadow-cyan-500/20 transform transition duration-300 hover:scale-105" 
-                alt="Valetec Gourmet" 
+                alt={empresa.name} 
               />
             </div>
             
             <h1 className="text-white font-black text-xl sm:text-2xl md:text-3xl tracking-wide uppercase leading-tight flex items-center justify-center gap-2">
-              <span className="text-white font-black tracking-wide">VALETEC</span>
-              <span className="text-cyan-400 font-extrabold tracking-widest">GOURMET</span>
+              <span className="text-white font-black tracking-wide">{brandMain}</span>
+              {brandHighlight && <span className="text-cyan-400 font-extrabold tracking-widest">{brandHighlight}</span>}
             </h1>
             <p className="text-[10px] sm:text-xs text-cyan-300 font-bold uppercase tracking-widest mt-1.5 sm:mt-2 bg-cyan-500/10 px-3.5 py-1 rounded-full border border-cyan-400/25">
               {empresa.tagline || 'Sistema Gastronómico & Punto de Venta'}
@@ -174,9 +175,17 @@ const LoginGate = ({ onLoginSuccess }) => {
 };
 
 // === COMPONENTS ===
+// Divide la marca para resaltar la última palabra (ej. "VALETEC GOURMET" → VALETEC + GOURMET)
+function splitBrand(brand) {
+  const words = String(brand || '').trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return [words[0] || '', ''];
+  return [words.slice(0, -1).join(' '), words[words.length - 1]];
+}
+
 const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
   const location = useLocation();
   const { empresa } = useCompany();
+  const [brandMain, brandHighlight] = splitBrand(empresa.brandShort);
 
   // Mapeo dinámico de permisos para visualización
   const menuItems = [
@@ -209,12 +218,12 @@ const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
             <img 
               src={logoUrl} 
               className="w-11 h-11 rounded-xl border border-slate-700/60 object-contain bg-white/95 p-1 shrink-0 shadow-lg shadow-cyan-500/20" 
-              alt="Valetec Gourmet" 
+              alt={empresa.name} 
             />
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-white font-black text-sm tracking-wide uppercase leading-none">VALETEC</span>
-                <span className="text-cyan-400 font-extrabold text-xs tracking-wider uppercase leading-none">GOURMET</span>
+                <span className="text-white font-black text-sm tracking-wide uppercase leading-none">{brandMain}</span>
+                {brandHighlight && <span className="text-cyan-400 font-extrabold text-xs tracking-wider uppercase leading-none">{brandHighlight}</span>}
               </div>
               <span className="text-[9px] font-bold text-slate-400 tracking-wider uppercase mt-1 leading-none">
                 POS & Restaurante

@@ -8,12 +8,16 @@ const CompanyContext = createContext({
   reloadEmpresa: async () => {},
 });
 
+// Los tickets y reportes leen COMPANY_CONFIG de forma estática: se sincroniza con los datos
+// guardados en Configuración para que impriman el nombre y RUC reales de la empresa
+const syncStaticConfig = (config) => Object.assign(DEFAULT_CONFIG, config);
+
 export const CompanyProvider = ({ children }) => {
   const [empresa, setEmpresa] = useState(() => {
     try {
       const stored = localStorage.getItem('cached_empresa_config');
       if (stored) {
-        return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
+        return syncStaticConfig({ ...DEFAULT_CONFIG, ...JSON.parse(stored) });
       }
     } catch (e) {
       // Usar defaults si falla el parseo
@@ -39,7 +43,9 @@ export const CompanyProvider = ({ children }) => {
           legalName: data.legalName || DEFAULT_CONFIG.legalName,
           ticketFooter: data.ticketFooter || DEFAULT_CONFIG.ticketFooter,
         };
-        setEmpresa(merged);
+        syncStaticConfig(merged);
+        setEmpresa({ ...merged });
+        document.title = `${merged.name} - Sistema POS`;
         localStorage.setItem('cached_empresa_config', JSON.stringify(merged));
       }
     } catch (err) {

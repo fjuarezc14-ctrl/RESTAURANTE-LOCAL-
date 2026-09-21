@@ -60,8 +60,7 @@ export const TIPOS_NEGOCIO = [
 
 export const COMPANY_CONFIG = {
   name: "Valetec Gourmet",
-  brandShort: "VALETEC",
-  brandHighlight: "GOURMET",
+  brandShort: "VALETEC GOURMET",
   tagline: "Sistema Gastronómico & Punto de Venta",
   legalName: "VALETEC GOURMET S.A.C.",
   ruc: "20600000001",
