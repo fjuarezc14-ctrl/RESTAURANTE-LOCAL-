@@ -49,7 +49,8 @@ async function apiRequest(endpoint, options = {}) {
     }
 
     if (!isJson) {
-      return null;
+      console.warn(`API ${endpoint}: respuesta no-JSON recibida.`);
+      return [];
     }
 
     return response.json();

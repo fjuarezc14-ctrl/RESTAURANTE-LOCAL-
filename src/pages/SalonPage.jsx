@@ -430,20 +430,25 @@ export default function SalonPage({ currentUser }) {
       }
     }
 
-    // 2. Variantes agrupadas
+    // 2. Variantes agrupadas de carne (Tallarines Verdes)
     if (prod.esAgrupado && Array.isArray(prod.variantes)) {
       return [{
         name: "Elige la Variante de Carne",
         key: "producto_variante",
         options: prod.variantes.map(v => ({
-          label: `${v.nombre.replace(/tallarines verdes (con )?/i, 'Con ')} (S/ ${v.precio.toFixed(2)})`,
+          label: `${v.nombre.replace(/tallar[ií]n(es)?\s+verde(s)?\s*(con\s*)?/i, 'Con ')} (S/ ${v.precio.toFixed(2)})`,
           value: v
         }))
       }];
     }
 
-    // 3. Categoría Menú: Entrada primero, luego Bebida (fallback si no tiene opcionesConfig personalizado)
-    if (isMenuProduct(prod)) {
+    // 3. Si el plato NO requiere guarnición explícitamente, NO genera pasos forzados. Directo al ticket!
+    if (prod.requiereGuarnicion === false && !prod.opcionesConfig) {
+      return [];
+    }
+
+    // 4. Categoría Menú (fallback legacy solo si requiereGuarnicion es true)
+    if (isMenuProduct(prod) && prod.requiereGuarnicion) {
       return [
         {
           name: "Elige la Entrada",
@@ -468,9 +473,9 @@ export default function SalonPage({ currentUser }) {
       ];
     }
 
-    // 4. Combos demo (fallback legacy)
+    // 5. Combos demo (fallback legacy solo si requiereGuarnicion es true)
     const combo = getComboConfig(prod.nombre);
-    if (combo) {
+    if (combo && prod.requiereGuarnicion) {
       const baseSteps = [];
       const config = combo.config;
       const fondoOptions = config.fondoOptions || [];
@@ -513,9 +518,9 @@ export default function SalonPage({ currentUser }) {
       return baseSteps;
     }
 
-    // 5. Categoría Combos (fallback si no tiene opcionesConfig personalizado)
+    // 6. Categoría Combos (fallback si requiereGuarnicion es true)
     const isCombo = String(prod.categoria || '').toLowerCase() === 'combos' || String(prod.nombre || '').toLowerCase().includes('combo');
-    if (isCombo) {
+    if (isCombo && prod.requiereGuarnicion) {
       return [
         {
           name: "Elige la Guarnición del Combo",
@@ -540,24 +545,37 @@ export default function SalonPage({ currentUser }) {
       ];
     }
 
-    // 6. NINGÚN OTRO PLATO TIENE PREGUNTAS FORZADAS. Se agrega directo al ticket!
+    // NINGÚN OTRO PLATO TIENE PREGUNTAS FORZADAS. Se agrega directo al ticket!
     return [];
   };
 
   const agregarAlTicket = (prod) => {
-    const hasDynamicOptions = !!prod.opcionesConfig;
-    const isMenu = isMenuProduct(prod);
-    const isCombo = String(prod.categoria || '').toLowerCase() === 'combos' || String(prod.nombre || '').toLowerCase().includes('combo');
-    const hasComboConfig = !!getComboConfig(prod.nombre);
-    const isVirtualGroup = prod.esAgrupado;
+    if (!prod) return;
 
-    if (hasDynamicOptions || isMenu || isCombo || hasComboConfig || isVirtualGroup) {
-      setSelectedProduct(prod);
-      setCurrentStepIdx(0);
-      setSelections({});
-      setAdditionalNotes('');
-      setOptionsModalOpen(true);
-      return;
+    const hasDynamicOptions = !!prod.opcionesConfig && (() => {
+      try {
+        const p = typeof prod.opcionesConfig === 'string' ? JSON.parse(prod.opcionesConfig) : prod.opcionesConfig;
+        return Array.isArray(p) && p.length > 0;
+      } catch { return false; }
+    })();
+
+    const isVirtualGroup = !!prod.esAgrupado;
+    const hasLegacyCombo = !prod.opcionesConfig && prod.requiereGuarnicion && !!getComboConfig(prod.nombre);
+    const isLegacyMenu = !prod.opcionesConfig && prod.requiereGuarnicion && isMenuProduct(prod);
+    const isLegacyCategoryCombo = !prod.opcionesConfig && prod.requiereGuarnicion && (
+      String(prod.categoria || '').toLowerCase() === 'combos' || String(prod.nombre || '').toLowerCase().includes('combo')
+    );
+
+    if (hasDynamicOptions || isVirtualGroup || hasLegacyCombo || isLegacyMenu || isLegacyCategoryCombo) {
+      const steps = getProductSteps(prod, {});
+      if (steps && steps.length > 0) {
+        setSelectedProduct(prod);
+        setCurrentStepIdx(0);
+        setSelections({});
+        setAdditionalNotes('');
+        setOptionsModalOpen(true);
+        return;
+      }
     }
     
     agregarAlTicketDirecto(prod, '');
@@ -568,9 +586,12 @@ export default function SalonPage({ currentUser }) {
       let nuevosItems = [...prevItems];
       const index = nuevosItems.findIndex(t => String(t.id) === String(prod.id) && !t.yaEnviado && t.notas === notas);
       
-      const cantEnTicket = index >= 0 ? nuevosItems[index].cant : 0;
+      // Contabilizar la cantidad total de este producto en el ticket actual (evita fuga de stock con notas distintas)
+      const cantTotalEnTicket = nuevosItems
+        .filter(t => String(t.id) === String(prod.id) && !t.yaEnviado)
+        .reduce((sum, item) => sum + item.cant, 0);
       
-      if (prod.tipoStock === 'limitado' && cantEnTicket >= prod.stock) {
+      if (prod.tipoStock === 'limitado' && cantTotalEnTicket >= prod.stock) {
         alert(`⚠️ Stock agotado. Solo quedan ${prod.stock} unidades de "${prod.nombre}".`);
         return prevItems;
       }
@@ -904,7 +925,7 @@ export default function SalonPage({ currentUser }) {
 
   const agruparProductos = (items) => {
     const list = [];
-    const esTallarin = (p) => p.categoria === 'Tallarines Verdes' || (p.nombre && p.nombre.toLowerCase().startsWith('tallarines verdes'));
+    const esTallarin = (p) => p.categoria === 'Tallarines Verdes' || (p.nombre && /tallar[ií]n(es)?\s+verde(s)?/i.test(p.nombre));
     const tallarines = items.filter(esTallarin);
     const otros = items.filter(p => !esTallarin(p));
     
@@ -1665,10 +1686,13 @@ export default function SalonPage({ currentUser }) {
       {/* MODAL DE SELECCIÓN DE OPCIONES Y COMBOS (INTERACTIVO) */}
       {optionsModalOpen && selectedProduct && (() => {
         const steps = getProductSteps(selectedProduct, selections);
-        if (steps.length === 0) return null;
+        if (!steps || steps.length === 0) return null;
         
-        const currentStep = steps[currentStepIdx];
-        const esUltimoPaso = currentStepIdx === steps.length - 1;
+        const safeStepIdx = Math.max(0, Math.min(currentStepIdx, steps.length - 1));
+        const currentStep = steps[safeStepIdx] || steps[0];
+        if (!currentStep) return null;
+
+        const esUltimoPaso = safeStepIdx >= steps.length - 1;
         const seleccionActual = selections[currentStep.key];
         
         const handleSelectOption = (val) => {
@@ -1676,19 +1700,52 @@ export default function SalonPage({ currentUser }) {
           
           if (!esUltimoPaso) {
             setTimeout(() => {
-              setCurrentStepIdx(prev => prev + 1);
+              setCurrentStepIdx(prev => Math.min(steps.length - 1, prev + 1));
             }, 150);
           }
         };
         
         const handleConfirm = () => {
+          const hasCustomConfig = selectedProduct.opcionesConfig && (() => {
+            try {
+              const p = typeof selectedProduct.opcionesConfig === 'string' 
+                ? JSON.parse(selectedProduct.opcionesConfig) 
+                : selectedProduct.opcionesConfig;
+              return Array.isArray(p) && p.length > 0;
+            } catch { return false; }
+          })();
+
           if (selectedProduct.esAgrupado) {
             const prodVariante = selections["producto_variante"];
             if (!prodVariante) {
-              alert("Por favor, selecciona una opción.");
+              alert("Por favor, selecciona una opción de carne.");
               return;
             }
-            agregarAlTicketDirecto(prodVariante, additionalNotes);
+            agregarAlTicketDirecto(prodVariante, additionalNotes.trim());
+          } else if (hasCustomConfig) {
+            const notesArray = [];
+            steps.forEach(step => {
+              const val = selections[step.key];
+              if (val) {
+                const valLower = String(val).toLowerCase();
+                if (valLower.includes('sin ') || valLower.includes('omitir')) return;
+                const stepLower = step.name.toLowerCase();
+                if (stepLower.includes('bebida')) {
+                  notesArray.push(`[Bebida: ${val}]`);
+                } else if (stepLower.includes('entrada')) {
+                  notesArray.push(`[Entrada: ${val}]`);
+                } else if (stepLower.includes('guarnicion') || stepLower.includes('acompañamiento')) {
+                  notesArray.push(`[Guarnición: ${val}]`);
+                } else {
+                  notesArray.push(`${step.name}: ${val}`);
+                }
+              }
+            });
+            if (additionalNotes.trim()) {
+              notesArray.push(`(Nota: ${additionalNotes.trim()})`);
+            }
+            const finalNotes = notesArray.join(' · ');
+            agregarAlTicketDirecto(selectedProduct, finalNotes);
           } else if (isMenuProduct(selectedProduct)) {
             const notesArray = [];
             const entr = selections["entrada_menu"];
@@ -1726,14 +1783,14 @@ export default function SalonPage({ currentUser }) {
               }
             }
             if (entrada) {
-              notesArray.push(`Entrada: ${entrada}`);
+              notesArray.push(`[Entrada: ${entrada}]`);
             }
             
             // Refresco y Postre automáticos (más cortos)
             notesArray.push(`+ refresco + postre`);
 
             if (bebida && !bebida.toLowerCase().includes('sin bebida') && !bebida.toLowerCase().includes('omitir')) {
-              notesArray.push(`Bebida: ${bebida}`);
+              notesArray.push(`[Bebida: ${bebida}]`);
             }
 
             const cantidadEnsaladas = selections["cantidad_ensaladas"];
@@ -1753,7 +1810,7 @@ export default function SalonPage({ currentUser }) {
 
             if (isParrilla2P) {
               const guarn = selections["guarnicion"];
-              if (guarn && !guarn.toLowerCase().includes('sin')) notesArray.push(`Guarnición: ${guarn}`);
+              if (guarn && !guarn.toLowerCase().includes('sin')) notesArray.push(`[Guarnición: ${guarn}]`);
               
               const b1 = selections["bebida_1"];
               const b2 = selections["bebida_2"];
@@ -1763,14 +1820,14 @@ export default function SalonPage({ currentUser }) {
                 if (b1 === b2) {
                   // Agrupar dos de 1/2 Lt iguales en un solo litro para la Barra (ej: Gaseosa 1/2 Lt + Gaseosa 1/2 Lt => Gaseosa 1 Lt)
                   const cleanName = b1.replace(" 1/2 Lt", " 1 Lt").replace(" - 1/2 Lt", " - 1 Lt");
-                  notesArray.push(`Bebida: ${cleanName}`);
+                  notesArray.push(`[Bebida: ${cleanName}]`);
                 } else {
-                  notesArray.push(`Bebida 1: ${b1}`);
-                  notesArray.push(`Bebida 2: ${b2}`);
+                  notesArray.push(`[Bebida 1: ${b1}]`);
+                  notesArray.push(`[Bebida 2: ${b2}]`);
                 }
               } else {
-                if (b1 && !b1.toLowerCase().includes('sin')) notesArray.push(`Bebida 1: ${b1}`);
-                if (b2 && !b2.toLowerCase().includes('sin')) notesArray.push(`Bebida 2: ${b2}`);
+                if (b1 && !b1.toLowerCase().includes('sin')) notesArray.push(`[Bebida 1: ${b1}]`);
+                if (b2 && !b2.toLowerCase().includes('sin')) notesArray.push(`[Bebida 2: ${b2}]`);
               }
               
               if (b_adic && b_adic !== "Sin Bebida Adicional") {
@@ -1781,21 +1838,21 @@ export default function SalonPage({ currentUser }) {
               steps.forEach(step => {
                 const val = selections[step.key];
                 if (val) {
-                  const valLower = val.toLowerCase();
+                  const valLower = String(val).toLowerCase();
                   if (valLower.includes('sin bebida') || valLower.includes('sin ensalada') || valLower.includes('omitir') || valLower.includes('sin acompañamiento') || valLower.includes('sin guarnicion')) {
                     return;
                   }
                   const stepLower = step.name.toLowerCase();
                   if (stepLower.includes('bebida')) {
-                    notesArray.push(`Bebida: ${val}`);
+                    notesArray.push(`[Bebida: ${val}]`);
                   } else if (stepLower.includes('ensalada')) {
                     notesArray.push(val);
                   } else if (stepLower.includes('guarnicion') || stepLower.includes('acompañamiento')) {
-                    notesArray.push(`Guarnición: ${val}`);
+                    notesArray.push(`[Guarnición: ${val}]`);
                   } else if (stepLower.includes('fondo')) {
                     notesArray.push(`Fondo: ${val}`);
                   } else if (stepLower.includes('entrada')) {
-                    notesArray.push(`Entrada: ${val}`);
+                    notesArray.push(`[Entrada: ${val}]`);
                   } else {
                     notesArray.push(`${step.name}: ${val}`);
                   }
@@ -1849,7 +1906,7 @@ export default function SalonPage({ currentUser }) {
                 {steps.length > 1 && (
                   <div className="space-y-2">
                     <div className="flex justify-between text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                      <span>Paso {currentStepIdx + 1} de {steps.length}</span>
+                      <span>Paso {safeStepIdx + 1} de {steps.length}</span>
                       <span className="text-amber-400">{currentStep.name}</span>
                     </div>
                     <div className="h-1.5 bg-slate-850 rounded-full overflow-hidden flex border border-slate-800">
@@ -1857,7 +1914,7 @@ export default function SalonPage({ currentUser }) {
                         <div 
                           key={idx} 
                           className={`h-full flex-1 border-r border-slate-900 last:border-0 transition-all ${
-                            idx <= currentStepIdx ? 'bg-amber-500' : 'bg-slate-800'
+                            idx <= safeStepIdx ? 'bg-amber-500' : 'bg-slate-800'
                           }`}
                         ></div>
                       ))}
@@ -1913,9 +1970,9 @@ export default function SalonPage({ currentUser }) {
               <div className="p-5 border-t border-slate-800 bg-slate-950/40 flex justify-between gap-3 shrink-0">
                 <button
                   onClick={() => setCurrentStepIdx(prev => Math.max(0, prev - 1))}
-                  disabled={currentStepIdx === 0}
+                  disabled={safeStepIdx === 0}
                   className={`px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                    currentStepIdx === 0
+                    safeStepIdx === 0
                       ? 'bg-slate-850 text-slate-600 border border-slate-850 opacity-40 cursor-not-allowed shadow-none'
                       : 'bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-750 hover:text-white'
                   }`}
@@ -1937,7 +1994,7 @@ export default function SalonPage({ currentUser }) {
                   </button>
                 ) : (
                   <button
-                    onClick={() => setCurrentStepIdx(prev => prev + 1)}
+                    onClick={() => setCurrentStepIdx(prev => Math.min(steps.length - 1, prev + 1))}
                     disabled={currentStep.key === "producto_variante" && !seleccionActual}
                     className={`px-6 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg ${
                       (currentStep.key !== "producto_variante" || seleccionActual)

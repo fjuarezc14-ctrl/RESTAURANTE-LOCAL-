@@ -79,7 +79,6 @@ export default function CocinaPage() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', triggerInstantRefresh);
-    window.addEventListener('pointerdown', triggerInstantRefresh, { passive: true });
 
     // 3. Screen Wake Lock API para evitar que la tablet o monitor se suspenda
     let wakeLock = null;
@@ -98,10 +97,11 @@ export default function CocinaPage() {
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      document.removeEventListener('visibilitychange', requestWakeLock);
       window.removeEventListener('focus', triggerInstantRefresh);
-      window.removeEventListener('pointerdown', triggerInstantRefresh);
-      if (wakeLock) wakeLock.release().catch(() => {});
+      document.removeEventListener('visibilitychange', requestWakeLock);
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+      }
     };
   }, [fetchPedidos, fetchCancelaciones]);
 

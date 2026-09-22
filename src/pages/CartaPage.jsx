@@ -172,22 +172,25 @@ export default function CartaPage({ currentUser }) {
         parsedOpciones = [];
       }
     }
+    
+    // Categoría predeterminada estándar gastronómica
+    const defaultCat = productos.some(prod => prod.categoria === 'Platos de Fondo') 
+      ? 'Platos de Fondo' 
+      : (MASTER_TODAS_CATEGORIAS[4] || 'Platos Criollos y Fondos');
+
     setEditProd(p
       ? {
           ...p,
           precio: String(p.precio),
           stock: String(p.stock),
           requiereGuarnicion: !!p.requiereGuarnicion,
-          tieneOpciones: parsedOpciones.length > 0 || (p.categoria === 'Menú'),
-          opcionesConfig: parsedOpciones.length > 0 ? parsedOpciones : (p.categoria === 'Menú' ? [
-            { name: "Elige la Entrada", options: "Sopa del Día, Ensalada Fresca, Papa a la Huancaína, Sin Entrada" },
-            { name: "Elige la Bebida", options: "Chicha Morada, Limonada, Gaseosa, Sin Bebida" }
-          ] : [])
+          tieneOpciones: parsedOpciones.length > 0,
+          opcionesConfig: parsedOpciones
         }
       : {
           id: '',
           nombre: '',
-          categoria: 'Menú',
+          categoria: defaultCat,
           precio: '',
           tipoStock: 'ilimitado',
           stock: '',
@@ -299,6 +302,9 @@ export default function CartaPage({ currentUser }) {
       if (pasosValidos.length > 0) {
         opcionesPayload = JSON.stringify(pasosValidos);
         requiereGuarnicionBool = true;
+      } else {
+        alert("Activaste las opciones pero no has ingresado opciones válidas. Por favor, escribe al menos una opción o desactiva la casilla 'Acompañamientos y Opciones' para venta directa sin guarnición.");
+        return;
       }
     }
 

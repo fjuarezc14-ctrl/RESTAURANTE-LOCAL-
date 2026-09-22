@@ -22,15 +22,32 @@ const ProtectedRoute = ({ children, permission, currentUser }) => {
   const userPermissions = currentUser?.permisos || [];
   const isAdmin = currentUser?.rol === 'Administrador';
   if (!isAdmin && !userPermissions.includes(permission)) {
-    // Redireccionar al primer módulo permitido del usuario
-    const firstPermitted = userPermissions.find(p => p !== 'Usuarios') || userPermissions[0] || 'Salon';
+    // Si no tiene permisos para esta ruta ni para nada más, o evitar bucle
+    const validPermitted = userPermissions.filter(p => p !== 'Usuarios');
+    if (validPermitted.length === 0) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center text-white">
+          <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl max-w-md shadow-2xl">
+            <h2 className="text-xl font-black text-rose-500 mb-2">Acceso Restringido</h2>
+            <p className="text-slate-400 text-sm mb-6">Tu usuario no cuenta con permisos asignados para acceder a ningún módulo.</p>
+            <button 
+              onClick={() => { localStorage.clear(); window.location.reload(); }}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-6 py-2.5 rounded-xl uppercase text-xs tracking-wider transition-all"
+            >
+              Cerrar Sesión
+            </button>
+          </div>
+        </div>
+      );
+    }
+    const firstPermitted = validPermitted[0];
     const pathToRedirect = 
       firstPermitted === 'Dashboard' ? '/' :
       firstPermitted === 'Salon' ? '/salon' :
       firstPermitted === 'Cocina' ? '/cocina' :
       firstPermitted === 'Barra' ? '/barra' :
       firstPermitted === 'Caja' ? '/caja' :
-      firstPermitted === 'Reportes' ? '/reportes' : '/salon';
+      firstPermitted === 'Reportes' ? '/reportes' : '/';
     return <Navigate to={pathToRedirect} replace />;
   }
   return children;
@@ -43,8 +60,21 @@ const LoginGate = ({ onLoginSuccess }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
+  const [intentosFallidos, setIntentosFallidos] = useState(0);
+  const [bloqueadoSegundos, setBloqueadoSegundos] = useState(0);
+
+  useEffect(() => {
+    let timer;
+    if (bloqueadoSegundos > 0) {
+      timer = setInterval(() => {
+        setBloqueadoSegundos(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [bloqueadoSegundos]);
 
   const handleKeyPress = (num) => {
+    if (bloqueadoSegundos > 0) return;
     if (pin.length < 4) {
       setPin(prev => prev + num);
       setError('');
@@ -52,10 +82,12 @@ const LoginGate = ({ onLoginSuccess }) => {
   };
 
   const handleBackspace = () => {
+    if (bloqueadoSegundos > 0) return;
     setPin(prev => prev.slice(0, -1));
   };
 
   const handleSubmit = async () => {
+    if (bloqueadoSegundos > 0) return;
     if (pin.length !== 4) {
       setError('El PIN debe tener 4 dígitos');
       return;
@@ -66,9 +98,17 @@ const LoginGate = ({ onLoginSuccess }) => {
       if (res.error) {
         throw new Error(res.error);
       }
+      setIntentosFallidos(0);
       onLoginSuccess(res.user);
     } catch (err) {
-      setError(err.message || 'Error de conexión');
+      const nuevosIntentos = intentosFallidos + 1;
+      setIntentosFallidos(nuevosIntentos);
+      if (nuevosIntentos >= 4) {
+        setBloqueadoSegundos(30);
+        setError('Demasiados intentos fallidos. Bloqueado por 30s');
+      } else {
+        setError(err.message || 'Error de conexión');
+      }
       setPin('');
     } finally {
       setCargando(false);

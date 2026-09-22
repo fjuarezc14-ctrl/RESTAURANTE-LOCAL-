@@ -326,15 +326,16 @@ const matchProductSemantic = (prod, query) => {
 
 const agruparProductos = (items) => {
   const list = [];
-  const tallarines = items.filter(p => p.categoria === 'Tallarines Verdes');
-  const otros = items.filter(p => p.categoria !== 'Tallarines Verdes');
+  const esTallarin = (p) => p.categoria === 'Tallarines Verdes' || (p.nombre && /tallar[ií]n(es)?\s+verde(s)?/i.test(p.nombre));
+  const tallarines = items.filter(esTallarin);
+  const otros = items.filter(p => !esTallarin(p));
   
-  if (tallarines.length > 0) {
+  if (tallarines.length > 1) {
     const ordenados = [...tallarines].sort((a, b) => a.precio - b.precio);
     list.push({
       id: 'group_tallarines_verdes',
-      nombre: 'Tallarines Verdes',
-      categoria: 'Tallarines Verdes',
+      nombre: 'Tallarines Verdes (Variantes)',
+      categoria: ordenados[0].categoria || 'Platos Criollos y Fondos',
       precioMin: ordenados[0].precio,
       precioMax: ordenados[ordenados.length - 1].precio,
       esAgrupado: true,
@@ -343,6 +344,8 @@ const agruparProductos = (items) => {
       stock: 0,
       activo: true
     });
+  } else if (tallarines.length === 1) {
+    list.push(tallarines[0]);
   }
   
   return [...list, ...otros];
@@ -369,6 +372,8 @@ export default function CajaPage({ currentUser }) {
   const [activeComprobante, setActiveComprobante] = useState(null);
   const [sunatModalOpen, setSunatModalOpen] = useState(false);
   const [cortesiaItemIds, setCortesiaItemIds] = useState([]);
+  const [motivoCortesia, setMotivoCortesia] = useState('');
+  const [deliveryMotivoCortesia, setDeliveryMotivoCortesia] = useState('');
   const [modalConfirmarCobro, setModalConfirmarCobro] = useState(false);
   const [datosConfirmacionCobro, setDatosConfirmacionCobro] = useState(null);
 
@@ -422,6 +427,8 @@ export default function CajaPage({ currentUser }) {
   const [filtroMetodoPago, setFiltroMetodoPago] = useState('Todos');
   const [consumoPin, setConsumoPin] = useState('');
   const [consumoPinError, setConsumoPinError] = useState('');
+  const [comprasTurno, setComprasTurno] = useState([]);
+  const [efectivoFisicoContado, setEfectivoFisicoContado] = useState('');
 
   // Créditos y Clientes
   const [clientes, setClientes] = useState([]);
@@ -540,7 +547,7 @@ export default function CajaPage({ currentUser }) {
 
   const fetchCajaData = useCallback(async () => {
     try {
-      const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList] = await Promise.all([
+      const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList] = await Promise.all([
         api.getMesas().catch(() => null),
         api.getResumenVentas().catch(() => ({ atendidas: 0, ingresos: 0 })),
         api.getPedidosLlevar().catch(() => null),
@@ -548,6 +555,7 @@ export default function CajaPage({ currentUser }) {
         api.getProductos().catch(() => null),
         api.getClientes().catch(() => []),
         api.getAbonos().catch(() => []),
+        api.getCompras().catch(() => []),
       ]);
       if (mesasData) setMesas(mesasData);
       if (llevarData) setPedidosLlevar(llevarData);
@@ -556,6 +564,7 @@ export default function CajaPage({ currentUser }) {
       if (prods) setProductosMenu(prods);
       setClientes(clientsList || []);
       setAbonos(abonosList || []);
+      setComprasTurno(comprasList || []);
     } catch (err) {
       // Ignorar micro-caídas o lags de red Wi-Fi
     } finally {
@@ -963,9 +972,9 @@ export default function CajaPage({ currentUser }) {
         return;
       }
 
-      const restante = Math.max(0, total - (tarjVal + yapeVal + credVal));
+      const restante = parseFloat(Math.max(0, total - (tarjVal + yapeVal + credVal)).toFixed(2));
       if (efecVal < (restante - 0.01)) {
-        const faltante = Math.max(0, total - (efecVal + tarjVal + yapeVal + credVal));
+        const faltante = parseFloat(Math.max(0, total - (efecVal + tarjVal + yapeVal + credVal)).toFixed(2));
         alert(`⚠️ Monto insuficiente. Debes cubrir el total de S/ ${total.toFixed(2)}.\nFaltan S/ ${faltante.toFixed(2)}`);
         return;
       }
@@ -1021,7 +1030,8 @@ export default function CajaPage({ currentUser }) {
         clienteCreditoId: finalClienteCreditoId,
         creditosDetalle: finalCreditosDetalle,
         clienteDireccion: clienteDireccion || '',
-        cortesiaItemIds: cortesiaItemIds
+        cortesiaItemIds: cortesiaItemIds,
+        motivoCortesia: motivoCortesia.trim() || null
       }
     });
 
@@ -1054,6 +1064,7 @@ export default function CajaPage({ currentUser }) {
       setClientesCreditoMixto([{ clienteId: '', monto: '', nombre: '' }]);
       setIncluirCreditoMixto(false);
       setCortesiaItemIds([]);
+      setMotivoCortesia('');
 
       // Desencadenar la visualización e impresión del comprobante (solo si no es Consumo Personal)
       if (mPago !== 'Consumo') {
@@ -1072,6 +1083,10 @@ export default function CajaPage({ currentUser }) {
           return item;
         });
 
+        const descCortesiaTicket = itemsCortesiaDescuento > 0 
+          ? (payload.motivoCortesia ? `Cortesía de ítems (${payload.motivoCortesia})` : 'Cortesía de ítems')
+          : (mPago === 'Cortesía' ? (payload.motivoCortesia ? `Cortesía total (${payload.motivoCortesia})` : 'Cortesía total') : null);
+
         abrirTicketImpresionDirecto(
           total,
           response,
@@ -1083,7 +1098,7 @@ export default function CajaPage({ currentUser }) {
           mesaNum,
           null,
           itemsCortesiaDescuento,
-          itemsCortesiaDescuento > 0 ? 'Cortesía de ítems' : (mPago === 'Cortesía' ? 'Cortesía total' : null)
+          descCortesiaTicket
         );
       } else {
         alert(`✅ Consumo Personal registrado. Mesa liberada.`);
@@ -1452,6 +1467,7 @@ export default function CajaPage({ currentUser }) {
     setTipoDelivery('PedidosYa');
     setPinAdminDelivery('');
     setCortesiaDeliveryIndices([]);
+    setDeliveryMotivoCortesia('');
     setDeliveryModal(true);
   };
 
@@ -1533,6 +1549,7 @@ export default function CajaPage({ currentUser }) {
 
     setPinAdminDelivery('');
     setCortesiaDeliveryIndices([]);
+    setDeliveryMotivoCortesia('');
     setDeliveryModal(true);
   };
 
@@ -1570,12 +1587,14 @@ export default function CajaPage({ currentUser }) {
     
     // 1. Variantes de Tallarines Verdes
     if (prod.esAgrupado) {
-      const todasLasVariantes = productosMenu.filter(p => p.categoria === 'Tallarines Verdes' && p.activo);
+      const todasLasVariantes = (prod.variantes && prod.variantes.length > 0)
+        ? prod.variantes
+        : productosMenu.filter(p => (p.categoria === 'Tallarines Verdes' || (p.nombre && /tallar[ií]n(es)?\s+verde(s)?/i.test(p.nombre))) && p.activo !== false);
       return [{
         name: "Elige la Variante de Carne",
         key: "producto_variante",
         options: todasLasVariantes.map(v => ({
-          label: `${v.nombre.replace('Tallarines Verdes con ', 'Con ').replace('Tallarines Verdes Con ', 'Con ')} (S/ ${v.precio.toFixed(2)})`,
+          label: `${v.nombre.replace(/tallar[ií]n(es)?\s+verde(s)?\s*(con\s*)?/i, 'Con ')} (S/ ${v.precio.toFixed(2)})`,
           value: v
         }))
       }];
@@ -1597,9 +1616,14 @@ export default function CajaPage({ currentUser }) {
       }
     }
 
-    // 3. Categoría Menú
+    // 3. Si el plato NO requiere guarnición explícitamente, NO genera pasos forzados. Directo al delivery!
+    if (prod.requiereGuarnicion === false && !prod.opcionesConfig) {
+      return [];
+    }
+
+    // 4. Categoría Menú (fallback solo si requiereGuarnicion es true)
     const isMenuCat = prod && (prod.categoria === 'Menú' || prod.categoria?.toLowerCase().includes('menú'));
-    if (isMenuCat) {
+    if (isMenuCat && prod.requiereGuarnicion) {
       return [
         {
           name: "Elige la Entrada",
@@ -1624,9 +1648,9 @@ export default function CajaPage({ currentUser }) {
       ];
     }
     
-    // 4. Combos configurados
+    // 5. Combos configurados (fallback legacy solo si requiereGuarnicion es true)
     const combo = getComboConfig(prod.nombre);
-    if (combo) {
+    if (combo && prod.requiereGuarnicion) {
       const baseSteps = [];
       const config = combo.config;
       const fondoOptions = config.fondoOptions || [];
@@ -1669,9 +1693,9 @@ export default function CajaPage({ currentUser }) {
       return baseSteps;
     }
 
-    // 5. Categoría Combos (fallback si no tiene opcionesConfig personalizado)
+    // 6. Categoría Combos (fallback si requiereGuarnicion es true)
     const isCombo = prod && (String(prod.categoria || '').toLowerCase() === 'combos' || String(prod.nombre || '').toLowerCase().includes('combo'));
-    if (isCombo) {
+    if (isCombo && prod.requiereGuarnicion) {
       return [
         {
           name: "Elige la Guarnición del Combo",
@@ -1700,29 +1724,49 @@ export default function CajaPage({ currentUser }) {
   };
 
   const agregarItemDelivery = (prod) => {
-    const hasDynamicOptions = !!prod.opcionesConfig;
-    const isMenu = prod && (prod.categoria === 'Menú' || prod.categoria?.toLowerCase().includes('menú') || prod.categoria?.toLowerCase().includes('menu'));
-    const isCombo = prod && (String(prod.categoria || '').toLowerCase() === 'combos' || String(prod.nombre || '').toLowerCase().includes('combo'));
-    const hasComboConfig = !!getComboConfig(prod.nombre);
-    const isVirtualGroup = prod.esAgrupado;
+    if (!prod) return;
 
-    if (hasDynamicOptions || isMenu || isCombo || hasComboConfig || isVirtualGroup) {
-      setSelectedProduct(prod);
-      setSelections({});
-      setCurrentStepIdx(0);
-      setAdditionalNotes('');
-      setOptionsModalOpen(true);
-    } else {
-      agregarItemDeliveryDirecto(prod, null);
+    const hasDynamicOptions = !!prod.opcionesConfig && (() => {
+      try {
+        const p = typeof prod.opcionesConfig === 'string' ? JSON.parse(prod.opcionesConfig) : prod.opcionesConfig;
+        return Array.isArray(p) && p.length > 0;
+      } catch { return false; }
+    })();
+
+    const isVirtualGroup = !!prod.esAgrupado;
+    const isMenu = prod && (prod.categoria === 'Menú' || prod.categoria?.toLowerCase().includes('menú') || prod.categoria?.toLowerCase().includes('menu'));
+    const hasLegacyCombo = !prod.opcionesConfig && prod.requiereGuarnicion && !!getComboConfig(prod.nombre);
+    const isLegacyMenu = !prod.opcionesConfig && prod.requiereGuarnicion && isMenu;
+    const isLegacyCategoryCombo = !prod.opcionesConfig && prod.requiereGuarnicion && (
+      String(prod.categoria || '').toLowerCase() === 'combos' || String(prod.nombre || '').toLowerCase().includes('combo')
+    );
+
+    if (hasDynamicOptions || isVirtualGroup || hasLegacyCombo || isLegacyMenu || isLegacyCategoryCombo) {
+      const steps = getProductSteps(prod, {});
+      if (steps && steps.length > 0) {
+        setSelectedProduct(prod);
+        setSelections({});
+        setCurrentStepIdx(0);
+        setAdditionalNotes('');
+        setOptionsModalOpen(true);
+        return;
+      }
     }
+    
+    agregarItemDeliveryDirecto(prod, null);
   };
 
   const agregarItemDeliveryDirecto = (prod, notas = null) => {
-    const idx = itemsDelivery.findIndex(i => i.id === String(prod.id) && i.notas === notas);
-    const cantEnTicket = idx >= 0 ? itemsDelivery[idx].cant : 0;
+    const cleanNotas = notas && String(notas).trim() ? String(notas).trim() : null;
+    const idx = itemsDelivery.findIndex(i => i.id === String(prod.id) && i.notas === cleanNotas);
+    
+    // Contabilizar total de este producto en delivery actual (evita fuga de stock con notas distintas)
+    const cantTotalEnTicket = itemsDelivery
+      .filter(i => String(i.id) === String(prod.id))
+      .reduce((sum, item) => sum + item.cant, 0);
     
     // Validar stock si es limitado
-    if (prod.tipoStock === 'limitado' && cantEnTicket >= prod.stock) {
+    if (prod.tipoStock === 'limitado' && cantTotalEnTicket >= prod.stock) {
       alert(`⚠️ Stock agotado. Solo quedan ${prod.stock} unidades de "${prod.nombre}".`);
       return;
     }
@@ -1741,7 +1785,7 @@ export default function CajaPage({ currentUser }) {
         cant: 1,
         ofertaNombre: prod.ofertaNombre,
         precioOriginal: prod.precio,
-        notas: notas
+        notas: cleanNotas
       }]);
     }
   };
@@ -1750,7 +1794,10 @@ export default function CajaPage({ currentUser }) {
     const nuevo = [...itemsDelivery];
     if (op === '+') {
       const prodOriginal = productosMenu.find(p => String(p.id) === String(nuevo[idx].id));
-      if (prodOriginal && prodOriginal.tipoStock === 'limitado' && nuevo[idx].cant >= prodOriginal.stock) {
+      const cantTotal = nuevo
+        .filter(i => String(i.id) === String(nuevo[idx].id))
+        .reduce((sum, item) => sum + item.cant, 0);
+      if (prodOriginal && prodOriginal.tipoStock === 'limitado' && cantTotal >= prodOriginal.stock) {
         alert(`⚠️ Stock agotado. Solo quedan ${prodOriginal.stock} unidades de "${prodOriginal.nombre}".`);
         return;
       }
@@ -2039,6 +2086,7 @@ export default function CajaPage({ currentUser }) {
         telefono: deliveryTelefono || null,
         descuentoPorcentaje: descPct,
         descuentoDescripcion: descuentoFinal > 0 ? `Descuento manual ${descPct}%` : null,
+        motivoCortesia: deliveryMotivoCortesia.trim() || null,
       };
 
       const result = editingPedidoId 
@@ -2058,6 +2106,7 @@ export default function CajaPage({ currentUser }) {
       setDeliveryDescuentoPorcentaje('');
       setPinAdminDelivery('');
       setCortesiaDeliveryIndices([]);
+      setDeliveryMotivoCortesia('');
       await fetchCajaData();
       
       // Si es Para Llevar o Delivery Propio con comprobante Boleta o Factura (o Ticket), activamos el ticket de impresión
@@ -2082,6 +2131,12 @@ export default function CajaPage({ currentUser }) {
           vuelto: vueltoVal,
         } : null;
 
+        const descCortesiaTicket = (deliveryMetodoPago === 'Cortesía')
+          ? (payload.motivoCortesia ? `Cortesía total (${payload.motivoCortesia})` : 'Cortesía total del pedido')
+          : (cortesiaDeliveryIndices.length > 0
+              ? (payload.motivoCortesia ? `Cortesía de ítems (${payload.motivoCortesia})` : 'Cortesía de ítems')
+              : (descuentoFinal > 0 ? `Descuento ${descPct}%` : null));
+
         abrirTicketImpresionDirecto(
           grandTotal, 
           result.venta, 
@@ -2093,7 +2148,7 @@ export default function CajaPage({ currentUser }) {
           tipoDelivery === 'DeliveryPropio' ? 'Delivery' : 'Llevar',
           deliveryInfo,
           descuentoFinal,
-          descuentoFinal > 0 ? `Descuento ${descPct}%` : null
+          descCortesiaTicket
         );
       } else {
         alert(`✅ Pedido ${codigoPY.toUpperCase()} enviado a Cocina. Venta registrada.`);
@@ -2226,6 +2281,15 @@ export default function CajaPage({ currentUser }) {
                         <button
                           onClick={() => {
                             setMesaSeleccionada(m);
+                            setTipoComprobante('Boleta');
+                            setMetodoPago('Efectivo');
+                            setPagaConEfectivoMesa('');
+                            setNumDocumento('');
+                            setClienteNombre('');
+                            setClienteDireccion('');
+                            setConsumoPin('');
+                            setConsumoPinError('');
+                            setMotivoCortesia('');
                             setCortesiaItemIds([]);
                             setClienteCreditoSeleccionado(null);
                             setClientesCreditoMixto([{ clienteId: '', monto: '', nombre: '' }]);
@@ -2672,6 +2736,15 @@ export default function CajaPage({ currentUser }) {
                                    {it}
                                  </span>
                                )) : 'Sin ítems'}
+                               {v.ofertaDescripcion && (() => {
+                                 const cleanDesc = v.ofertaDescripcion.replace(/\[CREDITO_SPLIT:.*?\]/g, '').trim();
+                                 if (!cleanDesc) return null;
+                                 return (
+                                   <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 block w-fit mt-0.5">
+                                     🎁 {cleanDesc}
+                                   </span>
+                                 );
+                               })()}
                              </div>
                           </td>
                           <td className="px-6 py-4 text-right font-mono font-black text-slate-900 text-base">
@@ -3607,6 +3680,22 @@ export default function CajaPage({ currentUser }) {
                         </p>
                       )}
                     </div>
+
+                    {(metodoPago === 'Cortesía' || tieneCortesiasIndividuales) && (
+                      <div className="space-y-1.5 pt-1">
+                        <label className="block text-slate-700 font-bold text-[11px] tracking-wider uppercase flex items-center gap-1.5">
+                          <Gift className="w-3.5 h-3.5 text-amber-600" />
+                          Motivo / Justificación de Cortesía (Opcional):
+                        </label>
+                        <input
+                          type="text"
+                          value={motivoCortesia}
+                          onChange={(e) => setMotivoCortesia(e.target.value)}
+                          placeholder="Ej: Cumpleaños, Demora en cocina, Invitación gerencia..."
+                          className="w-full bg-white border border-amber-300 focus:border-amber-500 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all"
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -4301,6 +4390,22 @@ export default function CajaPage({ currentUser }) {
                           />
                           <KeyRound className="w-4 h-4 text-amber-500 absolute left-3 top-1/2 -translate-y-1/2" />
                         </div>
+
+                        {(deliveryMetodoPago === 'Cortesía' || cortesiaDeliveryIndices.length > 0) && (
+                          <div className="space-y-1.5 pt-1">
+                            <label className="block text-slate-800 font-bold text-[10px] tracking-wider uppercase flex items-center gap-1.5">
+                              <Gift className="w-3.5 h-3.5 text-amber-600" />
+                              Motivo / Justificación de Cortesía (Opcional):
+                            </label>
+                            <input
+                              type="text"
+                              value={deliveryMotivoCortesia}
+                              onChange={(e) => setDeliveryMotivoCortesia(e.target.value)}
+                              placeholder="Ej: Cumpleaños, Demora en cocina, Invitación gerencia..."
+                              className="w-full bg-white border border-amber-300 focus:border-amber-500 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -4713,10 +4818,13 @@ export default function CajaPage({ currentUser }) {
       {/* MODAL DE SELECCIÓN DE OPCIONES Y COMBOS (INTERACTIVO PARA DELIVERY) */}
       {optionsModalOpen && selectedProduct && (() => {
         const steps = getProductSteps(selectedProduct, selections);
-        if (steps.length === 0) return null;
+        if (!steps || steps.length === 0) return null;
         
-        const currentStep = steps[currentStepIdx];
-        const esUltimoPaso = currentStepIdx === steps.length - 1;
+        const safeStepIdx = Math.max(0, Math.min(currentStepIdx, steps.length - 1));
+        const currentStep = steps[safeStepIdx] || steps[0];
+        if (!currentStep) return null;
+
+        const esUltimoPaso = safeStepIdx >= steps.length - 1;
         const seleccionActual = selections[currentStep.key];
         
         const handleSelectOption = (val) => {
@@ -4724,26 +4832,67 @@ export default function CajaPage({ currentUser }) {
           
           if (!esUltimoPaso) {
             setTimeout(() => {
-              setCurrentStepIdx(prev => prev + 1);
+              setCurrentStepIdx(prev => Math.min(steps.length - 1, prev + 1));
             }, 150);
           }
         };
         
         const handleConfirm = () => {
+          const hasCustomConfig = selectedProduct.opcionesConfig && (() => {
+            try {
+              const p = typeof selectedProduct.opcionesConfig === 'string' 
+                ? JSON.parse(selectedProduct.opcionesConfig) 
+                : selectedProduct.opcionesConfig;
+              return Array.isArray(p) && p.length > 0;
+            } catch { return false; }
+          })();
+
           if (selectedProduct.esAgrupado) {
             const prodVariante = selections["producto_variante"];
             if (!prodVariante) {
-              alert("Por favor, selecciona una opción.");
+              alert("Por favor, selecciona una opción de carne.");
               return;
             }
             agregarItemDeliveryDirecto(prodVariante, additionalNotes);
-          } else if (selectedProduct.categoria === 'Menú') {
+          } else if (hasCustomConfig) {
             const notesArray = [];
-            const guarn = selections["guarnicion_menu"];
+            steps.forEach(step => {
+              const val = selections[step.key];
+              if (val) {
+                const valLower = String(val).toLowerCase();
+                if (valLower.includes('sin ') || valLower.includes('omitir')) return;
+                const stepLower = step.name.toLowerCase();
+                if (stepLower.includes('bebida')) {
+                  notesArray.push(`[Bebida: ${val}]`);
+                } else if (stepLower.includes('entrada')) {
+                  notesArray.push(`[Entrada: ${val}]`);
+                } else if (stepLower.includes('guarnicion') || stepLower.includes('acompañamiento')) {
+                  notesArray.push(`[Guarnición: ${val}]`);
+                } else {
+                  notesArray.push(`${step.name}: ${val}`);
+                }
+              }
+            });
+            if (additionalNotes.trim()) {
+              notesArray.push(`(Nota: ${additionalNotes.trim()})`);
+            }
+            const finalNotes = notesArray.join(' · ');
+            agregarItemDeliveryDirecto(selectedProduct, finalNotes);
+          } else if (selectedProduct.categoria === 'Menú' || selectedProduct.categoria?.toLowerCase().includes('menú')) {
+            const notesArray = [];
             const entr = selections["entrada_menu"];
+            const beb = selections["bebida"];
+            const guarn = selections["guarnicion_menu"];
             
-            if (guarn) notesArray.push(`[Guarnición: ${guarn}]`);
-            if (entr) notesArray.push(`[Entrada: ${entr}]`);
+            if (entr && !entr.toLowerCase().includes('sin entrada') && !entr.toLowerCase().includes('omitir')) {
+              notesArray.push(`[Entrada: ${entr}]`);
+            }
+            if (beb && !beb.toLowerCase().includes('sin bebida') && !beb.toLowerCase().includes('omitir')) {
+              notesArray.push(`[Bebida: ${beb}]`);
+            }
+            if (guarn && !guarn.toLowerCase().includes('estándar') && !guarn.toLowerCase().includes('sin guarnición') && !guarn.toLowerCase().includes('omitir')) {
+              notesArray.push(`[Guarnición: ${guarn}]`);
+            }
             
             if (additionalNotes.trim()) {
               notesArray.push(`(Nota: ${additionalNotes.trim()})`);
@@ -4766,14 +4915,13 @@ export default function CajaPage({ currentUser }) {
               }
             }
             if (entrada) {
-              notesArray.push(`Entrada: ${entrada}`);
+              notesArray.push(`[Entrada: ${entrada}]`);
             }
             
-            // Refresco y Postre automáticos (más cortos)
             notesArray.push(`+ Refresco + Postre`);
 
             if (bebida && !bebida.toLowerCase().includes('sin bebida') && !bebida.toLowerCase().includes('omitir')) {
-              notesArray.push(`Bebida: ${bebida}`);
+              notesArray.push(`[Bebida: ${bebida}]`);
             }
 
             const cantidadEnsaladas = selections["cantidad_ensaladas"];
@@ -4791,21 +4939,21 @@ export default function CajaPage({ currentUser }) {
             steps.forEach(step => {
               const val = selections[step.key];
               if (val) {
-                const valLower = val.toLowerCase();
+                const valLower = String(val).toLowerCase();
                 if (valLower.includes('sin bebida') || valLower.includes('sin ensalada') || valLower.includes('omitir') || valLower.includes('sin acompañamiento') || valLower.includes('sin guarnicion')) {
                   return;
                 }
                 const stepLower = step.name.toLowerCase();
                 if (stepLower.includes('bebida')) {
-                  notesArray.push(`Bebida: ${val}`);
+                  notesArray.push(`[Bebida: ${val}]`);
                 } else if (stepLower.includes('ensalada')) {
                   notesArray.push(val);
                 } else if (stepLower.includes('guarnicion') || stepLower.includes('acompañamiento')) {
-                  notesArray.push(`Guarnición: ${val}`);
+                  notesArray.push(`[Guarnición: ${val}]`);
                 } else if (stepLower.includes('fondo')) {
                   notesArray.push(`Fondo: ${val}`);
                 } else if (stepLower.includes('entrada')) {
-                  notesArray.push(`Entrada: ${val}`);
+                  notesArray.push(`[Entrada: ${val}]`);
                 } else {
                   notesArray.push(`${step.name}: ${val}`);
                 }
@@ -4849,7 +4997,7 @@ export default function CajaPage({ currentUser }) {
                 {steps.length > 1 && (
                   <div className="space-y-2">
                     <div className="flex justify-between text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                      <span>Paso {currentStepIdx + 1} de {steps.length}</span>
+                      <span>Paso {safeStepIdx + 1} de {steps.length}</span>
                       <span className="text-amber-400">{currentStep.name}</span>
                     </div>
                     <div className="h-1.5 bg-slate-850 rounded-full overflow-hidden flex border border-slate-800">
@@ -4857,7 +5005,7 @@ export default function CajaPage({ currentUser }) {
                         <div 
                           key={idx} 
                           className={`h-full flex-1 border-r border-slate-900 last:border-0 transition-all ${
-                            idx <= currentStepIdx ? 'bg-cyan-500' : 'bg-slate-800'
+                            idx <= safeStepIdx ? 'bg-cyan-500' : 'bg-slate-800'
                           }`}
                         ></div>
                       ))}
@@ -4913,9 +5061,9 @@ export default function CajaPage({ currentUser }) {
               <div className="p-5 border-t border-slate-800 bg-slate-950/40 flex justify-between gap-3 shrink-0">
                 <button
                   onClick={() => setCurrentStepIdx(prev => Math.max(0, prev - 1))}
-                  disabled={currentStepIdx === 0}
+                  disabled={safeStepIdx === 0}
                   className={`px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                    currentStepIdx === 0
+                    safeStepIdx === 0
                       ? 'bg-slate-850 text-slate-600 border border-slate-850 opacity-40 cursor-not-allowed shadow-none'
                       : 'bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-750 hover:text-white'
                   }`}
@@ -4926,9 +5074,9 @@ export default function CajaPage({ currentUser }) {
                 {esUltimoPaso ? (
                   <button
                     onClick={handleConfirm}
-                    disabled={currentStep.key === 'producto_variante' && !seleccionActual}
+                    disabled={!seleccionActual && (currentStep.options?.length > 0 || currentStep.key === 'producto_variante')}
                     className={`px-6 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg ${
-                      (currentStep.key !== 'producto_variante' || seleccionActual)
+                      (seleccionActual || (!currentStep.options?.length && currentStep.key !== 'producto_variante'))
                         ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 shadow-emerald-500/20'
                         : 'bg-slate-850 text-slate-600 border border-slate-800 cursor-not-allowed shadow-none'
                     }`}
@@ -4937,10 +5085,10 @@ export default function CajaPage({ currentUser }) {
                   </button>
                 ) : (
                   <button
-                    onClick={() => setCurrentStepIdx(prev => prev + 1)}
-                    disabled={currentStep.key === 'producto_variante' && !seleccionActual}
+                    onClick={() => setCurrentStepIdx(prev => Math.min(steps.length - 1, prev + 1))}
+                    disabled={!seleccionActual && (currentStep.options?.length > 0 || currentStep.key === 'producto_variante')}
                     className={`px-6 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg ${
-                      (currentStep.key !== 'producto_variante' || seleccionActual)
+                      (seleccionActual || (!currentStep.options?.length && currentStep.key !== 'producto_variante'))
                         ? 'bg-cyan-500 hover:bg-amber-600 text-slate-950'
                         : 'bg-slate-850 text-slate-600 border border-slate-800 cursor-not-allowed shadow-none'
                     }`}
@@ -5039,13 +5187,28 @@ export default function CajaPage({ currentUser }) {
           }
         });
 
-        // Total Caja = ingresos reales cobrados en caja (efectivo + tarjeta + yape)
-        const totalCalculado = totalEfectivo + totalTarjeta + totalYape;
+        // Egresos en efectivo durante el turno
+        const egresosEfectivo = (comprasTurno || [])
+          .filter(c => {
+            const fechaValida = !ultimoCierre || new Date(c.fecha || c.creadoEn) > new Date(ultimoCierre);
+            return fechaValida && c.metodoPago === 'Efectivo';
+          })
+          .reduce((s, c) => s + parseFloat(c.total || 0), 0);
+
+        // Total Efectivo Esperado en Gaveta = (Ventas Efec + Abonos Efec) - Compras Efec
+        const totalEfectivoEsperado = Math.max(0, totalEfectivo - egresosEfectivo);
+
+        // Total Caja = ingresos reales cobrados en caja (efectivo neto + tarjeta + yape)
+        const totalCalculado = totalEfectivoEsperado + totalTarjeta + totalYape;
 
         // Cortesías: solo las ventas con metodoPago === 'Cortesía' o descuentoAplicado parcial
         const totalCortesias = ventasFiltradas
           .filter(v => v.metodoPago === 'Cortesía')
           .reduce((s, v) => s + (v.descuentoAplicado || v.total || 0), 0);
+
+        const montoFisicoNum = parseFloat(efectivoFisicoContado || 0);
+        const tieneConteoFisico = efectivoFisicoContado.trim() !== '';
+        const diferenciaEfectivo = tieneConteoFisico ? (montoFisicoNum - totalEfectivoEsperado) : 0;
 
         return (
           <div id="modal-cierre" className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
@@ -5055,7 +5218,7 @@ export default function CajaPage({ currentUser }) {
                   <Calculator className="w-6 h-6 shrink-0" />
                   <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight leading-none">Arqueo y Cierre</h3>
                 </div>
-                <button onClick={() => setCierreModalOpen(false)} className="text-slate-400 hover:text-slate-900 p-1 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"><X className="w-5 h-5" /></button>
+                <button onClick={() => { setCierreModalOpen(false); setEfectivoFisicoContado(''); }} className="text-slate-400 hover:text-slate-900 p-1 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"><X className="w-5 h-5" /></button>
               </div>
  
               {/* Vista del ticket térmico */}
@@ -5076,8 +5239,18 @@ export default function CajaPage({ currentUser }) {
 
                 <div className="space-y-3 mb-4 border-b border-dashed border-slate-300 pb-3">
                   <div className="flex justify-between font-bold text-slate-700">
-                    <span>💵 EFECTIVO:</span>
+                    <span>💵 EFECTIVO VENTAS:</span>
                     <span className="font-black text-slate-900">S/ {totalEfectivo.toFixed(2)}</span>
+                  </div>
+                  {egresosEfectivo > 0 && (
+                    <div className="flex justify-between font-bold text-rose-600">
+                      <span>📉 EGRESOS / COMPRAS:</span>
+                      <span className="font-black text-rose-600">- S/ {egresosEfectivo.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-slate-700">
+                    <span>💵 EFECTIVO ESPERADO:</span>
+                    <span className="font-black text-slate-900">S/ {totalEfectivoEsperado.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between font-bold text-slate-700">
                     <span>💳 TARJETA POS:</span>
@@ -5131,7 +5304,7 @@ export default function CajaPage({ currentUser }) {
                 </div>
 
                 <div className="flex justify-between items-center text-sm font-black text-slate-900 uppercase">
-                  <span>💰 TOTAL EN CAJA:</span>
+                  <span>💰 TOTAL ESPERADO:</span>
                   <span className="text-base text-emerald-700">S/ {totalCalculado.toFixed(2)}</span>
                 </div>
                 {totalPedidosYa > 0 && (
@@ -5140,8 +5313,50 @@ export default function CajaPage({ currentUser }) {
                   </div>
                 )}
 
+                {tieneConteoFisico && (
+                  <div className="mt-3 pt-3 border-t border-dashed border-slate-300 text-xs">
+                    <div className="flex justify-between font-bold text-slate-800">
+                      <span>EFECTIVO CONTADO:</span>
+                      <span className="font-black">S/ {montoFisicoNum.toFixed(2)}</span>
+                    </div>
+                    <div className={`flex justify-between font-black mt-1 text-xs ${
+                      Math.abs(diferenciaEfectivo) < 0.05 
+                        ? 'text-emerald-700' 
+                        : (diferenciaEfectivo > 0 ? 'text-blue-700' : 'text-rose-600')
+                    }`}>
+                      <span>DIFERENCIA (CUADRE):</span>
+                      <span>
+                        {Math.abs(diferenciaEfectivo) < 0.05 
+                          ? '✓ CUADRE EXACTO' 
+                          : (diferenciaEfectivo > 0 
+                              ? `+ S/ ${diferenciaEfectivo.toFixed(2)} (SOBRANTE)` 
+                              : `- S/ ${Math.abs(diferenciaEfectivo).toFixed(2)} (FALTANTE)`)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="text-center text-[9px] text-slate-400 font-bold mt-6 border-t border-dashed border-slate-200 pt-3">
                   *** Fin del Reporte de Turno ***
+                </div>
+              </div>
+
+              {/* Input de Conteo Físico para Arqueo */}
+              <div className="mb-4 bg-slate-50 border border-slate-200 p-3.5 rounded-2xl">
+                <label className="block text-slate-700 font-black text-[11px] uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>Efectivo Físico en Gaveta:</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Conteo de billetes y monedas</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">S/</span>
+                  <input
+                    type="number"
+                    step="0.10"
+                    placeholder="0.00"
+                    value={efectivoFisicoContado}
+                    onChange={(e) => setEfectivoFisicoContado(e.target.value)}
+                    className="w-full bg-white border-2 border-slate-200 focus:border-emerald-500 rounded-xl pl-8 pr-3 py-2.5 text-base font-black text-slate-900 focus:outline-none transition-all shadow-inner"
+                  />
                 </div>
               </div>
 
@@ -5172,7 +5387,11 @@ export default function CajaPage({ currentUser }) {
                     localStorage.setItem('ultimoCierre', newCierreISO);
                     setUltimoCierre(newCierreISO);
                     setMostrarTodoElDia(false);
-                    alert(`✅ ¡Cierre de Turno exitoso!\n\nTotal en Caja (real): S/ ${totalCalculado.toFixed(2)}\n${totalPedidosYa > 0 ? `PedidosYa (cobro semanal): S/ ${totalPedidosYa.toFixed(2)}\n` : ''}El turno ha sido archivado e inicializado.`);
+                    const diffMsg = tieneConteoFisico 
+                      ? `\nEfectivo Contado: S/ ${montoFisicoNum.toFixed(2)}\nDiferencia: S/ ${diferenciaEfectivo.toFixed(2)}`
+                      : '';
+                    alert(`✅ ¡Cierre de Turno exitoso!\n\nTotal en Caja (esperado): S/ ${totalCalculado.toFixed(2)}${diffMsg}\n${totalPedidosYa > 0 ? `PedidosYa (cobro semanal): S/ ${totalPedidosYa.toFixed(2)}\n` : ''}El turno ha sido archivado e inicializado.`);
+                    setEfectivoFisicoContado('');
                     setCierreModalOpen(false);
                   }}
                   className="py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-900 font-black rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20"

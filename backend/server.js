@@ -144,17 +144,34 @@ const MIX_PRODUCTS_DECOMPOSITION = {};
 function parseSelectionsFromNotes(notas) {
   const selections = {};
   if (!notas) return selections;
-  const matches = notas.match(/\[([^\]:]+):\s*([^\]]+)\]/g);
-  if (matches) {
-    matches.forEach(m => {
+  
+  // 1. Bracket format: [Key: Value]
+  const bracketMatches = String(notas).match(/\[([^\]:]+):\s*([^\]]+)\]/g);
+  if (bracketMatches) {
+    bracketMatches.forEach(m => {
       const parts = m.slice(1, -1).split(':');
       if (parts.length >= 2) {
         const key = parts[0].trim();
-        const val = parts[1].trim();
+        const val = parts.slice(1).join(':').trim();
         selections[key] = val;
       }
     });
   }
+
+  // 2. Dot or newline separated: Key: Value (e.g. "Bebida: Chicha · Entrada: Sopa")
+  const segments = String(notas).split(/[·\n]/);
+  for (const seg of segments) {
+    const cleaned = seg.trim().replace(/^\[|\]$/g, '');
+    if (cleaned.includes(':')) {
+      const colonIdx = cleaned.indexOf(':');
+      const key = cleaned.substring(0, colonIdx).trim();
+      const val = cleaned.substring(colonIdx + 1).trim();
+      if (key && val && !selections[key]) {
+        selections[key] = val;
+      }
+    }
+  }
+
   return selections;
 }
 
@@ -309,9 +326,18 @@ async function expandPedidoItemsForDb(itemsList) {
           "Bebida 2"
         ];
         const selectedDrinkNames = [];
+        const isExcludedVal = (v) => !v || ["sin bebida", "omitir (sin bebida)", "sin refresco", "ninguno", "sin entrada"].includes(String(v).trim().toLowerCase());
+
+        for (const [k, v] of Object.entries(parsedNotes)) {
+          if (isExcludedVal(v)) continue;
+          const lk = k.toLowerCase();
+          if (lk.includes('bebida') || lk.includes('refresco') || lk.includes('gaseosa') || lk.includes('chicha') || lk.includes('jugo')) {
+            if (!selectedDrinkNames.includes(v)) selectedDrinkNames.push(v);
+          }
+        }
         for (const key of drinkKeys) {
           const val = parsedNotes[key];
-          if (val && val !== "Sin Bebida" && val !== "Omitir (Sin Bebida)" && val !== "Sin refresco") {
+          if (!isExcludedVal(val) && !selectedDrinkNames.includes(val)) {
             selectedDrinkNames.push(val);
           }
         }
@@ -440,10 +466,10 @@ app.put('/api/empresa', async (req, res) => {
       conf = await prisma.empresaConfig.create({
         data: {
           ...dataToSave,
-          name: dataToSave.name || "Restaurante Señor Hernández",
-          brandShort: dataToSave.brandShort || "SEÑOR HERNÁNDEZ",
-          legalName: dataToSave.legalName || "SEÑOR HERNÁNDEZ RESTAURANTE E.I.R.L.",
-          ruc: dataToSave.ruc || "20601234567",
+          name: dataToSave.name || process.env.COMPANY_NAME || "Valetec Gourmet",
+          brandShort: dataToSave.brandShort || process.env.BRAND_SHORT || "VALETEC GOURMET",
+          legalName: dataToSave.legalName || process.env.LEGAL_NAME || "VALETEC GOURMET S.A.C.",
+          ruc: dataToSave.ruc || process.env.COMPANY_RUC || "20600000001",
         }
       });
     }
@@ -1134,10 +1160,14 @@ app.post('/api/mesas/:num/pedido', async (req, res) => {
 
       // Descontar stock de productos limitados de forma atómica
       for (const item of itemsNuevos) {
-        await tx.producto.updateMany({
-          where: { id: parseInt(item.id), tipoStock: 'limitado' },
-          data: { stock: { decrement: item.cant || item.cantidad } },
-        });
+        const prodId = parseInt(item.productoId || item.id);
+        const qty = parseInt(item.cant || item.cantidad || 1);
+        if (!isNaN(prodId) && prodId > 0 && !isNaN(qty) && qty > 0) {
+          await tx.producto.updateMany({
+            where: { id: prodId, tipoStock: 'limitado' },
+            data: { stock: { decrement: qty } },
+          });
+        }
       }
 
       await tx.mesa.update({
@@ -1786,7 +1816,8 @@ app.post('/api/pedidos/llevar', async (req, res) => {
     montoCredito,
     clienteCreditoId,
     descuentoPorcentaje,
-    descuentoDescripcion
+    descuentoDescripcion,
+    motivoCortesia
   } = req.body;
 
   try {
@@ -1843,10 +1874,14 @@ app.post('/api/pedidos/llevar', async (req, res) => {
 
     // Descontar stock limitado
     for (const item of items) {
-      await prisma.producto.updateMany({
-        where: { id: parseInt(item.id), tipoStock: 'limitado' },
-        data: { stock: { decrement: parseInt(item.cant || item.cantidad || 1) } },
-      });
+      const prodId = parseInt(item.productoId || item.id);
+      const qty = parseInt(item.cant || item.cantidad || 1);
+      if (!isNaN(prodId) && prodId > 0 && !isNaN(qty) && qty > 0) {
+        await prisma.producto.updateMany({
+          where: { id: prodId, tipoStock: 'limitado' },
+          data: { stock: { decrement: qty } },
+        });
+      }
     }
 
     // Registrar venta inmediatamente
@@ -1911,7 +1946,17 @@ app.post('/api/pedidos/llevar', async (req, res) => {
         serie,
         numero,
         descuentoAplicado: descuentoFinal,
-        ofertaDescripcion: descuentoFinal > 0 ? (descuentoDescripcion || `Descuento manual ${descPct}%`) : null,
+        ofertaDescripcion: (() => {
+          const motivoStr = motivoCortesia && String(motivoCortesia).trim() ? ` (${String(motivoCortesia).trim()})` : '';
+          if (finalMetodoPago === 'Cortesía') {
+            return `Cortesía total${motivoStr}`;
+          }
+          const hasCortesiaItems = Array.isArray(items) && items.some(i => i.notas && String(i.notas).includes('[CORTESÍA]'));
+          if (hasCortesiaItems) {
+            return `Cortesía de ítems${motivoStr}`;
+          }
+          return descuentoFinal > 0 ? (descuentoDescripcion || `Descuento manual ${descPct}%`) : null;
+        })(),
       },
       });
     });
@@ -3051,7 +3096,8 @@ app.post('/api/ventas', async (req, res) => {
     montoCredito,
     clienteCreditoId,
     creditosDetalle,
-    cortesiaItemIds
+    cortesiaItemIds,
+    motivoCortesia
   } = req.body;
   const idsAPagar = pedidoIds || [pedidoId];
   const idPrincipal = idsAPagar[idsAPagar.length - 1]; // El más reciente como venta principal
@@ -3210,12 +3256,13 @@ app.post('/api/ventas', async (req, res) => {
 
       let descAplicado = descuentoAplicado ? parseFloat(descuentoAplicado) : 0;
       let descDescrip = ofertaDescripcion ? String(ofertaDescripcion) : null;
+      const motivoStr = motivoCortesia && String(motivoCortesia).trim() ? ` (${String(motivoCortesia).trim()})` : '';
       if (metodoPago === 'Cortesía' || metodoPago === 'Consumo') {
         descAplicado = nuevoTotalPedido;
-        descDescrip = metodoPago === 'Cortesía' ? 'Cortesía total del pedido' : 'Consumo de personal';
+        descDescrip = metodoPago === 'Cortesía' ? `Cortesía total del pedido${motivoStr}` : `Consumo de personal${motivoStr}`;
       } else if (itemsCortesiaDescuento > 0) {
         descAplicado += itemsCortesiaDescuento;
-        descDescrip = descDescrip ? `${descDescrip} + Cortesía de ítems` : 'Cortesía de ítems';
+        descDescrip = descDescrip ? `${descDescrip} + Cortesía de ítems${motivoStr}` : `Cortesía de ítems${motivoStr}`;
       }
 
       // Si hay splits múltiples de crédito, anexar la etiqueta a ofertaDescripcion solo si aplica
