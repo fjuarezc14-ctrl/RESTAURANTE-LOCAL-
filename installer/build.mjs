@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 // ============================================================
 // GENERA EL INSTALADOR WINDOWS: installer/dist/ValetecPOS-Setup-<version>[-cliente].exe
-// Funciona en Windows y en Linux. Requisitos: Node 20+ y npm.
-//   Windows: descarga NSIS portable automáticamente.
-//   Linux:   usa `makensis` si está instalado; si no, Docker.
-// Uso: node installer/build.mjs [cliente]   (cliente = carpeta en installer/clientes/)
+// Se compila en Linux. Requisitos: Node 20+, npm, unzip y `makensis` o Docker.
+// Uso: ./installer/build.sh [cliente]   (cliente = carpeta en installer/clientes/)
 // ============================================================
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -16,10 +14,8 @@ import { fileURLToPath } from 'node:url';
 const NODE_VERSION = '20.20.2';
 const PG_VERSION = '16.10-1';
 const WINSW_VERSION = '2.12.0';
-const NSIS_VERSION = '3.10';
 const OBFUSCATOR_VERSION = '4.1.1';
 
-const IS_WINDOWS = process.platform === 'win32';
 const INST = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(INST, '..');
 const CACHE = path.join(INST, 'cache');
@@ -39,7 +35,7 @@ function fail(msg) {
   process.exit(1);
 }
 
-// Ejecuta un comando mostrando su salida; en Windows npm/npx son .cmd y requieren shell
+// Ejecuta un comando mostrando su salida
 function sh(cmd, { cwd = REPO, env = {}, quiet = false } = {}) {
   const r = spawnSync(cmd, { cwd, shell: true, stdio: quiet ? 'pipe' : 'inherit', env: { ...process.env, ...env } });
   if (r.status !== 0) {
@@ -59,14 +55,10 @@ async function download(url, dest) {
   fs.renameSync(`${dest}.part`, dest);
 }
 
-// Extrae entradas de un .zip: Windows 10+ trae tar (bsdtar) que abre zip; en Linux se usa unzip
+// Extrae carpetas de un .zip
 function unzip(zip, entries, dest) {
   fs.mkdirSync(dest, { recursive: true });
-  if (IS_WINDOWS) {
-    sh(`tar -xf ${q(zip)} -C ${q(dest)} ${entries.join(' ')}`);
-  } else {
-    sh(`unzip -q -o ${q(zip)} ${entries.map((e) => `'${e}/*'`).join(' ')} -d ${q(dest)}`);
-  }
+  sh(`unzip -q -o ${q(zip)} ${entries.map((e) => `'${e}/*'`).join(' ')} -d ${q(dest)}`);
 }
 
 function copy(src, dest) {
@@ -111,19 +103,11 @@ function prepararUsuarios() {
 
 async function compilarNsis() {
   const args = `-V2 ${q(`-DSTAGE=${STAGE}`)} -DVERSION=${VERSION} ${q(`-DOUTFILE=${OUTFILE}`)} ${q(path.join(INST, 'valetec.nsi'))}`;
-  if (IS_WINDOWS) {
-    const zip = path.join(CACHE, `nsis-${NSIS_VERSION}.zip`);
-    await download(`https://sourceforge.net/projects/nsis/files/NSIS%203/${NSIS_VERSION}/nsis-${NSIS_VERSION}.zip/download`, zip);
-    const nsisDir = path.join(CACHE, `nsis-${NSIS_VERSION}`);
-    if (!fs.existsSync(path.join(nsisDir, 'makensis.exe'))) sh(`tar -xf ${q(zip)} -C ${q(CACHE)}`);
-    sh(`${q(path.join(nsisDir, 'makensis.exe'))} ${args}`);
-    return;
-  }
   if (spawnSync('makensis', ['-VERSION']).status === 0) {
     sh(`makensis ${args}`);
     return;
   }
-  // Linux sin NSIS: compilar dentro de Docker montando el repo en /w
+  // Sin NSIS instalado: compilar dentro de Docker montando el repo en /w
   const rel = (p) => `/w/${path.relative(REPO, p).split(path.sep).join('/')}`;
   const dockerArgs = `-V2 -DSTAGE=${rel(STAGE)} -DVERSION=${VERSION} -DOUTFILE=${rel(OUTFILE)} ${rel(path.join(INST, 'valetec.nsi'))}`;
   sh(`docker run --rm -v ${q(`${REPO}:/w`)} -w /w debian:stable-slim sh -c "apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nsis >/dev/null 2>&1 && makensis ${dockerArgs} && chown $(id -u):$(id -g) ${rel(OUTFILE)}"`);

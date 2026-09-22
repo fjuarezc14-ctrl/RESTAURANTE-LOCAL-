@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-# Atajo para Linux: la lógica del build está en build.mjs (compartida con Windows)
+# La lógica del build está en build.mjs
 exec node "$(dirname "$0")/build.mjs" "$@"
