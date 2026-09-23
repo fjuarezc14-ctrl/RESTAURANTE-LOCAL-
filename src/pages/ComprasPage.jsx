@@ -102,11 +102,30 @@ export default function ComprasPage() {
   const [filtroMetodoPago, setFiltroMetodoPago] = useState('Todos');
   const [busquedaTexto, setBusquedaTexto] = useState('');
 
-  // Parámetros de Control de Caja Borrador
-  const [cajaInicialEfec, setCajaInicialEfec] = useState('400.00');
-  const [cajaInicialYape, setCajaInicialYape] = useState('0.00');
-  const [cajaInicialOtros, setCajaInicialOtros] = useState('0.00');
-  const [tiendaInfo, setTiendaInfo] = useState('Jr. AMALIA PUGA Nº 428');
+  // Parámetros de Control de Caja Borrador. Se recuerdan en este equipo: antes venían
+  // con valores fijos (S/ 400 y la dirección de otro local) que descuadraban el control.
+  const leerGuardado = (clave, porDefecto) => {
+    try {
+      return localStorage.getItem(clave) ?? porDefecto;
+    } catch {
+      return porDefecto;
+    }
+  };
+  const [cajaInicialEfec, setCajaInicialEfec] = useState(() => leerGuardado('caja_inicial_efectivo', '0.00'));
+  const [cajaInicialYape, setCajaInicialYape] = useState(() => leerGuardado('caja_inicial_yape', '0.00'));
+  const [cajaInicialOtros, setCajaInicialOtros] = useState(() => leerGuardado('caja_inicial_otros', '0.00'));
+  const [tiendaInfo, setTiendaInfo] = useState(() => leerGuardado('caja_tienda_info', COMPANY_CONFIG.address || ''));
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('caja_inicial_efectivo', cajaInicialEfec);
+      localStorage.setItem('caja_inicial_yape', cajaInicialYape);
+      localStorage.setItem('caja_inicial_otros', cajaInicialOtros);
+      localStorage.setItem('caja_tienda_info', tiendaInfo);
+    } catch {
+      // Sin almacenamiento local: los valores solo duran mientras la pantalla esté abierta
+    }
+  }, [cajaInicialEfec, cajaInicialYape, cajaInicialOtros, tiendaInfo]);
 
   const hoy = new Date();
   const [periodoMes, setPeriodoMes] = useState(
