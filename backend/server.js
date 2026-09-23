@@ -65,7 +65,7 @@ const BARRA_CATEGORIAS = {
 // Helper para parsear la distribución de crédito en ventas con múltiples clientes
 function parsearCreditoSplit(ofertaDescripcion, defaultClienteId, defaultMonto) {
   if (ofertaDescripcion && typeof ofertaDescripcion === 'string') {
-    const match = ofertaDescripcion.match(/\[CREDITO_SPLIT:(.*?)\]/);
+    const match = ofertaDescripcion.match(/\[CREDITO_SPLIT:(\[.*?\])\]/) || ofertaDescripcion.match(/\[CREDITO_SPLIT:(.*?)\]/);
     if (match && match[1]) {
       try {
         const parsed = JSON.parse(match[1]);

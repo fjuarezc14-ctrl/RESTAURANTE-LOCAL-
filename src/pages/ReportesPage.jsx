@@ -34,7 +34,7 @@ const parseDeliveryInfo = (code) => {
 
 const parsearCreditoSplit = (ofertaDescripcion, defaultClienteId, defaultMonto) => {
   if (ofertaDescripcion && typeof ofertaDescripcion === 'string') {
-    const match = ofertaDescripcion.match(/\[CREDITO_SPLIT:(.*?)\]/);
+    const match = ofertaDescripcion.match(/\[CREDITO_SPLIT:(\[.*?\])\]/) || ofertaDescripcion.match(/\[CREDITO_SPLIT:(.*?)\]/);
     if (match && match[1]) {
       try {
         const parsed = JSON.parse(match[1]);
