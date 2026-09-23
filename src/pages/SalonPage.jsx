@@ -2170,10 +2170,12 @@ export default function SalonPage({ currentUser }) {
         ))}
       </div>
 
-      {/* Botón flotante para Bandeja de Cocina (Platos Listos) */}
+      {/* Botón flotante para Bandeja de Cocina (Platos Listos).
+          En el celular se oculta mientras haya una ventana abierta: antes tapaba sus botones. */}
+      {!modalOpen && !optionsModalOpen && !cancelModal && !authModal.open && (
       <button
         onClick={() => setBandejaOpen(true)}
-        className="fixed bottom-6 right-6 z-[220] flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs md:text-sm px-4 py-3 rounded-2xl shadow-2xl transition-all active:scale-95 hover:-translate-y-1 uppercase tracking-wider border border-indigo-500/30"
+        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[220] flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs md:text-sm p-3 md:px-4 md:py-3 rounded-2xl shadow-2xl transition-all active:scale-95 hover:-translate-y-1 uppercase tracking-wider border border-indigo-500/30"
       >
         <Bell className={`w-5 h-5 ${platosListosDespacho.length > 0 ? 'animate-bounce' : ''}`} />
         <span className="hidden sm:inline">Bandeja de Cocina</span>
@@ -2185,6 +2187,7 @@ export default function SalonPage({ currentUser }) {
           <span className="bg-indigo-800 text-indigo-200 text-[10px] px-1.5 py-0.5 rounded-full ml-1">0</span>
         )}
       </button>
+      )}
 
       {/* DRAWER / MODAL DE BANDEJA DE DESPACHO */}
       {bandejaOpen && (
