@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Receipt, X, Banknote, Search, CheckCircle, Clock, Sparkles, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Tag, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, KeyRound, Flame } from 'lucide-react';
 
 import { api } from '../api';
-import { parsePasosOpciones, resolverSeleccion } from '../utils/combos';
+import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
 import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
@@ -1602,8 +1602,11 @@ export default function CajaPage({ currentUser }) {
     }
 
     // 2. OPCIONES Y MODIFICADORES PERSONALIZADOS DEL CLIENTE (MÁXIMA PRIORIDAD)
+    const pasoAcomp = pasoComplementos(prod);
     const pasosConfigurados = parsePasosOpciones(prod);
-    if (pasosConfigurados.length > 0) return pasosConfigurados;
+    if (pasosConfigurados.length > 0) return pasoAcomp ? [...pasosConfigurados, pasoAcomp] : pasosConfigurados;
+    // Sin opciones configuradas, pero con acompañamientos: igual se abre el asistente
+    if (pasoAcomp) return [pasoAcomp];
 
     // 3. Si el plato NO requiere guarnición explícitamente, NO genera pasos forzados. Directo al delivery!
     if (prod.requiereGuarnicion === false && !prod.opcionesConfig) {
@@ -1723,6 +1726,7 @@ export default function CajaPage({ currentUser }) {
     })();
 
     const isVirtualGroup = !!prod.esAgrupado;
+    const traeComplementos = tieneComplementos(prod);
     const isMenu = prod && (prod.categoria === 'Menú' || prod.categoria?.toLowerCase().includes('menú') || prod.categoria?.toLowerCase().includes('menu'));
     const hasLegacyCombo = !prod.opcionesConfig && prod.requiereGuarnicion && !!getComboConfig(prod.nombre);
     const isLegacyMenu = !prod.opcionesConfig && prod.requiereGuarnicion && isMenu;
@@ -1730,7 +1734,7 @@ export default function CajaPage({ currentUser }) {
       String(prod.categoria || '').toLowerCase() === 'combos' || String(prod.nombre || '').toLowerCase().includes('combo')
     );
 
-    if (hasDynamicOptions || isVirtualGroup || hasLegacyCombo || isLegacyMenu || isLegacyCategoryCombo) {
+    if (hasDynamicOptions || isVirtualGroup || hasLegacyCombo || isLegacyMenu || isLegacyCategoryCombo || traeComplementos) {
       const steps = getProductSteps(prod, {});
       if (steps && steps.length > 0) {
         setSelectedProduct(prod);
@@ -4840,6 +4844,10 @@ export default function CajaPage({ currentUser }) {
             } catch { return false; }
           })();
 
+          // Acompañamientos quitados y complementos agregados por el mozo
+          const compl = resolverComplementos(selectedProduct, selections);
+          const soloComplementos = !hasCustomConfig && steps.length === 1 && steps[0].tipo === 'complementos';
+
           if (selectedProduct.esAgrupado) {
             const prodVariante = selections["producto_variante"];
             if (!prodVariante) {
@@ -4847,9 +4855,14 @@ export default function CajaPage({ currentUser }) {
               return;
             }
             agregarItemDeliveryDirecto(prodVariante, additionalNotes);
+          } else if (soloComplementos) {
+            const notas = [...compl.notas];
+            if (additionalNotes.trim()) notas.push(`(Nota: ${additionalNotes.trim()})`);
+            agregarItemDeliveryDirecto(selectedProduct, notas.join(' · '), { opciones: [], precioExtra: compl.precioExtra });
           } else if (hasCustomConfig) {
             const notesArray = [];
             steps.forEach(step => {
+              if (step.tipo === 'complementos') return;
               const val = selections[step.key];
               if (val) {
                 const valLower = String(val).toLowerCase();
@@ -4866,11 +4879,13 @@ export default function CajaPage({ currentUser }) {
                 }
               }
             });
+            notesArray.push(...compl.notas);
             if (additionalNotes.trim()) {
               notesArray.push(`(Nota: ${additionalNotes.trim()})`);
             }
             const finalNotes = notesArray.join(' · ');
-            agregarItemDeliveryDirecto(selectedProduct, finalNotes, resolverSeleccion(steps, selections));
+            const sel = resolverSeleccion(steps, selections);
+            agregarItemDeliveryDirecto(selectedProduct, finalNotes, { ...sel, precioExtra: sel.precioExtra + compl.precioExtra });
           } else if (selectedProduct.categoria === 'Menú' || selectedProduct.categoria?.toLowerCase().includes('menú')) {
             const notesArray = [];
             const entr = selections["entrada_menu"];
@@ -5010,6 +5025,54 @@ export default function CajaPage({ currentUser }) {
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">
                     {currentStep.name}:
                   </h4>
+                  {currentStep.tipo === 'complementos' ? (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-slate-400">
+                        Toca para quitar lo que el cliente no quiere o agregar un extra. Quitar algo incluido no cambia el precio.
+                      </p>
+                      {currentStep.complementos.map(c => {
+                        const sel = selections.complementos || { quitados: [], agregados: [] };
+                        const quitado = (sel.quitados || []).includes(c.nombre);
+                        const agregado = (sel.agregados || []).includes(c.nombre);
+                        const activo = c.incluido ? !quitado : agregado;
+                        const alternar = () => setSelections(prev => {
+                          const actual = prev.complementos || { quitados: [], agregados: [] };
+                          const quitados = [...(actual.quitados || [])];
+                          const agregados = [...(actual.agregados || [])];
+                          if (c.incluido) {
+                            const i = quitados.indexOf(c.nombre);
+                            if (i >= 0) quitados.splice(i, 1); else quitados.push(c.nombre);
+                          } else {
+                            const i = agregados.indexOf(c.nombre);
+                            if (i >= 0) agregados.splice(i, 1); else agregados.push(c.nombre);
+                          }
+                          return { ...prev, complementos: { quitados, agregados } };
+                        });
+                        return (
+                          <button
+                            key={c.nombre}
+                            onClick={alternar}
+                            className={`w-full p-3 rounded-2xl border text-left flex items-center gap-3 transition-all ${
+                              activo
+                                ? 'bg-emerald-500/10 border-emerald-500/40 text-white'
+                                : 'bg-slate-800 border-slate-700 text-slate-400 line-through decoration-rose-500/70'
+                            }`}
+                          >
+                            <span className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 ${activo ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-500'}`}>
+                              {activo ? <Check className="w-3.5 h-3.5 stroke-[3px]" /> : <X className="w-3.5 h-3.5 stroke-[3px]" />}
+                            </span>
+                            <span className="font-black text-xs uppercase flex-1">{c.nombre}</span>
+                            {!c.incluido && (
+                              <span className={`text-[11px] font-black ${activo ? 'text-emerald-300' : 'text-slate-500'}`}>
+                                + S/ {c.precio.toFixed(2)}
+                              </span>
+                            )}
+                            {c.incluido && <span className="text-[10px] font-bold text-slate-500 uppercase">Incluido</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
                   <div className="grid grid-cols-2 gap-3">
                     {currentStep.options.map((opt, oIdx) => {
                       const isSelected = selectedProduct.esAgrupado 
@@ -5034,6 +5097,7 @@ export default function CajaPage({ currentUser }) {
                       );
                     })}
                   </div>
+                  )}
                 </div>
                 
                 {esUltimoPaso && (

@@ -2380,7 +2380,7 @@ app.get('/api/productos', async (req, res) => {
 
 app.post('/api/productos', async (req, res) => {
   try {
-    const { nombre, categoria, precio, tipoStock, stock, requiereGuarnicion, opcionesConfig, componentes } = req.body;
+    const { nombre, categoria, precio, tipoStock, stock, requiereGuarnicion, opcionesConfig, componentes, complementos } = req.body;
 
     const prod = await prisma.producto.create({
       data: {
@@ -2392,6 +2392,7 @@ app.post('/api/productos', async (req, res) => {
         requiereGuarnicion: requiereGuarnicion !== undefined ? Boolean(requiereGuarnicion) : false,
         opcionesConfig: opcionesConfig !== undefined ? (typeof opcionesConfig === 'string' ? opcionesConfig : JSON.stringify(opcionesConfig)) : null,
         componentes: componentes ? (typeof componentes === 'string' ? componentes : JSON.stringify(componentes)) : null,
+        complementos: complementos ? (typeof complementos === 'string' ? complementos : JSON.stringify(complementos)) : null,
       }
     });
     res.json(prod);
@@ -2411,6 +2412,9 @@ app.put('/api/productos/:id', async (req, res) => {
     }
     if (req.body.componentes !== undefined) {
       data.componentes = req.body.componentes ? (typeof req.body.componentes === 'string' ? req.body.componentes : JSON.stringify(req.body.componentes)) : null;
+    }
+    if (req.body.complementos !== undefined) {
+      data.complementos = req.body.complementos ? (typeof req.body.complementos === 'string' ? req.body.complementos : JSON.stringify(req.body.complementos)) : null;
     }
     if (req.body.precio !== undefined) data.precio = parseFloat(req.body.precio);
     if (req.body.tipoStock !== undefined) data.tipoStock = String(req.body.tipoStock);

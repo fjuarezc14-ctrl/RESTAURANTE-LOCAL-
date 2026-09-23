@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PlusCircle, Utensils, CupSoda, Wine, AlertCircle, Trash2, BookOpen, Save, X, Tag, ToggleLeft, ToggleRight, Edit2, ChevronDown, ChevronUp, Percent, DollarSign, Search, Sliders, Sparkles, FolderPlus } from 'lucide-react';
 import { api } from '../api';
-import { parseComponentes, calcularPrecioComponentes, normalizarOpcion } from '../utils/combos';
+import { parseComponentes, calcularPrecioComponentes, normalizarOpcion, parseComplementos, COMPLEMENTOS_SUGERIDOS } from '../utils/combos';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, TODAS_CATEGORIAS as MASTER_TODAS_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 
 // --- SISTEMA DE BÚSQUEDA INTELIGENTE Y FONÉTICA ---
@@ -96,6 +96,7 @@ export default function CartaPage({ currentUser }) {
   const [editProd, setEditProd] = useState({ id: '', nombre: '', categoria: 'Platos de Fondo', precio: '', tipoStock: 'ilimitado', stock: '' });
   const [searchQuery, setSearchQuery] = useState('');
   const [creandoNuevaCat, setCreandoNuevaCat] = useState(false);
+  const [nuevoComplemento, setNuevoComplemento] = useState('');
   const [nuevaCatNombre, setNuevaCatNombre] = useState('');
   const [categoriasExtra, setCategoriasExtra] = useState(() => {
     try {
@@ -193,6 +194,7 @@ export default function CartaPage({ currentUser }) {
           tieneOpciones: parsedOpciones.length > 0,
           opcionesConfig: parsedOpciones,
           componentes: parseComponentes(p),
+          complementos: parseComplementos(p),
         }
       : {
           id: '',
@@ -205,6 +207,7 @@ export default function CartaPage({ currentUser }) {
           tieneOpciones: false,
           opcionesConfig: [],
           componentes: [],
+          complementos: [],
         }
     );
     setCreandoNuevaCat(false);
@@ -319,6 +322,38 @@ export default function CartaPage({ currentUser }) {
     });
   };
 
+  const complementosActuales = editProd.complementos || [];
+
+  // Sugerencias: las de fábrica más las que ya se usaron en otros platos de la carta
+  const sugerenciasComplementos = (() => {
+    const usados = new Set();
+    productos.forEach(p => parseComplementos(p).forEach(c => usados.add(c.nombre)));
+    const todas = [...new Set([...COMPLEMENTOS_SUGERIDOS, ...usados])];
+    return todas.filter(n => !complementosActuales.some(c => c.nombre.toLowerCase() === n.toLowerCase()));
+  })();
+
+  const agregarComplemento = (nombre, incluido = true) => {
+    const limpio = String(nombre || '').trim();
+    if (!limpio) return;
+    setEditProd(prev => {
+      const actuales = prev.complementos || [];
+      if (actuales.some(c => c.nombre.toLowerCase() === limpio.toLowerCase())) return prev;
+      return { ...prev, complementos: [...actuales, { nombre: limpio, incluido, precio: 0 }] };
+    });
+    setNuevoComplemento('');
+  };
+
+  const actualizarComplemento = (nombre, campo, valor) => {
+    setEditProd(prev => ({
+      ...prev,
+      complementos: (prev.complementos || []).map(c => (c.nombre === nombre ? { ...c, [campo]: valor } : c)),
+    }));
+  };
+
+  const quitarComplemento = (nombre) => {
+    setEditProd(prev => ({ ...prev, complementos: (prev.complementos || []).filter(c => c.nombre !== nombre) }));
+  };
+
   const agregarPasoOpcion = () => {
     setEditProd(prev => ({
       ...prev,
@@ -400,6 +435,7 @@ export default function CartaPage({ currentUser }) {
         requiereGuarnicion: requiereGuarnicionBool,
         opcionesConfig: opcionesPayload,
         componentes: componentesActuales.length > 0 ? JSON.stringify(componentesActuales) : null,
+        complementos: complementosActuales.length > 0 ? JSON.stringify(complementosActuales) : null,
       };
       if (editProd.id) {
         await api.editarProducto(editProd.id, body);
@@ -1024,6 +1060,88 @@ export default function CartaPage({ currentUser }) {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* ACOMPAÑAMIENTOS DEL PLATO ("INCLUYE") */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                <div>
+                  <span className="text-sm text-slate-800 font-black flex items-center gap-1.5">
+                    <Utensils className="w-4 h-4 text-amber-500" />
+                    Este plato incluye
+                  </span>
+                  <span className="text-[11px] text-slate-500 block">
+                    Toca para agregar. Al comandar, el mozo podrá quitar lo incluido o sumar complementos con precio.
+                  </span>
+                </div>
+
+                {complementosActuales.length > 0 && (
+                  <div className="space-y-1.5">
+                    {complementosActuales.map(c => (
+                      <div key={c.nombre} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => actualizarComplemento(c.nombre, 'incluido', !c.incluido)}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors shrink-0 ${
+                            c.incluido ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
+                          }`}
+                          title="Cambiar entre incluido en el precio u opcional con costo"
+                        >
+                          {c.incluido ? 'Incluido' : 'Opcional'}
+                        </button>
+                        <span className="flex-1 text-xs font-bold text-slate-700 truncate">{c.nombre}</span>
+                        {!c.incluido && (
+                          <span className="flex items-center gap-1 text-xs text-slate-500">
+                            +S/
+                            <input
+                              type="number"
+                              step="0.5"
+                              min="0"
+                              value={c.precio}
+                              onChange={e => actualizarComplemento(c.nombre, 'precio', parseFloat(e.target.value) || 0)}
+                              className="w-14 border border-slate-200 rounded px-1 py-0.5 text-xs text-slate-800 focus:outline-none focus:border-amber-500"
+                            />
+                          </span>
+                        )}
+                        <button type="button" onClick={() => quitarComplemento(c.nombre)} className="text-slate-400 hover:text-red-600 p-1">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {sugerenciasComplementos.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {sugerenciasComplementos.map(n => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => agregarComplemento(n, true)}
+                        className="px-2.5 py-1 bg-white border border-slate-200 hover:border-amber-400 hover:bg-amber-50 rounded-lg text-[11px] font-bold text-slate-600 hover:text-amber-700 transition-colors"
+                      >
+                        + {n}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={nuevoComplemento}
+                    onChange={e => setNuevoComplemento(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregarComplemento(nuevoComplemento, true); } }}
+                    placeholder="Otro acompañamiento (ej: Tacu Tacu)"
+                    className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => agregarComplemento(nuevoComplemento, true)}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-[11px] font-black uppercase tracking-wider transition-colors"
+                  >
+                    Agregar
+                  </button>
+                </div>
               </div>
 
               {/* COMBO ARMADO CON PRODUCTOS DE LA CARTA */}

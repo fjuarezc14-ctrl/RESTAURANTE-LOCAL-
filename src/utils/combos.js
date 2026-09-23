@@ -69,3 +69,67 @@ export function calcularPrecioComponentes(componentes, productos) {
     return total + (prod ? prod.precio * c.cantidad : 0);
   }, 0);
 }
+
+// ================================================================
+// ACOMPAÑAMIENTOS ("incluye") Y COMPLEMENTOS OPCIONALES
+// El mozo puede quitar lo incluido (sin cambiar el precio) y agregar
+// complementos opcionales, que sí suman al precio del plato.
+// ================================================================
+
+// Sugerencias iniciales; se completan con lo que ya se usó en otros platos de la carta
+export const COMPLEMENTOS_SUGERIDOS = [
+  'Papas Fritas', 'Ensalada', 'Cremas', 'Arroz Blanco', 'Arroz Chaufa',
+  'Aguadito', 'Sopa Wantán', 'Wantán Frito', 'Yuca Frita', 'Camote Frito',
+  'Puré de Papas', 'Choclo', 'Salsa Criolla', 'Ají', 'Limón',
+];
+
+export function parseComplementos(prod) {
+  const parsed = parseJsonSafe(prod?.complementos, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .map(c => ({
+      nombre: String(c.nombre || '').trim(),
+      incluido: c.incluido !== false,
+      precio: parseFloat(c.precio || 0) || 0,
+    }))
+    .filter(c => c.nombre);
+}
+
+// Paso extra del asistente para elegir acompañamientos
+export function pasoComplementos(prod) {
+  const complementos = parseComplementos(prod);
+  if (complementos.length === 0) return null;
+  return {
+    name: 'Acompañamientos',
+    key: 'complementos',
+    tipo: 'complementos',
+    complementos,
+    options: [],
+  };
+}
+
+// Traduce lo que tocó el mozo a notas para la cocina y al precio extra a cobrar
+export function resolverComplementos(prod, selections) {
+  const complementos = parseComplementos(prod);
+  const sel = selections?.complementos || {};
+  const quitados = sel.quitados || [];
+  const agregados = sel.agregados || [];
+  const notas = [];
+  let precioExtra = 0;
+
+  for (const c of complementos) {
+    if (c.incluido && quitados.includes(c.nombre)) {
+      notas.push(`SIN ${c.nombre}`); // quitar algo incluido no baja el precio
+    }
+    if (!c.incluido && agregados.includes(c.nombre)) {
+      notas.push(c.precio > 0 ? `+ ${c.nombre} (S/ ${c.precio.toFixed(2)})` : `+ ${c.nombre}`);
+      precioExtra += c.precio;
+    }
+  }
+  return { notas, precioExtra };
+}
+
+// Marca si el producto trae acompañamientos configurados
+export function tieneComplementos(prod) {
+  return parseComplementos(prod).length > 0;
+}

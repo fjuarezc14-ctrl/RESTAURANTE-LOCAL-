@@ -75,6 +75,7 @@ model Producto {
   requiereGuarnicion Boolean @default(false)
   opcionesConfig String? // JSON con pasos de opciones/combos: [{"name": "...", "key": "...", "options": [...]}]
   componentes    String? // JSON de combo armado con productos de la carta: [{"productoId": 1, "cantidad": 2}]
+  complementos   String? // JSON de acompañamientos: [{"nombre": "Papas", "incluido": true, "precio": 0}]
   creadoEn  DateTime @default(now())
   
   ItemPedido ItemPedido[]
