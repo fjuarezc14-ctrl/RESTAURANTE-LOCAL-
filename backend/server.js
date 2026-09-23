@@ -345,6 +345,7 @@ async function expandPedidoItemsForDb(itemsList) {
           historial: false,
           entregado: false,
           notas: `(Incluido en ${prodNombre})`,
+          esComponente: true,
         });
       }
 
@@ -364,6 +365,7 @@ async function expandPedidoItemsForDb(itemsList) {
           historial: false,
           entregado: false,
           notas: `(${op.paso || 'Opción'} de ${prodNombre})`,
+          esComponente: true,
         });
         expandidoPorOpciones = true;
       }
@@ -426,6 +428,7 @@ async function expandPedidoItemsForDb(itemsList) {
             historial: false, // Va para la barra
             entregado: false,
             notas: "(Bebida Incluida en Combo - S/ 0.00)",
+            esComponente: true,
           });
         }
       }
@@ -1226,6 +1229,7 @@ app.post('/api/mesas/:num/pedido', async (req, res) => {
               historial: i.historial,
               entregado: i.entregado || false,
               notas: i.notas,
+              esComponente: i.esComponente || false,
             })),
           },
         },
@@ -1425,9 +1429,8 @@ app.patch('/api/pedidos/:id/preparar', async (req, res) => {
 
     // Filtrar los items que corresponden a la sección despachada
     const itemsAActualizar = pedido.items.filter(i => {
-      // Si es delivery/llevar, marcamos todos los items como listos
-      if (pedido.tipoEntrega === 'llevar' || pedido.tipoEntrega === 'delivery') return true;
-
+      // Cada estación despacha lo suyo, también en los pedidos para llevar:
+      // antes la cocina marcaba las bebidas y la barra las perdía de vista.
       const esItemBarra = BARRA_CATEGORIAS.includes(i.producto?.categoria);
       if (seccion === 'barra') return esItemBarra;
       if (seccion === 'cocina') return !esItemBarra;
@@ -1534,12 +1537,8 @@ app.patch('/api/pedidos/:id/entregar-todo', async (req, res) => {
 
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
 
-    // Filtrar items que son de Cocina (no barra) y están listos (historial: true) pero no entregados
-    const itemsAActualizar = pedido.items.filter(i =>
-      i.historial &&
-      !i.entregado &&
-      !BARRA_CATEGORIAS.includes(i.producto?.categoria)
-    );
+    // Todo lo que ya está listo y aún no se llevó a la mesa (cocina y barra)
+    const itemsAActualizar = pedido.items.filter(i => i.historial && !i.entregado);
 
     if (itemsAActualizar.length > 0) {
       await prisma.itemPedido.updateMany({
@@ -1936,6 +1935,7 @@ app.post('/api/pedidos/llevar', async (req, res) => {
             historial: i.historial,
             entregado: i.entregado || false,
             notas: i.notas,
+            esComponente: i.esComponente || false,
           })),
         },
       },
@@ -2111,7 +2111,7 @@ app.get('/api/pedidos/llevar', async (req, res) => {
         hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima',
       }),
       // Excluir items expandidos con precio 0 para evitar duplicidad al modificar en el frontend
-      items: p.items.filter(i => i.precio > 0).map(i => ({
+      items: p.items.filter(i => !i.esComponente).map(i => ({
         id: String(i.productoId),
         nombre: i.nombre,
         cant: i.cantidad,
@@ -2221,6 +2221,7 @@ app.put('/api/pedidos/llevar/:id', async (req, res) => {
           historial: i.historial,
           entregado: i.entregado || false,
           notas: i.notas,
+          esComponente: i.esComponente || false,
         }))
       });
 
@@ -3568,11 +3569,11 @@ app.get('/api/ventas', async (req, res) => {
       serie: v.serie,
       numero: v.numero,
       itemsResumen: v.pedido?.items
-        ?.filter(i => i.precio > 0 || BARRA_CATEGORIAS.includes(i.producto?.categoria) || i.notas?.includes('CORTESÍA') || i.nombre?.includes('CORTESÍA'))
+        ?.filter(i => !i.esComponente)
         ?.map(i => `${i.cantidad}x ${i.nombre}`).join(', ') || '',
 
       items: v.pedido?.items
-        ?.filter(i => i.precio > 0 || BARRA_CATEGORIAS.includes(i.producto?.categoria) || i.notas?.includes('CORTESÍA') || i.nombre?.includes('CORTESÍA'))
+        ?.filter(i => !i.esComponente)
         ?.map(i => ({
           nombre: i.nombre,
           cant: i.cantidad,
@@ -4279,8 +4280,10 @@ app.get('/api/reportes/pollos', async (req, res) => {
     // Determinar la fracción de un item basado en nombre o categoría
     const obtenerFraccion = (nombre, categoria) => {
       const n = (nombre || '').toLowerCase();
-      // Verificar si es un producto de pollo (nombre contiene pollo o categoría es pollos)
-      const esPollo = n.includes('pollo') || (categoria || '').includes('Pollos') || ['Pollos a la Brasa', 'Piqueo', 'Parrillada Mixta'].some(c => (categoria || '').includes(c));
+      const cat = (categoria || '').toLowerCase();
+      // Solo cuenta lo que sale del horno: antes sumaba un pollo entero por cada plato
+      // con la palabra "pollo" (Chaufa de Pollo, Pollo Saltado...) e inflaba el reporte.
+      const esPollo = cat.includes('pollo') || cat.includes('brasa') || cat.includes('mostrito');
       if (!esPollo) return 0;
 
       // Detectar fracción en el nombre
@@ -4468,10 +4471,7 @@ async function obtenerSiguienteSerieYNumero(tipoComprobante, txPrisma = prisma) 
 
 async function enviarAApisunat(venta, itemsRaw) {
   // Filtrar los items para excluir componentes de combos de precio 0 que no son barra
-  const items = itemsRaw.filter(i => {
-    const isBar = BARRA_CATEGORIAS.includes(i.categoria) || (i.producto?.categoria && BARRA_CATEGORIAS.includes(i.producto?.categoria));
-    return i.precio > 0 || isBar;
-  });
+  const items = itemsRaw.filter(i => !i.esComponente);
 
   // Simular caída de red si está activa la variable de entorno
   if (process.env.APISUNAT_SIMULATE_OUTAGE === 'true') {

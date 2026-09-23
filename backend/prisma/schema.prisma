@@ -132,6 +132,7 @@ model ItemPedido {
   historial  Boolean  @default(false)
   entregado  Boolean  @default(false)
   notas      String?
+  esComponente Boolean @default(false) // parte incluida de un combo: no se cobra ni se lista en el ticket
 
   @@index([pedidoId])
   @@index([productoId])

@@ -648,6 +648,34 @@ export default function SalonPage({ currentUser }) {
     if (prevMesasRef.current.length > 0) {
       const listasNuevas = [];
       const activeMeseroName = currentUser?.nombre || meseroGlobal;
+
+      // Avisar por cada plato o bebida que acaba de salir de su estación
+      const reciénListos = [];
+      mesas.forEach(m => {
+        const ant = prevMesasRef.current.find(p => p.num === m.num);
+        if (!ant || !m.pedidoData?.items) return;
+        const esMiMesa = m.pedidoData?.mesero === activeMeseroName || ['Administrador', 'Cajero'].includes(currentUser?.rol);
+        if (!esMiMesa) return;
+        const antesListos = new Set((ant.pedidoData?.items || []).filter(i => i.historial).map(i => i.itemId));
+        m.pedidoData.items.forEach(i => {
+          if (i.historial && !i.entregado && !antesListos.has(i.itemId)) {
+            reciénListos.push({ mesa: m.num, nombre: i.nombre, esBarra: BARRA_CATEGORIAS.includes(i.categoria) });
+          }
+        });
+      });
+      if (reciénListos.length > 0) {
+        playChimeNotification();
+        reciénListos.slice(0, 4).forEach(item => {
+          const toastId = Date.now() + Math.random();
+          setToasts(prev => [...prev, {
+            id: toastId,
+            mesa: item.mesa,
+            mensaje: `${item.esBarra ? '🍹 Bebida lista en BARRA' : '🍽️ Plato listo en COCINA'}: ${item.nombre} · Mesa ${item.mesa}`,
+          }]);
+          setTimeout(() => setToasts(prev => prev.filter(t => t.id !== toastId)), 6000);
+        });
+      }
+
       mesas.forEach(m => {
         const ant = prevMesasRef.current.find(p => p.num === m.num);
         if (ant && ant.estado === 'Cocina' && m.estado === 'Servido') {
@@ -972,17 +1000,15 @@ export default function SalonPage({ currentUser }) {
     const esMiMesa = m.pedidoData.mesero === activeMeseroName || isElevatedRole;
     if (!esMiMesa) return [];
 
-    const itemsListos = m.pedidoData.items.filter(i => 
-      i.historial && 
-      !i.entregado && 
-      !BARRA_CATEGORIAS.includes(i.categoria)
-    );
+    // Listo para llevar a la mesa: lo despachado por cocina y también por barra
+    const itemsListos = m.pedidoData.items.filter(i => i.historial && !i.entregado);
 
     return itemsListos.map(item => ({
       ...item,
       mesaNum: m.num,
       mesero: m.pedidoData.mesero,
       pedidoId: item.pedidoId,
+      estacion: BARRA_CATEGORIAS.includes(item.categoria) ? 'Barra' : 'Cocina',
     }));
   });
 
@@ -2234,7 +2260,7 @@ export default function SalonPage({ currentUser }) {
         ))}
       </div>
 
-      {/* Botón flotante para Bandeja de Cocina (Platos Listos).
+      {/* Botón flotante para Bandeja de Despacho (Platos Listos).
           En el celular se oculta mientras haya una ventana abierta: antes tapaba sus botones. */}
       {!modalOpen && !optionsModalOpen && !cancelModal && !authModal.open && (
       <button
@@ -2242,7 +2268,7 @@ export default function SalonPage({ currentUser }) {
         className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[220] flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs md:text-sm p-3 md:px-4 md:py-3 rounded-2xl shadow-2xl transition-all active:scale-95 hover:-translate-y-1 uppercase tracking-wider border border-indigo-500/30"
       >
         <Bell className={`w-5 h-5 ${platosListosDespacho.length > 0 ? 'animate-bounce' : ''}`} />
-        <span className="hidden sm:inline">Bandeja de Cocina</span>
+        <span className="hidden sm:inline">Bandeja de Despacho</span>
         {platosListosDespacho.length > 0 ? (
           <span className="bg-red-500 text-white font-black text-xs px-2 py-0.5 rounded-full border border-white shadow ml-1 animate-pulse">
             {platosListosDespacho.length}
@@ -2263,7 +2289,7 @@ export default function SalonPage({ currentUser }) {
                   <Bell className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-black text-sm md:text-base uppercase tracking-tight leading-none">Bandeja de Cocina</h2>
+                  <h2 className="font-black text-sm md:text-base uppercase tracking-tight leading-none">Bandeja de Despacho</h2>
                   <p className="text-[10px] text-indigo-200 mt-1 uppercase tracking-wider">Platos listos para servir</p>
                 </div>
               </div>
@@ -2277,7 +2303,7 @@ export default function SalonPage({ currentUser }) {
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 py-10">
                   <CheckCircle className="w-16 h-16 text-slate-300 mb-3" />
                   <p className="font-black uppercase tracking-wider text-sm">Bandeja Vacía</p>
-                  <p className="text-xs text-slate-400 text-center mt-1">No hay platos listos pendientes de entregar en cocina.</p>
+                  <p className="text-xs text-slate-400 text-center mt-1">No hay platos ni bebidas pendientes de llevar a las mesas.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -2315,8 +2341,13 @@ export default function SalonPage({ currentUser }) {
                         <ul className="space-y-2">
                           {items.map((item, idx) => (
                             <li key={idx} className="flex items-center justify-between text-xs bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
-                              <span className="font-bold text-slate-800 uppercase flex-1 pr-2">
-                                <span className="font-black text-indigo-600 mr-2">{item.cant}x</span> {item.nombre}
+                              <span className="font-bold text-slate-800 uppercase flex-1 pr-2 flex items-center gap-2 flex-wrap">
+                                <span className="font-black text-indigo-600">{item.cant}x</span> {item.nombre}
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md tracking-wider ${
+                                  item.estacion === 'Barra' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {item.estacion === 'Barra' ? '🍹 BARRA' : '🔥 COCINA'}
+                                </span>
                               </span>
                               <button
                                 onClick={async () => {
