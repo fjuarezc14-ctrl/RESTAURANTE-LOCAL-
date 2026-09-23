@@ -4300,31 +4300,20 @@ export default function CajaPage({ currentUser }) {
                   </div>
                 )}
 
-                {/* Formulario de Facturación / Pago para Para Llevar y Delivery Propio */}
+                {/* Formulario de cobro para Para Llevar y Delivery Propio */}
                 {(tipoDelivery === 'ParaLlevar' || tipoDelivery === 'DeliveryPropio') && (
                   <div className="p-4 bg-slate-50 border-t border-b border-slate-200 space-y-4 shrink-0">
                     <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                       <Banknote className="w-4 h-4 text-emerald-600" />
-                      Facturación y Cobro
+                      Cobro del Pedido
                     </h4>
                     
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-slate-500 font-bold text-[9px] tracking-widest uppercase mb-1">Comprobante:</label>
-                        <select 
-                          value={(deliveryMetodoPago === 'Crédito' || deliveryMetodoPago === 'Cortesía' || deliveryMetodoPago === 'Consumo') ? 'Ticket' : deliveryTipoComprobante} 
-                          onChange={(e) => {
-                            setDeliveryTipoComprobante(e.target.value);
-                            setDeliveryNumDocumento('');
-                            setDeliveryClienteNombre('');
-                          }} 
-                          disabled={deliveryMetodoPago === 'Crédito' || deliveryMetodoPago === 'Cortesía' || deliveryMetodoPago === 'Consumo'}
-                          className="w-full bg-white border border-slate-200 rounded-xl px-2 py-1.5 font-bold text-slate-800 text-xs focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <option value="Ticket">{(deliveryMetodoPago === 'Crédito' || deliveryMetodoPago === 'Cortesía' || deliveryMetodoPago === 'Consumo') ? 'Ticket Interno (forzado)' : 'Ticket Interno'}</option>
-                          {deliveryMetodoPago !== 'Crédito' && deliveryMetodoPago !== 'Cortesía' && deliveryMetodoPago !== 'Consumo' && <option value="Boleta">Boleta (DNI)</option>}
-                          {deliveryMetodoPago !== 'Crédito' && deliveryMetodoPago !== 'Cortesía' && deliveryMetodoPago !== 'Consumo' && <option value="Factura">Factura (RUC)</option>}
-                        </select>
+                        <div className="w-full bg-white border border-slate-200 rounded-xl px-2 py-1.5 font-bold text-slate-800 text-xs">
+                          🧾 Ticket de Venta
+                        </div>
                       </div>
                       <div>
                         <label className="block text-slate-500 font-bold text-[9px] tracking-widest uppercase mb-1">Método Pago:</label>
@@ -4609,12 +4598,12 @@ export default function CajaPage({ currentUser }) {
                       );
                     })()}
 
-                    {(deliveryTipoComprobante === 'Boleta' || deliveryTipoComprobante === 'Factura') && (
+                    {deliveryMetodoPago !== 'Consumo' && (
                       <div className="space-y-3">
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="block text-slate-500 font-bold text-[9px] tracking-widest uppercase mb-1">
-                              {deliveryTipoComprobante === 'Factura' ? 'RUC del Cliente:' : 'DNI del Cliente:'}
+                              DNI o RUC (opcional):
                             </label>
                             <div className="flex gap-1.5">
                               <input 
@@ -4641,7 +4630,7 @@ export default function CajaPage({ currentUser }) {
                           </div>
                           <div>
                             <label className="block text-slate-500 font-bold text-[9px] tracking-widest uppercase mb-1">
-                              {deliveryTipoComprobante === 'Factura' ? 'Razón Social:' : 'Nombre Cliente:'}
+                              Nombre del cliente (opcional):
                             </label>
                             <input 
                               type="text" 
