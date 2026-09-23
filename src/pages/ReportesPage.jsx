@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Download, TrendingUp, TrendingDown, DollarSign, XCircle, Users, Truck, Calendar, Search, Receipt, Printer, X, Wallet, Briefcase, Award, Flame, UtensilsCrossed, PieChart, Layers } from 'lucide-react';
+import { Download, TrendingUp, TrendingDown, DollarSign, XCircle, Users, Truck, Calendar, Search, Receipt, Printer, X, Wallet, Briefcase, Award, Flame, UtensilsCrossed, PieChart, Layers, History, AlertTriangle, Filter } from 'lucide-react';
 
 import { api } from '../api';
 import { useCompany } from '../context/CompanyContext';
@@ -98,8 +98,11 @@ export default function ReportesPage() {
   const [clientes, setClientes] = useState([]);
   const [gerencialModalOpen, setGerencialModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('resumen');
+  const [cierresHistorial, setCierresHistorial] = useState([]);
+  const [cierreAImprimir, setCierreAImprimir] = useState(null);
   const [rotacionCatFiltro, setRotacionCatFiltro] = useState('Todos');
   const [rotacionBusqueda, setRotacionBusqueda] = useState('');
+  const [filtroTipoAnulacion, setFiltroTipoAnulacion] = useState('Todos');
 
   // Filtros de secciones para el Reporte Gerencial PDF
   const [incluirBalance, setIncluirBalance] = useState(true);
@@ -245,7 +248,7 @@ export default function ReportesPage() {
   const fetchReportes = useCallback(async (desde, hasta) => {
     setFiltrando(true);
     try {
-      const [data, cancs, mzs, vts, rot, cmps, clients] = await Promise.all([
+      const [data, cancs, mzs, vts, rot, cmps, clients, cierresRes] = await Promise.all([
         api.getReporteContable(desde, hasta),
         api.getCancelaciones(desde, hasta),
         api.getReporteMozos(desde, hasta),
@@ -253,6 +256,7 @@ export default function ReportesPage() {
         api.getRotacion(desde, hasta),
         api.getCompras(desde, hasta),
         api.getClientes().catch(() => []),
+        api.getHistorialCierres(100).catch(() => []),
       ]);
       setResumen(data);
       setCancelaciones(cancs || []);
@@ -261,6 +265,8 @@ export default function ReportesPage() {
       setRotacion(rot || []);
       setCompras(cmps || []);
       setClientes(clients || []);
+      const listCierres = Array.isArray(cierresRes) ? cierresRes : (cierresRes?.cierres || []);
+      setCierresHistorial(listCierres);
     } catch(err) {
       console.error('Error cargando reportes:', err);
     } finally {
@@ -291,68 +297,231 @@ export default function ReportesPage() {
         api.getCompras(fechaDesde, fechaHasta)
       ]);
 
-      const rows = [
-        [`REGISTRO TRIBUTARIO (RCE / RVE) - ${COMPANY_CONFIG.name.toUpperCase()}`],
-        [`PERIODO: DESDE ${fechaDesde} HASTA ${fechaHasta}`],
-        [],
-        ['TIPO', 'FECHA EMISION', 'COMPROBANTE', 'NUM DOCUMENTO', 'CLIENTE / PROVEEDOR', 'METODO PAGO', 'BASE IMPONIBLE (S/)', 'IGV (S/)', 'TOTAL (S/)', 'EFECTIVO (S/)', 'TARJETA (S/)', 'YAPE (S/)']
-      ];
+      const totalVentas = ventasData.reduce((s, v) => s + (Number(v.total) || 0), 0);
+      const baseVentas = ventasData.reduce((s, v) => s + (Number(v.subtotal) || 0), 0);
+      const igvVentas = ventasData.reduce((s, v) => s + (Number(v.igv) || 0), 0);
 
-      // Insertar Ventas
+      const totalCompras = comprasData.reduce((s, c) => s + (Number(c.total) || 0), 0);
+      const baseCompras = comprasData.reduce((s, c) => s + (Number(c.baseImponible) || 0), 0);
+      const igvCompras = comprasData.reduce((s, c) => s + (Number(c.igv) || 0), 0);
+
+      const margenOperativo = totalVentas - totalCompras;
+
+      // Desglose por métodos de pago en ventas
+      let ventasEfec = 0;
+      let ventasTarj = 0;
+      let ventasYape = 0;
+      let ventasOtros = 0;
+
       ventasData.forEach(v => {
+        let e = Number(v.montoEfectivo) || (v.metodoPago === 'Efectivo' ? v.total : 0);
+        let t = Number(v.montoTarjeta) || (v.metodoPago === 'Tarjeta' ? v.total : 0);
+        let y = Number(v.montoYape) || (v.metodoPago === 'Yape' ? v.total : 0);
+        if (v.metodoPago === 'Mixto' && (e + t + y) < v.total) {
+          e += (v.total - (e + t + y));
+        }
+        ventasEfec += e;
+        ventasTarj += t;
+        ventasYape += y;
+        if (v.metodoPago === 'Consumo' || v.metodoPago === 'Cortesía' || v.metodoPago === 'Crédito') {
+          ventasOtros += Number(v.total) || 0;
+        }
+      });
+
+      // Filas de Ventas
+      const ventasRows = ventasData.map((v, idx) => {
         const date = v.createdAt ? v.createdAt.split('T')[0] : '';
-        let efec = v.montoEfectivo || (v.metodoPago === 'Efectivo' ? v.total : 0);
-        let tarj = v.montoTarjeta || (v.metodoPago === 'Tarjeta' ? v.total : 0);
-        let yape = v.montoYape || (v.metodoPago === 'Yape' ? v.total : 0);
-        
+        const serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
+        const correlativoStr = String(v.id % 10000).padStart(4, '0');
+        const numComp = `${serie}-${correlativoStr}`;
+        let efec = Number(v.montoEfectivo) || (v.metodoPago === 'Efectivo' ? v.total : 0);
+        let tarj = Number(v.montoTarjeta) || (v.metodoPago === 'Tarjeta' ? v.total : 0);
+        let yape = Number(v.montoYape) || (v.metodoPago === 'Yape' ? v.total : 0);
         if (v.metodoPago === 'Mixto' && (efec + tarj + yape) < v.total) {
           efec += (v.total - (efec + tarj + yape));
         }
 
-        rows.push([
-          'VENTA',
-          date,
-          v.tipoComprobante,
-          v.numDocumento || 'S/D',
-          v.nombreCliente || 'PÚBLICO GENERAL',
-          v.metodoPago,
-          v.subtotal.toFixed(2),
-          v.igv.toFixed(2),
-          v.total.toFixed(2),
-          efec.toFixed(2),
-          tarj.toFixed(2),
-          yape.toFixed(2)
-        ]);
-      });
+        const bg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+        return `
+          <tr style="background-color: ${bg};">
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'\\@';">${idx + 1}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'yyyy-mm-dd';">${date}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${v.tipoComprobante || 'Ticket'}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; font-weight: bold; mso-number-format:'\\@';">${numComp}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'\\@';">${v.numDocumento || 'S/D'}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px;">${v.nombreCliente || 'PÚBLICO GENERAL'}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; font-weight: 600;">${v.metodoPago}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${v.subtotal.toFixed(2)}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; color: #2563EB; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${v.igv.toFixed(2)}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; font-weight: bold; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${v.total.toFixed(2)}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${efec.toFixed(2)}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${tarj.toFixed(2)}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${yape.toFixed(2)}</td>
+          </tr>
+        `;
+      }).join('');
 
-      // Insertar Compras
-      comprasData.forEach(c => {
+      // Filas de Compras
+      const comprasRows = comprasData.map((c, idx) => {
         const date = c.creadoEn ? c.creadoEn.split('T')[0] : '';
-        rows.push([
-          'COMPRA',
-          date,
-          c.tipoDocumento || 'Factura',
-          c.ruc || 'S/D',
-          c.proveedor,
-          'Efectivo/Transferencia',
-          c.baseImponible.toFixed(2),
-          c.igv.toFixed(2),
-          c.total.toFixed(2),
-          '0.00',
-          '0.00',
-          '0.00'
-        ]);
-      });
+        const bg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+        return `
+          <tr style="background-color: ${bg};">
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'\\@';">${idx + 1}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'yyyy-mm-dd';">${date}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${c.tipoDocumento || 'Factura'}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; font-weight: bold; mso-number-format:'\\@';">${c.serieNumero || '-'}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'\\@';">${c.ruc || 'S/D'}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; font-weight: 600;">${c.proveedor || 'Sin proveedor'}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px;">${c.categoria || 'Gastos Operativos'}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${c.baseImponible.toFixed(2)}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; color: #E11D48; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${c.igv.toFixed(2)}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; font-weight: bold; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${c.total.toFixed(2)}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${c.metodoPago || 'Efectivo'}</td>
+          </tr>
+        `;
+      }).join('');
 
-      // Convertir a CSV compatible con Excel en español (con codificación UTF-8 BOM)
-      const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map(r => r.join(',')).join('\n');
+      const excelHtml = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+          <!--[if gte mso 9]>
+          <xml>
+            <x:ExcelWorkbook>
+              <x:ExcelWorksheets>
+                <x:ExcelWorksheet>
+                  <x:Name>Libro Contable RCE-RVE</x:Name>
+                  <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+                </x:ExcelWorksheet>
+              </x:ExcelWorksheets>
+            </x:ExcelWorkbook>
+          </xml>
+          <![endif]-->
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1E293B; }
+            .title { font-size: 16px; font-weight: 900; color: #0F172A; text-align: center; }
+            .subtitle { font-size: 11px; color: #64748B; text-align: center; }
+            .section-header { background-color: #0F172A; color: #FFFFFF; font-weight: 900; font-size: 12px; padding: 8px; text-align: left; }
+            .table-head th { background-color: #1E293B; color: #FFFFFF; font-weight: 800; font-size: 10px; text-transform: uppercase; padding: 6px; border: 1px solid #0F172A; }
+            .kpi-title { background-color: #F1F5F9; font-weight: 800; font-size: 10px; color: #475569; padding: 6px; border: 1px solid #CBD5E1; }
+            .kpi-val { background-color: #FFFFFF; font-weight: 900; font-size: 12px; color: #0F172A; text-align: right; padding: 6px; border: 1px solid #CBD5E1; }
+            .total-row td { background-color: #E2E8F0; font-weight: 900; font-size: 11px; color: #0F172A; border-top: 2px solid #0F172A; border-bottom: 3px double #0F172A; padding: 6px; }
+          </style>
+        </head>
+        <body>
+          <table>
+            <tr><td colspan="13" class="title">${COMPANY_CONFIG.legalName.toUpperCase()}</td></tr>
+            <tr><td colspan="13" class="subtitle">RUC: ${COMPANY_CONFIG.ruc} · ${COMPANY_CONFIG.address}</td></tr>
+            <tr><td colspan="13" class="subtitle" style="font-weight: bold; color: #334155; font-size: 13px;">LIBRO CONTABLE TRIBUTARIO Y FINANCIERO (RVE / RCE)</td></tr>
+            <tr><td colspan="13" class="subtitle">PERIODO EVALUADO: DESDE ${fechaDesde} HASTA ${fechaHasta} · EMISIÓN: ${new Date().toLocaleDateString('es-PE')} ${new Date().toLocaleTimeString('es-PE')}</td></tr>
+            <tr><td colspan="13"></td></tr>
+
+            <!-- DASHBOARD RESUMEN EJECUTIVO -->
+            <tr><td colspan="13" class="section-header" style="background-color: #334155;">📊 1. RESUMEN EJECUTIVO FINANCIERO DEL PERIODO</td></tr>
+            <tr>
+              <td colspan="3" class="kpi-title">TOTAL VENTAS (RVE)</td>
+              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${totalVentas.toFixed(2)}</td>
+              <td colspan="3" class="kpi-title">RECAUDACIÓN EFECTIVO</td>
+              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasEfec.toFixed(2)}</td>
+              <td colspan="3"></td>
+            </tr>
+            <tr>
+              <td colspan="3" class="kpi-title">TOTAL COMPRAS Y GASTOS (RCE)</td>
+              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00'; color: #E11D48;">S/ ${totalCompras.toFixed(2)}</td>
+              <td colspan="3" class="kpi-title">RECAUDACIÓN TARJETAS (POS)</td>
+              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasTarj.toFixed(2)}</td>
+              <td colspan="3"></td>
+            </tr>
+            <tr>
+              <td colspan="3" class="kpi-title" style="background-color: #FEF3C7; color: #92400E;">UTILIDAD BRUTA OPERATIVA</td>
+              <td colspan="2" class="kpi-val" style="background-color: #FEF3C7; color: ${margenOperativo >= 0 ? '#166534' : '#991B1B'}; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${margenOperativo.toFixed(2)}</td>
+              <td colspan="3" class="kpi-title">RECAUDACIÓN YAPE / PLIN</td>
+              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasYape.toFixed(2)}</td>
+              <td colspan="3"></td>
+            </tr>
+            <tr>
+              <td colspan="3" class="kpi-title">BASE IMPONIBLE VENTAS</td>
+              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${baseVentas.toFixed(2)}</td>
+              <td colspan="3" class="kpi-title">OTROS (CONSUMO / CRÉDITOS)</td>
+              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasOtros.toFixed(2)}</td>
+              <td colspan="3"></td>
+            </tr>
+            <tr>
+              <td colspan="3" class="kpi-title">IGV VENTAS (10.5%)</td>
+              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${igvVentas.toFixed(2)}</td>
+              <td colspan="8"></td>
+            </tr>
+            <tr><td colspan="13"></td></tr>
+
+            <!-- SECCIÓN VENTAS RVE -->
+            <tr><td colspan="13" class="section-header">🍽️ 2. REGISTRO DETALLADO DE VENTAS E INGRESOS (RVE)</td></tr>
+            <tr class="table-head">
+              <th style="width: 40px;">N°</th>
+              <th style="width: 85px;">FECHA</th>
+              <th style="width: 75px;">TIPO</th>
+              <th style="width: 95px;">COMPROBANTE</th>
+              <th style="width: 95px;">DOC. CLIENTE</th>
+              <th style="width: 220px;">CLIENTE / RAZÓN SOCIAL</th>
+              <th style="width: 100px;">MEDIO PAGO</th>
+              <th style="width: 100px;">BASE IMP. (S/)</th>
+              <th style="width: 80px;">IGV (S/)</th>
+              <th style="width: 100px;">TOTAL (S/)</th>
+              <th style="width: 90px;">EFECTIVO</th>
+              <th style="width: 90px;">TARJETA</th>
+              <th style="width: 90px;">YAPE/PLIN</th>
+            </tr>
+            ${ventasRows}
+            <tr class="total-row">
+              <td colspan="7" style="text-align: right; padding-right: 12px;">TOTALES RVE VENTAS:</td>
+              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${baseVentas.toFixed(2)}</td>
+              <td style="text-align: right; color: #2563EB; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${igvVentas.toFixed(2)}</td>
+              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${totalVentas.toFixed(2)}</td>
+              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasEfec.toFixed(2)}</td>
+              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasTarj.toFixed(2)}</td>
+              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasYape.toFixed(2)}</td>
+            </tr>
+            <tr><td colspan="13"></td></tr>
+
+            <!-- SECCIÓN COMPRAS RCE -->
+            <tr><td colspan="13" class="section-header" style="background-color: #BE123C;">🔻 3. REGISTRO DETALLADO DE COMPRAS Y GASTOS (RCE)</td></tr>
+            <tr class="table-head">
+              <th style="width: 40px; background-color: #881337;">N°</th>
+              <th style="width: 85px; background-color: #881337;">FECHA</th>
+              <th style="width: 75px; background-color: #881337;">TIPO</th>
+              <th style="width: 95px; background-color: #881337;">SERIE/NUM</th>
+              <th style="width: 95px; background-color: #881337;">RUC PROVEEDOR</th>
+              <th style="width: 220px; background-color: #881337;">PROVEEDOR / RAZÓN SOCIAL</th>
+              <th style="width: 130px; background-color: #881337;">CATEGORÍA / CONCEPTO</th>
+              <th style="width: 100px; background-color: #881337;">BASE IMP. (S/)</th>
+              <th style="width: 80px; background-color: #881337;">IGV (S/)</th>
+              <th style="width: 100px; background-color: #881337;">TOTAL GASTO (S/)</th>
+              <th style="width: 90px; background-color: #881337;">FORMA PAGO</th>
+              <th colspan="2" style="background-color: #881337;"></th>
+            </tr>
+            ${comprasRows}
+            <tr class="total-row">
+              <td colspan="7" style="text-align: right; padding-right: 12px;">TOTALES RCE COMPRAS:</td>
+              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${baseCompras.toFixed(2)}</td>
+              <td style="text-align: right; color: #E11D48; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${igvCompras.toFixed(2)}</td>
+              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${totalCompras.toFixed(2)}</td>
+              <td colspan="3"></td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `;
+
+      const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.setAttribute('href', encodeURI(csvContent));
+      link.href = url;
       const marca = (COMPANY_CONFIG.brandShort || 'EMPRESA').replace(/\s+/g, '_');
-      link.setAttribute('download', `RCE_RVE_${marca}_${fechaDesde}_AL_${fechaHasta}.csv`);
+      link.download = `Libro_Contable_RCE_RVE_${marca}_${fechaDesde}_AL_${fechaHasta}.xls`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     } catch (err) {
       alert('Error al generar libro contable: ' + err.message);
     } finally {
@@ -477,7 +646,7 @@ export default function ReportesPage() {
               disabled={filtrando}
               className="flex-1 sm:flex-initial bg-emerald-500 hover:bg-emerald-600 text-slate-900 px-4 py-2.5 rounded-xl font-black uppercase tracking-wider text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10 transition-all active:scale-95 disabled:opacity-50 h-[38px] shrink-0"
             >
-              <Download className="w-4 h-4" /> Exportar RCE
+              <Download className="w-4 h-4" /> Excel RCE / RVE
             </button>
             <button 
               onClick={() => setGerencialModalOpen(true)} 
@@ -495,8 +664,10 @@ export default function ReportesPage() {
           { id: 'resumen', label: '📊 Balance y Finanzas' },
           { id: 'rotacion', label: '🍽️ Rendimiento de Carta y Platos' },
           { id: 'mozos', label: '👥 Mozos y Servicio' },
+          { id: 'anulaciones', label: '🚫 Auditoría de Anulaciones' },
           { id: 'consumo', label: '📋 Consumos y Créditos' },
           { id: 'pedidosya', label: '🛵 Control PedidosYa' },
+          { id: 'cierres', label: '🔒 Cierres de Turno (Arqueos)' },
         ].map(tab => (
           <button
             key={tab.id}
@@ -1505,62 +1676,464 @@ export default function ReportesPage() {
               </table>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* PEDIDOS CANCELADOS DEL DÍA */}
-          <div className="bg-white rounded-3xl border border-red-200/60 shadow-sm overflow-hidden">
-            <div className="p-4 md:p-5 border-b border-red-100 bg-red-50 flex justify-between items-center">
-              <h2 className="font-black text-red-700 uppercase text-xs tracking-wider flex items-center gap-2">
-                <XCircle className="w-4 h-4 text-red-500" /> Pedidos Cancelados e Incidencias en el Periodo
-              </h2>
-              <span className="bg-red-100 text-red-800 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
-                {cancelaciones.length} cancelación{cancelaciones.length !== 1 ? 'es' : ''}
-              </span>
+      {/* 4. AUDITORÍA INTEGRAL DE ANULACIONES Y DEVOLUCIONES */}
+      {activeTab === 'anulaciones' && (() => {
+        const cancelacionesFiltradas = cancelaciones.filter(c => {
+          if (filtroTipoAnulacion === 'Todos') return true;
+          return (c.tipo || 'Comanda Cancelada') === filtroTipoAnulacion;
+        });
+
+        const totalPerdida = cancelacionesFiltradas.reduce((s, c) => s + (Number(c.total) || 0), 0);
+        const devolucionesList = cancelaciones.filter(c => c.tipo === 'Devolución en Caja');
+        const montoDevoluciones = devolucionesList.reduce((s, c) => s + (Number(c.total) || 0), 0);
+        const comandasList = cancelaciones.filter(c => c.tipo !== 'Devolución en Caja');
+        const montoComandas = comandasList.reduce((s, c) => s + (Number(c.total) || 0), 0);
+
+        return (
+          <div className="space-y-6">
+            {/* KPI CARDS ANULACIONES */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2 text-rose-600">
+                    <XCircle className="w-5 h-5" />
+                    <span className="text-xs font-black uppercase text-slate-500">Total Incidencias</span>
+                  </div>
+                  <p className="text-2xl font-black font-mono text-slate-900">{cancelacionesFiltradas.length}</p>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">Registros de cancelaciones y devoluciones</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2 text-red-600">
+                    <DollarSign className="w-5 h-5" />
+                    <span className="text-xs font-black uppercase text-slate-500">Monto Impactado</span>
+                  </div>
+                  <p className="text-2xl font-black font-mono text-red-600">S/ {totalPerdida.toFixed(2)}</p>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">Total en el filtro seleccionado</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-3xl border border-purple-200/60 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2 text-purple-600">
+                    <Receipt className="w-5 h-5" />
+                    <span className="text-xs font-black uppercase text-slate-500">Devoluciones en Caja</span>
+                  </div>
+                  <p className="text-2xl font-black font-mono text-purple-900">{devolucionesList.length}</p>
+                </div>
+                <div className="flex justify-between text-xs text-purple-700 font-bold border-t border-purple-50 pt-2 mt-2">
+                  <span>Reembolsos</span>
+                  <span className="font-mono font-black">S/ {montoDevoluciones.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-3xl border border-amber-200/60 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2 text-amber-600">
+                    <AlertTriangle className="w-5 h-5" />
+                    <span className="text-xs font-black uppercase text-slate-500">Comandas Salón</span>
+                  </div>
+                  <p className="text-2xl font-black font-mono text-amber-900">{comandasList.length}</p>
+                </div>
+                <div className="flex justify-between text-xs text-amber-700 font-bold border-t border-amber-50 pt-2 mt-2">
+                  <span>Pre-pago anuladas</span>
+                  <span className="font-mono font-black">S/ {montoComandas.toFixed(2)}</span>
+                </div>
+              </div>
             </div>
-            <div className="table-scroll">
-              <table className="w-full text-left min-w-[700px]">
-                <thead className="bg-white text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                  <tr>
-                    <th className="px-5 py-4">Fecha / Hora</th>
-                    <th className="px-5 py-4">Mesa / Delivery</th>
-                    <th className="px-5 py-4">Cancelado por</th>
-                    <th className="px-5 py-4">Motivo / Explicación</th>
-                    <th className="px-5 py-4">Detalle Consumo</th>
-                    <th className="px-5 py-4 text-right">Pérdida Estimada</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 text-sm bg-white font-bold text-slate-700">
-                  {cancelaciones.length > 0 ? cancelaciones.map((c, i) => (
-                    <tr key={i} className="hover:bg-red-50/30 transition-colors">
-                      <td className="px-5 py-4">
-                        <div className="flex flex-col">
-                          <span className="font-mono text-slate-800 text-xs">{c.fecha || 'Hoy'}</span>
-                          <span className="text-[10px] text-slate-400 mt-0.5 font-mono">{c.hora}</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        {c.mesa
-                          ? <span className="bg-slate-100 border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-black">Mesa {c.mesa}</span>
-                          : <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-lg text-xs font-black flex items-center gap-1 w-max"><Truck className="w-3.5 h-3.5" />{c.codigoPedidosYa || 'Delivery'}</span>
-                        }
-                      </td>
-                      <td className="px-5 py-4 text-slate-800">{c.canceladoPor}</td>
-                      <td className="px-5 py-4 text-slate-500 text-xs italic max-w-[200px] truncate" title={c.motivoCancela}>{c.motivoCancela}</td>
-                      <td className="px-5 py-4 text-slate-500 text-xs max-w-[220px] truncate" title={c.resumenItems}>{c.resumenItems}</td>
-                      <td className="px-5 py-4 text-right font-mono font-black text-red-600">- S/ {c.total.toFixed(2)}</td>
+
+            {/* TABLA AUDITORÍA CON FILTRO */}
+            <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
+              <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <h2 className="font-black text-slate-800 uppercase text-xs tracking-wider flex items-center gap-2">
+                    <XCircle className="w-4 h-4 text-rose-500" /> Registro Detallado de Anulaciones y Devoluciones
+                  </h2>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Auditoría con motivo, autorizante e impacto económico.</p>
+                </div>
+
+                {/* Filtro por tipo */}
+                <div className="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-2xl shrink-0">
+                  {[
+                    { id: 'Todos', label: 'Todos', count: cancelaciones.length },
+                    { id: 'Devolución en Caja', label: 'Devoluciones', count: devolucionesList.length },
+                    { id: 'Comanda Cancelada', label: 'Comandas', count: comandasList.length },
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => setFiltroTipoAnulacion(f.id)}
+                      className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                        filtroTipoAnulacion === f.id
+                          ? 'bg-slate-900 text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                      }`}
+                    >
+                      {f.label}
+                      <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold ${
+                        filtroTipoAnulacion === f.id ? 'bg-white/20 text-white' : 'bg-slate-300 text-slate-700'
+                      }`}>
+                        {f.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="table-scroll">
+                <table className="w-full text-left min-w-[850px]">
+                  <thead className="bg-white text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+                    <tr>
+                      <th className="px-5 py-4">Tipo / Identificador</th>
+                      <th className="px-5 py-4">Fecha / Hora</th>
+                      <th className="px-5 py-4">Mesa / Origen</th>
+                      <th className="px-5 py-4">Responsable</th>
+                      <th className="px-5 py-4">Motivo / Justificación</th>
+                      <th className="px-5 py-4">Detalle Consumo</th>
+                      <th className="px-5 py-4 text-right">Importe (S/)</th>
                     </tr>
-                  )) : (
-                    <tr><td colSpan="6" className="text-center py-12 text-slate-400 font-bold uppercase text-xs">No hay cancelaciones registradas en este rango de fechas.</td></tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 text-sm bg-white font-bold text-slate-700">
+                    {cancelacionesFiltradas.length > 0 ? cancelacionesFiltradas.map((c, i) => {
+                      const isDevolucion = c.tipo === 'Devolución en Caja';
+                      return (
+                        <tr key={i} className={`transition-colors ${isDevolucion ? 'hover:bg-purple-50/20' : 'hover:bg-amber-50/20'}`}>
+                          <td className="px-5 py-4">
+                            <div className="flex flex-col">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider w-max ${
+                                isDevolucion
+                                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                  : 'bg-amber-100 text-amber-800 border border-amber-200'
+                              }`}>
+                                {isDevolucion ? <Receipt className="w-3 h-3 text-purple-600" /> : <AlertTriangle className="w-3 h-3 text-amber-600" />}
+                                {c.tipo || 'Comanda Cancelada'}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono mt-1">
+                                {isDevolucion && c.ventaId ? `Ticket #${c.ventaId}` : `Ref #${c.id}`}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="flex flex-col">
+                              <span className="font-mono text-slate-800 text-xs">{c.fecha || 'Hoy'}</span>
+                              <span className="text-[10px] text-slate-400 mt-0.5 font-mono">{c.hora}</span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            {c.mesa
+                              ? <span className="bg-slate-100 border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-black">Mesa {c.mesa}</span>
+                              : <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-lg text-xs font-black flex items-center gap-1 w-max"><Truck className="w-3.5 h-3.5" />{c.codigoPedidosYa || 'Delivery'}</span>
+                            }
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className="text-slate-800 uppercase text-xs font-bold">{c.canceladoPor || 'No registrado'}</span>
+                          </td>
+                          <td className="px-5 py-4 max-w-[220px]">
+                            <p className="text-slate-600 text-xs italic bg-slate-50 p-2 rounded-xl border border-slate-100 line-clamp-2" title={c.motivoCancela}>
+                              "{c.motivoCancela || 'Sin motivo especificado'}"
+                            </p>
+                          </td>
+                          <td className="px-5 py-4 text-slate-500 text-xs max-w-[240px] truncate" title={c.resumenItems}>
+                            {c.resumenItems || '-'}
+                          </td>
+                          <td className="px-5 py-4 text-right font-mono font-black text-rose-600">
+                            - S/ {(Number(c.total) || 0).toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    }) : (
+                      <tr>
+                        <td colSpan="7" className="text-center py-12 text-slate-400 font-bold uppercase text-xs">
+                          No hay registros de {filtroTipoAnulacion.toLowerCase()} en este rango de fechas.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {cancelacionesFiltradas.length > 0 && (
+                <div className="p-4 md:p-5 border-t border-slate-100 bg-slate-50/80 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                    Mostrando {cancelacionesFiltradas.length} de {cancelaciones.length} eventos
+                  </span>
+                  <span className="font-black text-slate-900 text-sm">
+                    Pérdida / Devolución Filtrada: <span className="font-mono text-xl ml-2 text-rose-600">- S/ {totalPerdida.toFixed(2)}</span>
+                  </span>
+                </div>
+              )}
             </div>
-            {cancelaciones.length > 0 && (
-              <div className="p-5 border-t border-red-100 bg-red-50/50 flex justify-end">
-                <span className="font-black text-red-700 text-sm">
-                  Total Pérdida en Periodo: <span className="font-mono text-xl ml-2">S/ {cancelaciones.reduce((s, c) => s + c.total, 0).toFixed(2)}</span>
+          </div>
+        );
+      })()}
+
+      {/* 6. CONTROL Y AUDITORÍA DE CIERRES DE CAJA (ARQUEOS) */}
+      {activeTab === 'cierres' && (() => {
+        const cierresFiltrados = cierresHistorial.filter(c => {
+          if (!c.fechaCierre) return true;
+          const fStr = new Date(c.fechaCierre).toISOString().slice(0, 10);
+          return fStr >= fechaDesde && fStr <= fechaHasta;
+        });
+
+        const totalEsperado = cierresFiltrados.reduce((s, c) => s + (Number(c.efectivoEsperado) || 0), 0);
+        const totalContado = cierresFiltrados.reduce((s, c) => s + (Number(c.efectivoContado) || 0), 0);
+        const totalDif = cierresFiltrados.reduce((s, c) => s + (Number(c.diferencia) || 0), 0);
+        const totalElec = cierresFiltrados.reduce((s, c) => s + (Number(c.totalTarjeta || 0) + Number(c.totalYape || 0)), 0);
+
+        return (
+          <div className="space-y-6">
+            {/* KPI Cards Cierres */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2 text-purple-600">
+                    <History className="w-5 h-5" />
+                    <span className="text-xs font-black uppercase text-slate-500">Turnos Cerrados</span>
+                  </div>
+                  <p className="text-2xl font-black font-mono text-slate-900">{cierresFiltrados.length}</p>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">Arqueos archivados en PostgreSQL</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2 text-emerald-600">
+                    <DollarSign className="w-5 h-5" />
+                    <span className="text-xs font-black uppercase text-slate-500">Efec. Esperado Total</span>
+                  </div>
+                  <p className="text-2xl font-black font-mono text-slate-900">S/ {totalEsperado.toFixed(2)}</p>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">Ventas + abonos - egresos efec.</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2 text-blue-600">
+                    <Wallet className="w-5 h-5" />
+                    <span className="text-xs font-black uppercase text-slate-500">Tarjetas & Yape</span>
+                  </div>
+                  <p className="text-2xl font-black font-mono text-slate-900">S/ {totalElec.toFixed(2)}</p>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">Cobros electrónicos acumulados</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2 text-slate-600">
+                    <span className="text-xs font-black uppercase text-slate-500">Diferencia Acumulada</span>
+                  </div>
+                  <p className={`text-2xl font-black font-mono ${totalDif < -0.01 ? 'text-rose-600' : (totalDif > 0.01 ? 'text-blue-600' : 'text-emerald-600')}`}>
+                    {totalDif > 0.01 ? `+S/ ${totalDif.toFixed(2)}` : `S/ ${totalDif.toFixed(2)}`}
+                  </p>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">Balance neto físico vs calculado</p>
+              </div>
+            </div>
+
+            {/* Listado de Arqueos */}
+            <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
+              <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                <div>
+                  <h2 className="font-black text-slate-700 uppercase text-xs tracking-wider flex items-center gap-2">
+                    <History className="w-4 h-4 text-purple-600" /> Historial de Turnos y Arqueos de Caja
+                  </h2>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Reporte auditable de gaveta y desgloses por cajero.</p>
+                </div>
+                <span className="bg-purple-100 text-purple-800 text-xs font-black px-3.5 py-1.5 rounded-full uppercase tracking-wider">
+                  {cierresFiltrados.length} Registros
                 </span>
               </div>
-            )}
+
+              <div className="table-scroll">
+                <table className="w-full text-left min-w-[750px]">
+                  <thead className="bg-white text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+                    <tr>
+                      <th className="px-5 py-4">ID / Fecha Cierre</th>
+                      <th className="px-5 py-4">Cajero</th>
+                      <th className="px-5 py-4 text-right">Efec. Esperado</th>
+                      <th className="px-5 py-4 text-right">Efec. Contado</th>
+                      <th className="px-5 py-4 text-right">Diferencia</th>
+                      <th className="px-5 py-4 text-right">Tarjeta / Yape</th>
+                      <th className="px-5 py-4 text-right">Egresos</th>
+                      <th className="px-5 py-4 text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 text-sm bg-white font-bold text-slate-700">
+                    {cierresFiltrados.length > 0 ? (
+                      cierresFiltrados.map((c) => {
+                        const dif = Number(c.diferencia || 0);
+                        const isExact = Math.abs(dif) < 0.01;
+                        const isSobrante = dif > 0.01;
+                        return (
+                          <tr key={c.id} className="hover:bg-purple-50/20 transition-colors">
+                            <td className="px-5 py-4">
+                              <div className="flex flex-col">
+                                <span className="font-black text-slate-900 text-xs">
+                                  #{c.id} · {new Date(c.fechaCierre).toLocaleDateString('es-PE')}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  {new Date(c.fechaCierre).toLocaleTimeString('es-PE')}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 uppercase text-xs text-slate-800 font-black">{c.cajeroNombre}</td>
+                            <td className="px-5 py-4 text-right font-mono text-xs">S/ {Number(c.efectivoEsperado || 0).toFixed(2)}</td>
+                            <td className="px-5 py-4 text-right font-mono text-xs text-slate-900">S/ {Number(c.efectivoContado || 0).toFixed(2)}</td>
+                            <td className="px-5 py-4 text-right font-mono text-xs">
+                              <span className={`px-2 py-0.5 rounded-lg text-xs font-black ${
+                                isExact ? 'bg-emerald-100 text-emerald-700' : (isSobrante ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700')
+                              }`}>
+                                {isSobrante ? `+S/ ${dif.toFixed(2)}` : `S/ ${dif.toFixed(2)}`}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 text-right font-mono text-xs text-slate-600">
+                              S/ {(Number(c.totalTarjeta || 0) + Number(c.totalYape || 0)).toFixed(2)}
+                            </td>
+                            <td className="px-5 py-4 text-right font-mono text-xs text-rose-600">
+                              S/ {Number(c.egresosEfectivo || 0).toFixed(2)}
+                            </td>
+                            <td className="px-5 py-4 text-center">
+                              <button
+                                onClick={() => setCierreAImprimir(c)}
+                                className="px-2.5 py-1 bg-slate-900 hover:bg-purple-700 text-white font-black rounded-xl text-[10px] uppercase tracking-wider inline-flex items-center gap-1 transition-all shadow-sm active:scale-95"
+                              >
+                                <Printer className="w-3 h-3 text-purple-300" /> Ticket
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="8" className="text-center py-12 text-slate-400 font-bold uppercase text-xs">
+                          No hay cierres de caja registrados en este rango de fechas.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL REIMPRESIÓN TICKET DE CIERRE (REPORTES) */}
+      {cierreAImprimir && (
+        <div id="modal-cierre-reporte" className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar animate-slide-up relative">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2 text-purple-700">
+                <Printer className="w-5 h-5 shrink-0" />
+                <h3 className="font-black text-slate-900 text-base uppercase tracking-tight leading-none">Ticket de Cierre #{cierreAImprimir.id}</h3>
+              </div>
+              <button onClick={() => setCierreAImprimir(null)} className="text-slate-400 hover:text-slate-900 p-1 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Vista del ticket térmico */}
+            <div id="cierre-imprimible-reporte" className="bg-amber-50/70 border-2 border-dashed border-amber-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm mb-5 flex flex-col">
+              <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4 flex flex-col items-center">
+                <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain mb-1 filter grayscale" />
+                <h4 className="font-black text-sm text-slate-900 uppercase tracking-wide">{COMPANY_CONFIG.legalName}</h4>
+                <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">{COMPANY_CONFIG.address} · RUC: {COMPANY_CONFIG.ruc}</p>
+                <p className="text-[10px] text-purple-700 font-black mt-1 uppercase">COPIA DE CIERRE DE TURNO · #{cierreAImprimir.id}</p>
+              </div>
+
+              <div className="space-y-1.5 border-b border-dashed border-slate-300 pb-3 mb-4 text-slate-600 font-bold">
+                <div className="flex justify-between"><span>FECHA APERTURA:</span><span>{new Date(cierreAImprimir.fechaApertura).toLocaleString('es-PE')}</span></div>
+                <div className="flex justify-between"><span>FECHA CIERRE:</span><span>{new Date(cierreAImprimir.fechaCierre).toLocaleString('es-PE')}</span></div>
+                <div className="flex justify-between"><span>CAJERO:</span><span className="uppercase">{cierreAImprimir.cajeroNombre}</span></div>
+                <div className="flex justify-between"><span>ESTADO:</span><span className="text-emerald-700 font-black">CERRADO</span></div>
+              </div>
+
+              <div className="space-y-2.5 mb-4 border-b border-dashed border-slate-300 pb-3">
+                <div className="flex justify-between font-bold text-slate-700">
+                  <span>💵 EFECTIVO VENTAS:</span>
+                  <span className="font-black text-slate-900">S/ {Number(cierreAImprimir.efectivoVentas || 0).toFixed(2)}</span>
+                </div>
+                {Number(cierreAImprimir.egresosEfectivo || 0) > 0 && (
+                  <div className="flex justify-between font-bold text-rose-600">
+                    <span>🔻 GASTOS EFECTIVO:</span>
+                    <span className="font-black">- S/ {Number(cierreAImprimir.egresosEfectivo || 0).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(cierreAImprimir.abonosEfectivo || 0) > 0 && (
+                  <div className="flex justify-between font-bold text-emerald-600">
+                    <span>➕ ABONOS EFECTIVO:</span>
+                    <span className="font-black">+ S/ {Number(cierreAImprimir.abonosEfectivo || 0).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-black text-slate-900 bg-amber-100/60 p-2 rounded-lg">
+                  <span>EFECTIVO ESPERADO:</span>
+                  <span>S/ {Number(cierreAImprimir.efectivoEsperado || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-slate-700">
+                  <span>EFECTIVO CONTADO:</span>
+                  <span className="font-black text-slate-900">S/ {Number(cierreAImprimir.efectivoContado || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-black">
+                  <span>DIFERENCIA:</span>
+                  <span className={Number(cierreAImprimir.diferencia || 0) < 0 ? 'text-rose-600' : 'text-emerald-700'}>
+                    S/ {Number(cierreAImprimir.diferencia || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 mb-3 border-b border-dashed border-slate-300 pb-3 text-[11px]">
+                <div className="flex justify-between font-bold text-slate-600">
+                  <span>💳 TARJETA:</span>
+                  <span>S/ {Number(cierreAImprimir.totalTarjeta || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-slate-600">
+                  <span>📱 YAPE / PLIN:</span>
+                  <span>S/ {Number(cierreAImprimir.totalYape || 0).toFixed(2)}</span>
+                </div>
+                {Number(cierreAImprimir.totalPedidosYa || 0) > 0 && (
+                  <div className="flex justify-between font-bold text-rose-500">
+                    <span>🛵 PEDIDOS YA:</span>
+                    <span>S/ {Number(cierreAImprimir.totalPedidosYa || 0).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(cierreAImprimir.totalConsumo || 0) > 0 && (
+                  <div className="flex justify-between font-bold text-purple-600">
+                    <span>🍽️ CONSUMO / CRÉDITO:</span>
+                    <span>S/ {Number(cierreAImprimir.totalConsumo || 0).toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+
+              {cierreAImprimir.nota && (
+                <div className="text-[10px] text-slate-500 italic mb-3">
+                  <strong>Nota:</strong> {cierreAImprimir.nota}
+                </div>
+              )}
+
+              <div className="text-center text-[10px] text-slate-400 font-bold">
+                *** Reimpresión de Arqueo de Turno ***
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setCierreAImprimir(null)}
+                className="py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-wider transition-colors"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-1.5"
+              >
+                <Printer className="w-4 h-4" />
+                Imprimir
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2147,7 +2720,7 @@ export default function ReportesPage() {
           }
           /* Ocultar el resto del contenido de la página excepto el modal a imprimir */
           main > *:not(section),
-          section > *:not(#modal-comprobante-sunat-print-container):not(#modal-reporte-gerencial-container):not(#modal-cierre) {
+          section > *:not(#modal-comprobante-sunat-print-container):not(#modal-reporte-gerencial-container):not(#modal-cierre):not(#modal-cierre-reporte) {
             display: none !important;
           }
            /* Garantizar que el body y todos los contenedores padre fluyan libremente sin alturas fijas */
@@ -2205,6 +2778,47 @@ export default function ReportesPage() {
           }
           #comprobante-sunat-ticket-print div,
           #comprobante-sunat-ticket-print blockquote {
+            page-break-inside: avoid !important;
+          }
+          #modal-cierre-reporte {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 74mm !important;
+            height: auto !important;
+            display: block !important;
+            background: white !important;
+            z-index: 99999 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          #modal-cierre-reporte > div {
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            max-width: 74mm !important;
+            width: 74mm !important;
+            height: auto !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          #modal-cierre-reporte button {
+            display: none !important;
+          }
+          #cierre-imprimible-reporte {
+            width: 74mm !important;
+            padding: 6px !important;
+            margin: 0 !important;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
+            font-size: 11px !important;
+            line-height: 1.3 !important;
+            color: #000000 !important;
+            font-weight: 850 !important;
+          }
+          #cierre-imprimible-reporte * {
+            color: #000000 !important;
+            font-weight: 850 !important;
+          }
+          #cierre-imprimible-reporte div {
             page-break-inside: avoid !important;
           }
           #modal-reporte-gerencial-container {

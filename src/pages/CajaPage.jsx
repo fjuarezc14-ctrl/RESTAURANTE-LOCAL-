@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Receipt, X, Banknote, Search, CheckCircle, Clock, Sparkles, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Tag, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, KeyRound, Flame } from 'lucide-react';
+import { Receipt, X, Banknote, Search, CheckCircle, Clock, Sparkles, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Tag, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, KeyRound, Flame, FileText, History } from 'lucide-react';
 
 import { api } from '../api';
 import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
@@ -434,6 +434,25 @@ export default function CajaPage({ currentUser }) {
   const [consumoPinError, setConsumoPinError] = useState('');
   const [comprasTurno, setComprasTurno] = useState([]);
   const [efectivoFisicoContado, setEfectivoFisicoContado] = useState('');
+  const [historialCierresModalOpen, setHistorialCierresModalOpen] = useState(false);
+  const [historialCierres, setHistorialCierres] = useState([]);
+  const [cargandoHistorialCierres, setCargandoHistorialCierres] = useState(false);
+  const [guardandoCierre, setGuardandoCierre] = useState(false);
+  const [cierreAImprimir, setCierreAImprimir] = useState(null);
+
+  const abrirHistorialCierres = async () => {
+    setHistorialCierresModalOpen(true);
+    setCargandoHistorialCierres(true);
+    try {
+      const res = await api.getHistorialCierres(50);
+      const list = Array.isArray(res) ? res : (res?.cierres || []);
+      setHistorialCierres(list);
+    } catch (err) {
+      console.error('Error al cargar historial de cierres:', err);
+    } finally {
+      setCargandoHistorialCierres(false);
+    }
+  };
 
   // Créditos y Clientes
   const [clientes, setClientes] = useState([]);
@@ -552,7 +571,7 @@ export default function CajaPage({ currentUser }) {
 
   const fetchCajaData = useCallback(async () => {
     try {
-      const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList] = await Promise.all([
+      const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList, ultimoCierreRes] = await Promise.all([
         api.getMesas().catch(() => null),
         api.getResumenVentas().catch(() => ({ atendidas: 0, ingresos: 0 })),
         api.getPedidosLlevar().catch(() => null),
@@ -561,6 +580,7 @@ export default function CajaPage({ currentUser }) {
         api.getClientes().catch(() => []),
         api.getAbonos().catch(() => []),
         api.getCompras().catch(() => []),
+        api.getUltimoCierre().catch(() => null),
       ]);
       if (mesasData) setMesas(mesasData);
       if (llevarData) setPedidosLlevar(llevarData);
@@ -570,6 +590,11 @@ export default function CajaPage({ currentUser }) {
       setClientes(clientsList || []);
       setAbonos(abonosList || []);
       setComprasTurno(comprasList || []);
+      if (ultimoCierreRes?.ultimoCierre?.fechaCierre) {
+        const fechaDbISO = new Date(ultimoCierreRes.ultimoCierre.fechaCierre).toISOString();
+        setUltimoCierre(prev => (prev !== fechaDbISO ? fechaDbISO : prev));
+        localStorage.setItem('ultimoCierre', fechaDbISO);
+      }
     } catch (err) {
       // Ignorar micro-caídas o lags de red Wi-Fi
     } finally {
@@ -580,10 +605,10 @@ export default function CajaPage({ currentUser }) {
   useEffect(() => {
     fetchCajaData();
     const interval = setInterval(() => {
-      if (!modalOpen && !deliveryModal && !cierreModalOpen) fetchCajaData();
+      if (!modalOpen && !deliveryModal && !cierreModalOpen && !historialCierresModalOpen) fetchCajaData();
     }, 4000);
     return () => clearInterval(interval);
-  }, [fetchCajaData, modalOpen, deliveryModal, cierreModalOpen]);
+  }, [fetchCajaData, modalOpen, deliveryModal, cierreModalOpen, historialCierresModalOpen]);
 
   // Alerta sonora y visual en tiempo real al estar listos
   useEffect(() => {
@@ -1613,14 +1638,15 @@ export default function CajaPage({ currentUser }) {
     // Sin opciones configuradas, pero con acompañamientos: igual se abre el asistente
     if (pasoAcomp) return [pasoAcomp];
 
-    // 3. Si el plato NO requiere guarnición explícitamente, NO genera pasos forzados. Directo al delivery!
-    if (prod.requiereGuarnicion === false && !prod.opcionesConfig) {
+    // 3. Blindaje de Carta: Si el producto fue configurado en la carta (tiene opcionesConfig)
+    // o tiene requiereGuarnicion === false, NUNCA cae en los pasos demo/legacy hardcodeados.
+    if ((prod.opcionesConfig !== null && prod.opcionesConfig !== undefined) || prod.requiereGuarnicion === false) {
       return [];
     }
 
-    // 4. Categoría Menú (fallback solo si requiereGuarnicion es true)
+    // 4. Categoría Menú (fallback solo si requiereGuarnicion es true y no tiene opcionesConfig)
     const isMenuCat = prod && (prod.categoria === 'Menú' || prod.categoria?.toLowerCase().includes('menú'));
-    if (isMenuCat && prod.requiereGuarnicion) {
+    if (isMenuCat && prod.requiereGuarnicion && !prod.opcionesConfig) {
       return [
         {
           name: "Elige la Entrada",
@@ -2939,14 +2965,24 @@ export default function CajaPage({ currentUser }) {
                 <h2 className="font-black uppercase text-xs tracking-widest text-amber-400 flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-amber-400" /> Resumen del Turno
                 </h2>
-                <button
-                  type="button"
-                  onClick={() => setCierreModalOpen(true)}
-                  className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 border border-purple-500/20"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  Cerrar Caja (Turno)
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCierreModalOpen(true)}
+                    className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 border border-purple-500/20"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Cerrar Caja (Turno)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={abrirHistorialCierres}
+                    className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold uppercase tracking-wider text-[10px] rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-700/80 active:scale-95"
+                  >
+                    <History className="w-3.5 h-3.5 text-purple-400" />
+                    Historial de Cierres
+                  </button>
+                </div>
               </div>
               <div className="space-y-3 flex-1">
                 <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700">
@@ -5406,7 +5442,8 @@ export default function CajaPage({ currentUser }) {
                   Imprimir Ticket
                 </button>
                 <button
-                  onClick={() => {
+                  disabled={guardandoCierre}
+                  onClick={async () => {
                     const pendientes = mesas.filter(m => m.estado !== 'Libre' && m.pedidoData);
                     if (pendientes.length > 0) {
                       const nombresMesas = pendientes.map(m => `Mesa ${m.num}`).join(', ');
@@ -5419,25 +5456,296 @@ export default function CajaPage({ currentUser }) {
                       : new Date().getTime();
                     const newCierreISO = new Date(maxSaleTime + 1000).toISOString();
 
-                    localStorage.setItem('ultimoCierre', newCierreISO);
-                    setUltimoCierre(newCierreISO);
-                    setMostrarTodoElDia(false);
-                    const diffMsg = tieneConteoFisico 
-                      ? `\nEfectivo Contado: S/ ${montoFisicoNum.toFixed(2)}\nDiferencia: S/ ${diferenciaEfectivo.toFixed(2)}`
-                      : '';
-                    alert(`✅ ¡Cierre de Turno exitoso!\n\nTotal en Caja (esperado): S/ ${totalCalculado.toFixed(2)}${diffMsg}\n${totalPedidosYa > 0 ? `PedidosYa (cobro semanal): S/ ${totalPedidosYa.toFixed(2)}\n` : ''}El turno ha sido archivado e inicializado.`);
-                    setEfectivoFisicoContado('');
-                    setCierreModalOpen(false);
+                    setGuardandoCierre(true);
+                    try {
+                      const abonosEfectivoTotal = abonosFiltrados.reduce((s, a) => s + (parseFloat(a.montoEfectivo) || 0), 0);
+                      await api.registrarCierre({
+                        fechaApertura: ultimoCierre || new Date(Date.now() - 8 * 3600 * 1000).toISOString(),
+                        fechaCierre: newCierreISO,
+                        cajeroNombre: cajeroNombre || currentUser?.nombre || 'Cajero',
+                        efectivoVentas: totalEfectivo,
+                        efectivoEsperado: totalEfectivoEsperado,
+                        efectivoContado: tieneConteoFisico ? montoFisicoNum : totalEfectivoEsperado,
+                        diferencia: diferenciaEfectivo,
+                        totalTarjeta: totalTarjeta,
+                        totalYape: totalYape,
+                        totalConsumo: totalConsumoClientes + totalConsumoPlanilla,
+                        totalPedidosYa: totalPedidosYa,
+                        egresosEfectivo: egresosEfectivo,
+                        abonosEfectivo: abonosEfectivoTotal,
+                        nota: tieneConteoFisico ? `Conteo físico: S/ ${montoFisicoNum.toFixed(2)}. Diferencia: S/ ${diferenciaEfectivo.toFixed(2)}` : null,
+                      });
+
+                      localStorage.setItem('ultimoCierre', newCierreISO);
+                      setUltimoCierre(newCierreISO);
+                      setMostrarTodoElDia(false);
+                      const diffMsg = tieneConteoFisico 
+                        ? `\nEfectivo Contado: S/ ${montoFisicoNum.toFixed(2)}\nDiferencia: S/ ${diferenciaEfectivo.toFixed(2)}`
+                        : '';
+                      alert(`✅ ¡Cierre de Turno registrado con éxito en la Base de Datos!\n\nTotal en Caja (esperado): S/ ${totalCalculado.toFixed(2)}${diffMsg}\n${totalPedidosYa > 0 ? `PedidosYa (cobro semanal): S/ ${totalPedidosYa.toFixed(2)}\n` : ''}El turno ha sido guardado e inicializado.`);
+                      setEfectivoFisicoContado('');
+                      setCierreModalOpen(false);
+                    } catch (err) {
+                      console.error('Error al registrar cierre de caja en el servidor:', err);
+                      // Fallback local por seguridad ante micro-desconexiones
+                      localStorage.setItem('ultimoCierre', newCierreISO);
+                      setUltimoCierre(newCierreISO);
+                      setMostrarTodoElDia(false);
+                      alert(`⚠️ El turno se cerró localmente (aviso: sincronización con base de datos falló: ${err.message || 'error de conexión'}).`);
+                      setEfectivoFisicoContado('');
+                      setCierreModalOpen(false);
+                    } finally {
+                      setGuardandoCierre(false);
+                    }
                   }}
-                  className="py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-900 font-black rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20"
+                  className="py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-900 font-black rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50"
                 >
-                  Cerrar Turno
+                  {guardandoCierre ? 'Guardando...' : 'Cerrar Turno'}
                 </button>
               </div>
             </div>
           </div>
         );
       })()}
+
+      {/* MODAL DE HISTORIAL DE CIERRES DE CAJA (POSTGRESQL) */}
+      {historialCierresModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-6 flex flex-col max-h-[85vh] overflow-hidden animate-slide-up">
+            {/* Header */}
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight">Historial de Cierres de Turno</h3>
+                  <p className="text-xs text-slate-400 font-medium">Registros históricos persistidos en PostgreSQL</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setHistorialCierresModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700 p-2 hover:bg-slate-100 rounded-xl transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar py-4 space-y-3">
+              {cargandoHistorialCierres ? (
+                <div className="py-12 flex flex-col items-center justify-center text-slate-400">
+                  <div className="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin mb-3" />
+                  <p className="text-xs font-bold uppercase tracking-wider">Cargando registros...</p>
+                </div>
+              ) : (!historialCierres || historialCierres.length === 0) ? (
+                <div className="py-12 text-center text-slate-400">
+                  <FileText className="w-12 h-12 mx-auto text-slate-300 mb-2 stroke-[1.5]" />
+                  <p className="text-sm font-black text-slate-600 uppercase">Sin cierres guardados</p>
+                  <p className="text-xs text-slate-400 mt-1">Los cierres que realices desde "Cerrar Turno" se archivarán aquí automáticamente.</p>
+                </div>
+              ) : (
+                historialCierres.map(c => {
+                  const dif = Number(c.diferencia || 0);
+                  const isExact = Math.abs(dif) < 0.01;
+                  const isSobrante = dif > 0.01;
+                  return (
+                    <div key={c.id} className="bg-slate-50 hover:bg-slate-100/70 border border-slate-200/80 rounded-2xl p-4 transition-all">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200/60">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-xs bg-purple-100 text-purple-700 px-2.5 py-0.5 rounded-full">
+                            #{c.id}
+                          </span>
+                          <span className="font-black text-xs text-slate-800 uppercase">
+                            {new Date(c.fechaCierre).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-500">
+                            · Cajero: <strong className="text-slate-700 uppercase">{c.cajeroNombre}</strong>
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-black uppercase text-slate-400">Diferencia:</span>
+                          <span className={`text-xs font-mono font-black px-2 py-0.5 rounded-lg ${
+                            isExact
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : isSobrante
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-rose-100 text-rose-700'
+                          }`}>
+                            {isSobrante ? `+S/ ${dif.toFixed(2)}` : `S/ ${dif.toFixed(2)}`}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2.5 text-xs">
+                        <div className="bg-white p-2 rounded-xl border border-slate-200/60">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Efec. Esperado</p>
+                          <p className="font-black font-mono text-slate-800">S/ {Number(c.efectivoEsperado || 0).toFixed(2)}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded-xl border border-slate-200/60">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Efec. Contado</p>
+                          <p className="font-black font-mono text-slate-800">S/ {Number(c.efectivoContado || 0).toFixed(2)}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded-xl border border-slate-200/60">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Tarjeta / Yape</p>
+                          <p className="font-black font-mono text-slate-800">
+                            S/ {(Number(c.totalTarjeta || 0) + Number(c.totalYape || 0)).toFixed(2)}
+                          </p>
+                        </div>
+                        <div className="bg-white p-2 rounded-xl border border-slate-200/60">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Egresos Efec.</p>
+                          <p className="font-black font-mono text-rose-600">S/ {Number(c.egresosEfectivo || 0).toFixed(2)}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 mt-2.5 border-t border-slate-200/60">
+                        {c.nota ? (
+                          <p className="text-[11px] text-slate-500 font-medium italic">
+                            Nota: {c.nota}
+                          </p>
+                        ) : <div />}
+                        <button
+                          onClick={() => setCierreAImprimir(c)}
+                          className="px-3 py-1.5 bg-slate-900 hover:bg-purple-700 text-white font-black rounded-xl text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 ml-auto"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-purple-300" />
+                          Reimprimir Ticket
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setHistorialCierresModalOpen(false)}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-wider transition-all"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE REIMPRESIÓN DE TICKET DE CIERRE HISTÓRICO */}
+      {cierreAImprimir && (
+        <div id="modal-cierre-reimpresion" className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[240] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar animate-slide-up relative">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2 text-purple-700">
+                <Printer className="w-5 h-5 shrink-0" />
+                <h3 className="font-black text-slate-900 text-base uppercase tracking-tight leading-none">Ticket de Cierre #{cierreAImprimir.id}</h3>
+              </div>
+              <button onClick={() => setCierreAImprimir(null)} className="text-slate-400 hover:text-slate-900 p-1 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Vista del ticket térmico */}
+            <div id="cierre-imprimible-reimpresion" className="bg-amber-50/70 border-2 border-dashed border-amber-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm mb-5 flex flex-col">
+              <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4 flex flex-col items-center">
+                <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain mb-1 filter grayscale" />
+                <h4 className="font-black text-sm text-slate-900 uppercase tracking-wide">{COMPANY_CONFIG.legalName}</h4>
+                <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">{COMPANY_CONFIG.address} · RUC: {COMPANY_CONFIG.ruc}</p>
+                <p className="text-[10px] text-purple-700 font-black mt-1 uppercase">COPIA DE CIERRE DE TURNO · #{cierreAImprimir.id}</p>
+              </div>
+
+              <div className="space-y-1.5 border-b border-dashed border-slate-300 pb-3 mb-4 text-slate-600 font-bold">
+                <div className="flex justify-between"><span>FECHA APERTURA:</span><span>{new Date(cierreAImprimir.fechaApertura).toLocaleString('es-PE')}</span></div>
+                <div className="flex justify-between"><span>FECHA CIERRE:</span><span>{new Date(cierreAImprimir.fechaCierre).toLocaleString('es-PE')}</span></div>
+                <div className="flex justify-between"><span>CAJERO:</span><span className="uppercase">{cierreAImprimir.cajeroNombre}</span></div>
+                <div className="flex justify-between"><span>ESTADO:</span><span className="text-emerald-700 font-black">CERRADO</span></div>
+              </div>
+
+              <div className="space-y-2.5 mb-4 border-b border-dashed border-slate-300 pb-3">
+                <div className="flex justify-between font-bold text-slate-700">
+                  <span>💵 EFECTIVO VENTAS:</span>
+                  <span className="font-black text-slate-900">S/ {Number(cierreAImprimir.efectivoVentas || 0).toFixed(2)}</span>
+                </div>
+                {Number(cierreAImprimir.egresosEfectivo || 0) > 0 && (
+                  <div className="flex justify-between font-bold text-rose-600">
+                    <span>🔻 GASTOS EFECTIVO:</span>
+                    <span className="font-black">- S/ {Number(cierreAImprimir.egresosEfectivo || 0).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(cierreAImprimir.abonosEfectivo || 0) > 0 && (
+                  <div className="flex justify-between font-bold text-emerald-600">
+                    <span>➕ ABONOS EFECTIVO:</span>
+                    <span className="font-black">+ S/ {Number(cierreAImprimir.abonosEfectivo || 0).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-black text-slate-900 bg-amber-100/60 p-2 rounded-lg">
+                  <span>EFECTIVO ESPERADO:</span>
+                  <span>S/ {Number(cierreAImprimir.efectivoEsperado || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-slate-700">
+                  <span>EFECTIVO CONTADO:</span>
+                  <span className="font-black text-slate-900">S/ {Number(cierreAImprimir.efectivoContado || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-black">
+                  <span>DIFERENCIA:</span>
+                  <span className={Number(cierreAImprimir.diferencia || 0) < 0 ? 'text-rose-600' : 'text-emerald-700'}>
+                    S/ {Number(cierreAImprimir.diferencia || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 mb-3 border-b border-dashed border-slate-300 pb-3 text-[11px]">
+                <div className="flex justify-between font-bold text-slate-600">
+                  <span>💳 TARJETA:</span>
+                  <span>S/ {Number(cierreAImprimir.totalTarjeta || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-slate-600">
+                  <span>📱 YAPE / PLIN:</span>
+                  <span>S/ {Number(cierreAImprimir.totalYape || 0).toFixed(2)}</span>
+                </div>
+                {Number(cierreAImprimir.totalPedidosYa || 0) > 0 && (
+                  <div className="flex justify-between font-bold text-rose-500">
+                    <span>🛵 PEDIDOS YA:</span>
+                    <span>S/ {Number(cierreAImprimir.totalPedidosYa || 0).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(cierreAImprimir.totalConsumo || 0) > 0 && (
+                  <div className="flex justify-between font-bold text-purple-600">
+                    <span>🍽️ CONSUMO / CRÉDITO:</span>
+                    <span>S/ {Number(cierreAImprimir.totalConsumo || 0).toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+
+              {cierreAImprimir.nota && (
+                <div className="text-[10px] text-slate-500 italic mb-3">
+                  <strong>Nota:</strong> {cierreAImprimir.nota}
+                </div>
+              )}
+
+              <div className="text-center text-[10px] text-slate-400 font-bold">
+                *** Reimpresión de Arqueo de Turno ***
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setCierreAImprimir(null)}
+                className="py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-wider transition-colors"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-1.5"
+              >
+                <Printer className="w-4 h-4" />
+                Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal: Corregir Método de Pago */}
       {cambioMetodoModal && ventaACambiar && (
@@ -6428,7 +6736,7 @@ export default function CajaPage({ currentUser }) {
           }
           /* Ocultar el resto del contenido de la página excepto el modal a imprimir */
           main > *:not(section),
-          section > *:not(#modal-comprobante-sunat-print-container):not(#modal-cierre) {
+          section > *:not(#modal-comprobante-sunat-print-container):not(#modal-cierre):not(#modal-cierre-reimpresion) {
             display: none !important;
           }
           /* Garantizar que el body y contenedores no tengan alturas fijas o desbordamientos */
@@ -6487,7 +6795,8 @@ export default function CajaPage({ currentUser }) {
           }
           
           /* Cierre de Caja en impresión */
-          #modal-cierre {
+          #modal-cierre,
+          #modal-cierre-reimpresion {
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
@@ -6499,7 +6808,8 @@ export default function CajaPage({ currentUser }) {
             padding: 0 !important;
             margin: 0 !important;
           }
-          #modal-cierre > div {
+          #modal-cierre > div,
+          #modal-cierre-reimpresion > div {
             border-radius: 0 !important;
             box-shadow: none !important;
             max-width: 74mm !important;
@@ -6509,10 +6819,12 @@ export default function CajaPage({ currentUser }) {
             margin: 0 !important;
           }
           #modal-cierre div.bg-slate-950, 
-          #modal-cierre div.shrink-0 {
+          #modal-cierre div.shrink-0,
+          #modal-cierre-reimpresion button {
             display: none !important;
           }
-          #cierre-imprimible {
+          #cierre-imprimible,
+          #cierre-imprimible-reimpresion {
             width: 74mm !important;
             padding: 6px !important;
             margin: 0 !important;
@@ -6522,11 +6834,13 @@ export default function CajaPage({ currentUser }) {
             color: #000000 !important;
             font-weight: 850 !important;
           }
-          #cierre-imprimible * {
+          #cierre-imprimible *,
+          #cierre-imprimible-reimpresion * {
             color: #000000 !important;
             font-weight: 850 !important;
           }
-          #cierre-imprimible div {
+          #cierre-imprimible div,
+          #cierre-imprimible-reimpresion div {
             page-break-inside: avoid !important;
           }
         }

@@ -434,13 +434,14 @@ export default function SalonPage({ currentUser }) {
       }];
     }
 
-    // 3. Si el plato NO requiere guarnición explícitamente, NO genera pasos forzados. Directo al ticket!
-    if (prod.requiereGuarnicion === false && !prod.opcionesConfig) {
+    // 3. Blindaje de Carta: Si el producto fue configurado en la carta (tiene opcionesConfig)
+    // o tiene requiereGuarnicion === false, NUNCA cae en los pasos demo/legacy hardcodeados.
+    if ((prod.opcionesConfig !== null && prod.opcionesConfig !== undefined) || prod.requiereGuarnicion === false) {
       return [];
     }
 
-    // 4. Categoría Menú (fallback legacy solo si requiereGuarnicion es true)
-    if (isMenuProduct(prod) && prod.requiereGuarnicion) {
+    // 4. Categoría Menú (fallback legacy solo si requiereGuarnicion es true y no tiene opcionesConfig)
+    if (isMenuProduct(prod) && prod.requiereGuarnicion && !prod.opcionesConfig) {
       return [
         {
           name: "Elige la Entrada",
@@ -1070,8 +1071,7 @@ export default function SalonPage({ currentUser }) {
           const esMiMesa = m.pedidoData?.mesero === activeMeseroName || isElevatedRole;
           const tieneListos = esMiMesa && (m.pedidoData?.items?.some(i => 
             i.historial && 
-            !i.entregado && 
-            !BARRA_CATEGORIAS.includes(i.categoria)
+            !i.entregado
           ) || false);
 
           let colorBg = 'bg-white hover:bg-emerald-50', colorText = 'text-emerald-500', colorBorder = 'border-slate-200', Icon = Receipt;

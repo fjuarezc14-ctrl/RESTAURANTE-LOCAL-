@@ -158,6 +158,13 @@ export const api = {
     const qs = (desde && hasta) ? `?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}` : '';
     return apiRequest(`/api/ventas${qs}`);
   },
+
+  // Cierre de Caja y Arqueos (PostgreSQL)
+  getUltimoCierre: () => apiRequest('/api/caja/ultimo-cierre'),
+  registrarCierre: (body) => apiRequest('/api/caja/cierre', {
+    method: 'POST', body: JSON.stringify(body)
+  }),
+  getHistorialCierres: (limit = 30) => apiRequest(`/api/caja/cierres?limit=${limit}`),
   cambiarMetodoPago: (ventaId, metodoPago, pin, montos = {}) => apiRequest(`/api/ventas/${ventaId}/metodo-pago`, {
     method: 'PATCH', body: JSON.stringify({ metodoPago, pin, ...montos })
   }),

@@ -31,7 +31,7 @@ services:
     #env_file:
     #  - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql://local_user:local_password@db:5432/restaurante_local
+      - DATABASE_URL=postgresql://local_user:local_password@db:5432/restaurante_local?connection_limit=20&pool_timeout=10
       - PORT=3010
       - COMPANY_NAME=Restaurante Local
       - COMPANY_RUC=20600000001

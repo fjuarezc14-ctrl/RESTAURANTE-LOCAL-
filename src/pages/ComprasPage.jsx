@@ -480,14 +480,15 @@ export default function ComprasPage() {
     let tableRows = '';
     compras.forEach((c, idx) => {
       const comprobante = c.serieNumero ? `${c.tipoDocumento} ${c.serieNumero}` : (c.metodoPago === 'Yape' ? 'YAPE' : (c.tipoDocumento || ''));
+      const bg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
       tableRows += `
-        <tr>
-          <td style="border: 1px solid #999; padding: 6px; text-align: center;">${idx + 1}</td>
-          <td style="border: 1px solid #999; padding: 6px; font-weight: bold;">${c.proveedor || 'Sin descripción'}</td>
-          <td style="border: 1px solid #999; padding: 6px;">${c.categoria || 'Otros'}</td>
-          <td style="border: 1px solid #999; padding: 6px; text-align: right; font-weight: bold;">${parseFloat(c.total || 0).toFixed(2)}</td>
-          <td style="border: 1px solid #999; padding: 6px; text-align: center;">${c.metodoPago || comprobante}</td>
-          <td style="border: 1px solid #999; padding: 6px; text-align: center;"></td>
+        <tr style="background-color: ${bg};">
+          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'\\@';">${idx + 1}</td>
+          <td style="border: 1px solid #CBD5E1; padding: 6px; font-weight: bold;">${c.proveedor || 'Sin descripción'}</td>
+          <td style="border: 1px solid #CBD5E1; padding: 6px;">${c.categoria || 'Otros'}</td>
+          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; font-weight: bold; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${parseFloat(c.total || 0).toFixed(2)}</td>
+          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${c.metodoPago || comprobante}</td>
+          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;"></td>
         </tr>
       `;
     });
@@ -509,13 +510,13 @@ export default function ComprasPage() {
         </xml>
         <![endif]-->
         <style>
-          body { font-family: Arial, sans-serif; font-size: 12px; }
-          .header-title { font-size: 16px; font-weight: bold; text-align: center; }
-          .sub-header { font-size: 12px; font-weight: bold; }
-          .table-header { background-color: #E2E8F0; font-weight: bold; text-align: center; border: 1px solid #000; }
-          .total-row { background-color: #FEF3C7; font-weight: bold; font-size: 13px; }
-          .ingreso-row { background-color: #ECFDF5; font-weight: bold; }
-          .egreso-row { background-color: #FEF2F2; font-weight: bold; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1E293B; }
+          .header-title { font-size: 16px; font-weight: 900; text-align: center; color: #0F172A; }
+          .sub-header { font-size: 11px; font-weight: 800; color: #475569; text-align: center; }
+          .table-header { background-color: #0F172A; color: #FFFFFF; font-weight: 800; text-align: center; border: 1px solid #0F172A; padding: 6px; }
+          .total-row { background-color: #FEF3C7; font-weight: 900; font-size: 12px; }
+          .ingreso-row { background-color: #ECFDF5; font-weight: 800; }
+          .egreso-row { background-color: #FFF1F2; font-weight: 800; }
         </style>
       </head>
       <body>

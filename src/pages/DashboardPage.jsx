@@ -8,13 +8,24 @@ export default function DashboardPage() {
   const [topProducts, setTopProducts] = useState([]);
 
   useEffect(() => {
+    let activeCierreCutoff = localStorage.getItem('ultimoCierre');
+
     const updateStats = async () => {
       try {
-        const savedCierre = localStorage.getItem('ultimoCierre');
+        if (!activeCierreCutoff) {
+          try {
+            const cierreRes = await api.getUltimoCierre();
+            if (cierreRes?.ultimoCierre?.fechaCierre) {
+              activeCierreCutoff = new Date(cierreRes.ultimoCierre.fechaCierre).toISOString();
+              localStorage.setItem('ultimoCierre', activeCierreCutoff);
+            }
+          } catch (_) {}
+        }
+
         const [mesas, resumen, rotacion] = await Promise.all([
           api.getMesas(),
-          api.getResumenVentas(savedCierre || null),
-          api.getRotacion(savedCierre || null),
+          api.getResumenVentas(activeCierreCutoff || null),
+          api.getRotacion(activeCierreCutoff || null),
         ]);
         setStats({
           ocupadas: mesas.filter(m => m.estado !== 'Libre').length,

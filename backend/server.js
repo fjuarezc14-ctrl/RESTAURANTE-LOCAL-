@@ -9,7 +9,17 @@ const path = require('path');
 const company = require('./config/company');
 
 const app = express();
-const prisma = new PrismaClient();
+
+// Optimización de Conexiones Prisma (Pool size y timeout para concurrencia)
+let dbUrl = process.env.DATABASE_URL || '';
+if (dbUrl && !dbUrl.includes('connection_limit')) {
+  dbUrl += (dbUrl.includes('?') ? '&' : '?') + 'connection_limit=20&pool_timeout=10';
+  process.env.DATABASE_URL = dbUrl;
+}
+
+const prisma = new PrismaClient({
+  log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+});
 const LIMITE_CANCELACION_MS = 5 * 60 * 1000; // 5 minutos
 
 function generarPinSignature(pin, userId) {
@@ -253,6 +263,7 @@ async function expandPedidoItemsForDb(itemsList) {
             historial: false,
             entregado: false,
             notas: null,
+            esComponente: true,
           });
         }
       }
@@ -298,6 +309,7 @@ async function expandPedidoItemsForDb(itemsList) {
             historial: false,
             entregado: false,
             notas: null,
+            esComponente: true,
           });
         }
       }
@@ -313,6 +325,7 @@ async function expandPedidoItemsForDb(itemsList) {
             historial: rep.toBar ? false : true,
             entregado: rep.toBar ? false : true,
             notas: null,
+            esComponente: true,
           });
         }
       }
@@ -2763,9 +2776,10 @@ app.patch('/api/ventas/:ventaId/metodo-pago', async (req, res) => {
       }
     }
     const originalTotal = baseItemsTotal + shippingFee;
+    const desc = parseFloat(venta.descuentoAplicado || 0);
 
-    // Si el nuevo método es Cortesía, el total va a 0.00
-    const nuevoTotal = metodoPago === 'Cortesía' ? 0.00 : originalTotal;
+    // Si el nuevo método es Cortesía, el total va a 0.00; de lo contrario, preservar el descuento original
+    const nuevoTotal = metodoPago === 'Cortesía' ? 0.00 : Math.max(0, parseFloat((originalTotal - desc).toFixed(2)));
     const { subtotal, igv } = calcularSubtotalEIgv(nuevoTotal);
 
     let finalMontoEfectivo = 0;
@@ -3556,6 +3570,86 @@ app.get('/api/ventas/resumen', async (req, res) => {
 });
 
 // ============================================================
+// CIERRES DE CAJA Y ARQUEOS PERSISTENTES (PostgreSQL)
+// ============================================================
+
+// POST /api/caja/cierre → Registrar un arqueo y cierre de turno
+app.post('/api/caja/cierre', async (req, res) => {
+  try {
+    const {
+      fechaApertura,
+      fechaCierre,
+      cajeroNombre,
+      efectivoVentas,
+      efectivoEsperado,
+      efectivoContado,
+      diferencia,
+      totalTarjeta,
+      totalYape,
+      totalConsumo,
+      totalPedidosYa,
+      egresosEfectivo,
+      abonosEfectivo,
+      nota,
+    } = req.body;
+
+    if (!cajeroNombre) {
+      return res.status(400).json({ error: 'El nombre del cajero es obligatorio.' });
+    }
+
+    const cierre = await prisma.cierreCaja.create({
+      data: {
+        fechaApertura: fechaApertura ? new Date(fechaApertura) : new Date(),
+        fechaCierre: fechaCierre ? new Date(fechaCierre) : new Date(),
+        cajeroNombre: String(cajeroNombre).trim(),
+        efectivoVentas: parseFloat(efectivoVentas || 0),
+        efectivoEsperado: parseFloat(efectivoEsperado || 0),
+        efectivoContado: parseFloat(efectivoContado || 0),
+        diferencia: parseFloat(diferencia || 0),
+        totalTarjeta: parseFloat(totalTarjeta || 0),
+        totalYape: parseFloat(totalYape || 0),
+        totalConsumo: parseFloat(totalConsumo || 0),
+        totalPedidosYa: parseFloat(totalPedidosYa || 0),
+        egresosEfectivo: parseFloat(egresosEfectivo || 0),
+        abonosEfectivo: parseFloat(abonosEfectivo || 0),
+        nota: nota ? String(nota).trim() : null,
+      },
+    });
+
+    console.log(`🔒 Cierre de Caja registrado exitosamente por ${cajeroNombre}: Esperado S/ ${cierre.efectivoEsperado.toFixed(2)}, Contado S/ ${cierre.efectivoContado.toFixed(2)}, Dif: S/ ${cierre.diferencia.toFixed(2)}`);
+    res.json({ ok: true, cierre });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/caja/ultimo-cierre → Obtener el último cierre de caja registrado
+app.get('/api/caja/ultimo-cierre', async (req, res) => {
+  try {
+    const ultimo = await prisma.cierreCaja.findFirst({
+      orderBy: { fechaCierre: 'desc' },
+    });
+    res.json({ ok: true, ultimoCierre: ultimo });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/caja/cierres → Historial de los últimos cierres de caja
+app.get('/api/caja/cierres', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || 30);
+    const cierres = await prisma.cierreCaja.findMany({
+      orderBy: { fechaCierre: 'desc' },
+      take: Math.min(limit, 100),
+    });
+    res.json({ ok: true, cierres });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
 // COMPRAS (RCE)
 // ============================================================
 
@@ -3903,29 +3997,47 @@ app.get('/api/reportes/cancelaciones', async (req, res) => {
 
     const pedidos = await prisma.pedido.findMany({
       where: {
-        OR: [
-          { estado: 'Cancelado' },
-          { Venta: { anulado: true } }
-        ],
-        createdAt: filtroFecha
+        AND: [
+          {
+            OR: [
+              { estado: 'Cancelado' },
+              { Venta: { anulado: true } }
+            ]
+          },
+          {
+            OR: [
+              { canceladoEn: filtroFecha },
+              { createdAt: filtroFecha },
+              { Venta: { anuladoEn: filtroFecha } }
+            ]
+          }
+        ]
       },
       include: { items: true, mesa: true, Venta: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { id: 'desc' },
     });
 
-    const formateados = pedidos.map(p => ({
-      id: p.id,
-      hora: (p.canceladoEn || p.updatedAt || p.createdAt)?.toLocaleTimeString('es-PE', {
-        hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima',
-      }),
-      fecha: (p.canceladoEn || p.updatedAt || p.createdAt)?.toLocaleDateString('es-PE'),
-      mesa: p.mesa?.numero || null,
-      codigoPedidosYa: p.codigoPedidosYa,
-      canceladoPor: p.canceladoPor || p.Venta?.anuladoPor || 'Admin',
-      motivoCancela: p.motivoCancela || p.Venta?.motivoAnulacion || 'Devolución en Caja',
-      total: p.Venta?.montoOriginal || p.total,
-      resumenItems: p.items.map(i => `${i.cantidad}x ${i.nombre}`).join(', '),
-    }));
+    const formateados = pedidos.map(p => {
+      const esDevolucionCaja = !!p.Venta?.anulado || (p.motivoCancela || '').startsWith('[DEVOLUCIÓN CAJA]');
+      const fechaIncidencia = p.Venta?.anuladoEn || p.canceladoEn || p.createdAt;
+      return {
+        id: p.id,
+        ventaId: p.Venta?.id || null,
+        tipo: esDevolucionCaja ? 'Devolución en Caja' : 'Comanda Cancelada',
+        hora: fechaIncidencia ? new Date(fechaIncidencia).toLocaleTimeString('es-PE', {
+          hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima',
+        }) : '--:--',
+        fecha: fechaIncidencia ? new Date(fechaIncidencia).toLocaleDateString('es-PE') : '--/--/----',
+        fechaRaw: fechaIncidencia,
+        mesa: p.mesa?.numero || null,
+        codigoPedidosYa: p.codigoPedidosYa,
+        canceladoPor: p.Venta?.anuladoPor || p.canceladoPor || 'Admin',
+        motivoCancela: (p.Venta?.motivoAnulacion || (p.motivoCancela || '').replace('[DEVOLUCIÓN CAJA]: ', '') || 'Sin motivo especificado').trim(),
+        total: Number(p.Venta?.montoOriginal || p.total || 0),
+        metodoPagoOriginal: p.Venta?.metodoPago || 'No cobrado',
+        resumenItems: p.items.map(i => `${i.cantidad}x ${i.nombre}`).join(', '),
+      };
+    });
 
     res.json(formateados);
   } catch (err) {
@@ -4280,11 +4392,27 @@ app.get('/api/reportes/rotacion', async (req, res) => {
 // INICIO DEL SERVIDOR (DESACOPLADO DE TAREAS PESADAS DE MIGRACIÓN)
 // ============================================================
 const PORT = process.env.PORT || 3003;
-
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Backend ${company.COMPANY_NAME} corriendo en http://localhost:${PORT}`);
   console.log(`ℹ️ Para ejecutar tareas de mantenimiento/reparación de datos: npm run db:repair`);
 });
+
+const gracefulShutdown = async (signal) => {
+  console.log(`\n🛑 Recibida señal ${signal}. Cerrando servidor y pool de conexiones...`);
+  server.close(async () => {
+    try {
+      await prisma.$disconnect();
+      console.log('✅ Pool de conexiones PostgreSQL liberado con éxito.');
+    } catch (err) {
+      console.error('Error al desconectar Prisma:', err);
+    } finally {
+      process.exit(0);
+    }
+  });
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 
 // HELPERS E INTEGRACIÓN APISUNAT.PE (SUNAT PSE)
