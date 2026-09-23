@@ -1062,7 +1062,8 @@ export default function CajaPage({ currentUser }) {
         creditosDetalle: finalCreditosDetalle,
         clienteDireccion: clienteDireccion || '',
         cortesiaItemIds: cortesiaItemIds,
-        motivoCortesia: motivoCortesia.trim() || null
+        motivoCortesia: motivoCortesia.trim() || null,
+        cajeroNombre: cajeroNombre || currentUser?.nombre || 'Cajero'
       }
     });
 

@@ -2022,6 +2022,7 @@ app.post('/api/pedidos/llevar', async (req, res) => {
         estadoSunat: initEstadoSunat,
         serie,
         numero,
+        cajeroNombre: cajero ? String(cajero).trim() : null,
         descuentoAplicado: descuentoFinal,
         ofertaDescripcion: (() => {
           const motivoStr = motivoCortesia && String(motivoCortesia).trim() ? ` (${String(motivoCortesia).trim()})` : '';
@@ -3102,7 +3103,8 @@ app.post('/api/ventas', async (req, res) => {
     clienteCreditoId,
     creditosDetalle,
     cortesiaItemIds,
-    motivoCortesia
+    motivoCortesia,
+    cajeroNombre
   } = req.body;
   const idsAPagar = pedidoIds || [pedidoId];
   const idPrincipal = idsAPagar[idsAPagar.length - 1]; // El más reciente como venta principal
@@ -3301,6 +3303,7 @@ app.post('/api/ventas', async (req, res) => {
           numero,
           ofertaDescripcion: descDescrip,
           descuentoAplicado: descAplicado,
+          cajeroNombre: cajeroNombre ? String(cajeroNombre).trim() : null,
         },
       });
 
@@ -3427,6 +3430,7 @@ app.get('/api/ventas', async (req, res) => {
       }),
       mesaNum: v.pedido?.mesa?.numero || null,
       mesero: v.pedido?.mesero || null,
+      cajeroNombre: v.cajeroNombre || 'Cajero Principal',
       codigoPedidosYa: v.pedido?.codigoPedidosYa || null,
       tipoEntrega: v.pedido?.tipoEntrega || 'salon',
       estadoPedido: v.pedido?.estado || null,
@@ -4087,6 +4091,86 @@ app.get('/api/reportes/mozos', async (req, res) => {
       mesasActivas: stats.activas,
       mesasAtendidas: stats.atendidas,
     })).sort((a, b) => b.mesasAtendidas - a.mesasAtendidas);
+
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/reportes/cajeros → Rendimiento y desglose de ventas por cajero
+app.get('/api/reportes/cajeros', async (req, res) => {
+  const { desde, hasta } = req.query;
+  try {
+    let filtroFecha = {};
+    if (desde && hasta) {
+      const nextDay = new Date(hasta + 'T00:00:00.000-05:00');
+      nextDay.setDate(nextDay.getDate() + 1);
+      const nextDayStr = nextDay.toISOString().split('T')[0];
+      filtroFecha = {
+        gte: new Date(desde + 'T03:00:00.000-05:00'),
+        lte: new Date(nextDayStr + 'T02:59:59.999-05:00')
+      };
+    } else {
+      const ahora = new Date();
+      const hoyPeru = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Lima' }));
+      hoyPeru.setHours(0, 0, 0, 0);
+      const inicioUTC = new Date(hoyPeru.getTime() + 5 * 60 * 60 * 1000);
+      filtroFecha = { gte: inicioUTC };
+    }
+
+    const ventas = await prisma.venta.findMany({
+      where: {
+        createdAt: filtroFecha,
+        anulado: false,
+        pedido: { estado: { not: 'Cancelado' } }
+      },
+      select: {
+        total: true,
+        montoEfectivo: true,
+        montoTarjeta: true,
+        montoYape: true,
+        metodoPago: true,
+        cajeroNombre: true,
+      }
+    });
+
+    const cajeros = {};
+    for (const v of ventas) {
+      const cajero = (v.cajeroNombre && v.cajeroNombre.trim()) || 'Cajero Principal';
+      if (!cajeros[cajero]) {
+        cajeros[cajero] = {
+          nombre: cajero,
+          totalVentas: 0,
+          cantidadTickets: 0,
+          efectivo: 0,
+          tarjeta: 0,
+          yape: 0,
+          otros: 0
+        };
+      }
+
+      let efec = Number(v.montoEfectivo) || (v.metodoPago === 'Efectivo' ? v.total : 0);
+      let tarj = Number(v.montoTarjeta) || (v.metodoPago === 'Tarjeta' ? v.total : 0);
+      let yape = Number(v.montoYape) || (v.metodoPago === 'Yape' ? v.total : 0);
+      if (v.metodoPago === 'Mixto' && (efec + tarj + yape) < v.total) {
+        efec += (v.total - (efec + tarj + yape));
+      }
+
+      cajeros[cajero].totalVentas += Number(v.total) || 0;
+      cajeros[cajero].cantidadTickets += 1;
+      cajeros[cajero].efectivo += efec;
+      cajeros[cajero].tarjeta += tarj;
+      cajeros[cajero].yape += yape;
+      if (v.metodoPago === 'Consumo' || v.metodoPago === 'Cortesía' || v.metodoPago === 'Crédito') {
+        cajeros[cajero].otros += Number(v.total) || 0;
+      }
+    }
+
+    const resultado = Object.values(cajeros).map(c => ({
+      ...c,
+      ticketPromedio: c.cantidadTickets > 0 ? (c.totalVentas / c.cantidadTickets) : 0
+    })).sort((a, b) => b.totalVentas - a.totalVentas);
 
     res.json(resultado);
   } catch (err) {

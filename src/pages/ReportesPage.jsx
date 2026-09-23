@@ -88,6 +88,7 @@ export default function ReportesPage() {
   });
   const [cancelaciones, setCancelaciones] = useState([]);
   const [mozos, setMozos] = useState([]);
+  const [cajeros, setCajeros] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtrando, setFiltrando] = useState(false);
   const [ventas, setVentas] = useState([]);
@@ -248,7 +249,7 @@ export default function ReportesPage() {
   const fetchReportes = useCallback(async (desde, hasta) => {
     setFiltrando(true);
     try {
-      const [data, cancs, mzs, vts, rot, cmps, clients, cierresRes] = await Promise.all([
+      const [data, cancs, mzs, vts, rot, cmps, clients, cierresRes, cajs] = await Promise.all([
         api.getReporteContable(desde, hasta),
         api.getCancelaciones(desde, hasta),
         api.getReporteMozos(desde, hasta),
@@ -257,6 +258,7 @@ export default function ReportesPage() {
         api.getCompras(desde, hasta),
         api.getClientes().catch(() => []),
         api.getHistorialCierres(100).catch(() => []),
+        api.getReporteCajeros(desde, hasta).catch(() => []),
       ]);
       setResumen(data);
       setCancelaciones(cancs || []);
@@ -267,6 +269,7 @@ export default function ReportesPage() {
       setClientes(clients || []);
       const listCierres = Array.isArray(cierresRes) ? cierresRes : (cierresRes?.cierres || []);
       setCierresHistorial(listCierres);
+      setCajeros(cajs || []);
     } catch(err) {
       console.error('Error cargando reportes:', err);
     } finally {
@@ -351,6 +354,7 @@ export default function ReportesPage() {
             <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'\\@';">${v.numDocumento || 'S/D'}</td>
             <td style="border: 1px solid #CBD5E1; padding: 6px;">${v.nombreCliente || 'PÚBLICO GENERAL'}</td>
             <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; font-weight: 600;">${v.metodoPago}</td>
+            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; font-weight: bold; mso-number-format:'\\@';">${v.cajeroNombre || 'Cajero Principal'}</td>
             <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${v.subtotal.toFixed(2)}</td>
             <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; color: #2563EB; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${v.igv.toFixed(2)}</td>
             <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; font-weight: bold; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${v.total.toFixed(2)}</td>
@@ -411,51 +415,51 @@ export default function ReportesPage() {
         </head>
         <body>
           <table>
-            <tr><td colspan="13" class="title">${COMPANY_CONFIG.legalName.toUpperCase()}</td></tr>
-            <tr><td colspan="13" class="subtitle">RUC: ${COMPANY_CONFIG.ruc} · ${COMPANY_CONFIG.address}</td></tr>
-            <tr><td colspan="13" class="subtitle" style="font-weight: bold; color: #334155; font-size: 13px;">LIBRO CONTABLE TRIBUTARIO Y FINANCIERO (RVE / RCE)</td></tr>
-            <tr><td colspan="13" class="subtitle">PERIODO EVALUADO: DESDE ${fechaDesde} HASTA ${fechaHasta} · EMISIÓN: ${new Date().toLocaleDateString('es-PE')} ${new Date().toLocaleTimeString('es-PE')}</td></tr>
-            <tr><td colspan="13"></td></tr>
+            <tr><td colspan="14" class="title">${COMPANY_CONFIG.legalName.toUpperCase()}</td></tr>
+            <tr><td colspan="14" class="subtitle">RUC: ${COMPANY_CONFIG.ruc} · ${COMPANY_CONFIG.address}</td></tr>
+            <tr><td colspan="14" class="subtitle" style="font-weight: bold; color: #334155; font-size: 13px;">LIBRO CONTABLE TRIBUTARIO Y FINANCIERO (RVE / RCE)</td></tr>
+            <tr><td colspan="14" class="subtitle">PERIODO EVALUADO: DESDE ${fechaDesde} HASTA ${fechaHasta} · EMISIÓN: ${new Date().toLocaleDateString('es-PE')} ${new Date().toLocaleTimeString('es-PE')}</td></tr>
+            <tr><td colspan="14"></td></tr>
 
             <!-- DASHBOARD RESUMEN EJECUTIVO -->
-            <tr><td colspan="13" class="section-header" style="background-color: #334155;">📊 1. RESUMEN EJECUTIVO FINANCIERO DEL PERIODO</td></tr>
+            <tr><td colspan="14" class="section-header" style="background-color: #334155;">📊 1. RESUMEN EJECUTIVO FINANCIERO DEL PERIODO</td></tr>
             <tr>
               <td colspan="3" class="kpi-title">TOTAL VENTAS (RVE)</td>
               <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${totalVentas.toFixed(2)}</td>
               <td colspan="3" class="kpi-title">RECAUDACIÓN EFECTIVO</td>
               <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasEfec.toFixed(2)}</td>
-              <td colspan="3"></td>
+              <td colspan="4"></td>
             </tr>
             <tr>
               <td colspan="3" class="kpi-title">TOTAL COMPRAS Y GASTOS (RCE)</td>
               <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00'; color: #E11D48;">S/ ${totalCompras.toFixed(2)}</td>
               <td colspan="3" class="kpi-title">RECAUDACIÓN TARJETAS (POS)</td>
               <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasTarj.toFixed(2)}</td>
-              <td colspan="3"></td>
+              <td colspan="4"></td>
             </tr>
             <tr>
               <td colspan="3" class="kpi-title" style="background-color: #FEF3C7; color: #92400E;">UTILIDAD BRUTA OPERATIVA</td>
               <td colspan="2" class="kpi-val" style="background-color: #FEF3C7; color: ${margenOperativo >= 0 ? '#166534' : '#991B1B'}; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${margenOperativo.toFixed(2)}</td>
               <td colspan="3" class="kpi-title">RECAUDACIÓN YAPE / PLIN</td>
               <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasYape.toFixed(2)}</td>
-              <td colspan="3"></td>
+              <td colspan="4"></td>
             </tr>
             <tr>
               <td colspan="3" class="kpi-title">BASE IMPONIBLE VENTAS</td>
               <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${baseVentas.toFixed(2)}</td>
               <td colspan="3" class="kpi-title">OTROS (CONSUMO / CRÉDITOS)</td>
               <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasOtros.toFixed(2)}</td>
-              <td colspan="3"></td>
+              <td colspan="4"></td>
             </tr>
             <tr>
               <td colspan="3" class="kpi-title">IGV VENTAS (10.5%)</td>
               <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${igvVentas.toFixed(2)}</td>
-              <td colspan="8"></td>
+              <td colspan="9"></td>
             </tr>
-            <tr><td colspan="13"></td></tr>
+            <tr><td colspan="14"></td></tr>
 
             <!-- SECCIÓN VENTAS RVE -->
-            <tr><td colspan="13" class="section-header">🍽️ 2. REGISTRO DETALLADO DE VENTAS E INGRESOS (RVE)</td></tr>
+            <tr><td colspan="14" class="section-header">🍽️ 2. REGISTRO DETALLADO DE VENTAS E INGRESOS (RVE)</td></tr>
             <tr class="table-head">
               <th style="width: 40px;">N°</th>
               <th style="width: 85px;">FECHA</th>
@@ -464,6 +468,7 @@ export default function ReportesPage() {
               <th style="width: 95px;">DOC. CLIENTE</th>
               <th style="width: 220px;">CLIENTE / RAZÓN SOCIAL</th>
               <th style="width: 100px;">MEDIO PAGO</th>
+              <th style="width: 110px;">CAJERO</th>
               <th style="width: 100px;">BASE IMP. (S/)</th>
               <th style="width: 80px;">IGV (S/)</th>
               <th style="width: 100px;">TOTAL (S/)</th>
@@ -473,7 +478,7 @@ export default function ReportesPage() {
             </tr>
             ${ventasRows}
             <tr class="total-row">
-              <td colspan="7" style="text-align: right; padding-right: 12px;">TOTALES RVE VENTAS:</td>
+              <td colspan="8" style="text-align: right; padding-right: 12px;">TOTALES RVE VENTAS:</td>
               <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${baseVentas.toFixed(2)}</td>
               <td style="text-align: right; color: #2563EB; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${igvVentas.toFixed(2)}</td>
               <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${totalVentas.toFixed(2)}</td>
@@ -481,7 +486,7 @@ export default function ReportesPage() {
               <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasTarj.toFixed(2)}</td>
               <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasYape.toFixed(2)}</td>
             </tr>
-            <tr><td colspan="13"></td></tr>
+            <tr><td colspan="14"></td></tr>
 
             <!-- SECCIÓN COMPRAS RCE -->
             <tr><td colspan="13" class="section-header" style="background-color: #BE123C;">🔻 3. REGISTRO DETALLADO DE COMPRAS Y GASTOS (RCE)</td></tr>
@@ -801,6 +806,72 @@ export default function ReportesPage() {
             </div>
           )}
 
+          {/* RENDIMIENTO Y VENTAS POR CAJERO */}
+          {cajeros.length > 0 && (
+            <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden mb-8">
+              <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                <div>
+                  <h2 className="font-black text-slate-700 uppercase text-xs tracking-wider flex items-center gap-2">
+                    <Users className="w-4 h-4 text-purple-600" /> Rendimiento y Ventas por Cajero
+                  </h2>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Recaudación y volumen de cobro por personal de caja en el periodo.</p>
+                </div>
+                <span className="bg-purple-100 text-purple-800 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
+                  {cajeros.length} Cajero{cajeros.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="table-scroll">
+                <table className="w-full text-left min-w-[750px]">
+                  <thead className="bg-white text-slate-450 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+                    <tr>
+                      <th className="px-6 py-4">Cajero / Usuario</th>
+                      <th className="px-6 py-4 text-center">Tickets Cobrados</th>
+                      <th className="px-6 py-4 text-right">Ticket Prom.</th>
+                      <th className="px-6 py-4 text-right">Efectivo</th>
+                      <th className="px-6 py-4 text-right">Tarjeta POS</th>
+                      <th className="px-6 py-4 text-right">Yape / Plin</th>
+                      <th className="px-6 py-4 text-right">Total Cobrado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 text-sm bg-white font-bold text-slate-700">
+                    {cajeros.map((c, i) => (
+                      <tr key={i} className="hover:bg-purple-50/20 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-purple-900 text-purple-200 rounded-xl flex items-center justify-center font-black text-xs shrink-0">
+                              {(c.nombre || 'C')[0].toUpperCase()}
+                            </div>
+                            <span className="font-bold text-slate-900 uppercase text-xs">{c.nombre}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center font-mono">
+                          <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-black">
+                            {c.cantidadTickets}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right font-mono text-slate-600">
+                          S/ {c.ticketPromedio.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 text-right font-mono text-emerald-700">
+                          S/ {c.efectivo.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 text-right font-mono text-blue-700">
+                          S/ {c.tarjeta.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 text-right font-mono text-purple-700">
+                          S/ {c.yape.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 text-right font-mono font-black text-slate-900">
+                          S/ {c.totalVentas.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* HISTORIAL Y AUDITORÍA DE COMPROBANTES EMITIDOS */}
           <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden mb-8">
             <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
@@ -826,6 +897,7 @@ export default function ReportesPage() {
                     <th className="px-6 py-4">ID / Hora</th>
                     <th className="px-6 py-4">Comprobante / Cliente</th>
                     <th className="px-6 py-4">Mesa / Delivery</th>
+                    <th className="px-6 py-4">Cajero</th>
                     <th className="px-6 py-4">Método de Pago</th>
                     <th className="px-6 py-4">Detalle Items</th>
                     <th className="px-6 py-4 text-right">Total</th>
@@ -915,6 +987,11 @@ export default function ReportesPage() {
                           )}
                         </td>
                         <td className="px-6 py-4">
+                          <span className="font-bold text-slate-700 text-xs uppercase whitespace-nowrap">
+                            {v.cajeroNombre || 'Cajero Principal'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
                           {v.anulado ? (
                             <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide bg-red-100 border border-red-200 text-red-700 whitespace-nowrap">
                               🚫 CANCELADO
@@ -986,7 +1063,7 @@ export default function ReportesPage() {
                       </tr>
                     )) : (
                       <tr>
-                        <td colSpan="7" className="text-center py-12 text-slate-400 font-bold uppercase text-xs">
+                        <td colSpan="8" className="text-center py-12 text-slate-400 font-bold uppercase text-xs">
                           No se encontraron comprobantes emitidos en este rango de fechas.
                         </td>
                       </tr>

@@ -219,6 +219,10 @@ export const api = {
     const qs = (desde && hasta) ? `?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}` : '';
     return apiRequest(`/api/reportes/mozos${qs}`);
   },
+  getReporteCajeros: (desde, hasta) => {
+    const qs = (desde && hasta) ? `?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}` : '';
+    return apiRequest(`/api/reportes/cajeros${qs}`);
+  },
   getRotacion: (desde = null, hasta = null) => {
     const params = [];
     if (desde) params.push(`desde=${encodeURIComponent(desde)}`);

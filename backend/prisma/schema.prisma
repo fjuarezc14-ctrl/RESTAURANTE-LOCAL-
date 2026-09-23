@@ -164,6 +164,7 @@ model Venta {
   numero          Int?     // Número correlativo asignado
   urlPdf          String?  // Enlace del PDF del comprobante
   urlXml          String?  // Enlace del XML del comprobante
+  cajeroNombre    String?  // Nombre del cajero en turno que procesó el cobro
   // --- Ofertas / Descuentos ---
   ofertaDescripcion  String?  // Nombre de la oferta aplicada, si hubo
   descuentoAplicado  Float    @default(0) // Monto total descontado en esta venta
