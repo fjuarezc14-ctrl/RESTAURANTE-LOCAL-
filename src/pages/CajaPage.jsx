@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Receipt, X, Banknote, Search, CheckCircle, Clock, Sparkles, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Tag, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, KeyRound, Flame } from 'lucide-react';
 
 import { api } from '../api';
+import { parsePasosOpciones, resolverSeleccion } from '../utils/combos';
 import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
@@ -1601,20 +1602,8 @@ export default function CajaPage({ currentUser }) {
     }
 
     // 2. OPCIONES Y MODIFICADORES PERSONALIZADOS DEL CLIENTE (MÁXIMA PRIORIDAD)
-    if (prod && prod.opcionesConfig) {
-      try {
-        const parsed = typeof prod.opcionesConfig === 'string' ? JSON.parse(prod.opcionesConfig) : prod.opcionesConfig;
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((step, sIdx) => ({
-            name: step.name || `Paso ${sIdx + 1}`,
-            key: step.key || `opcion_${sIdx + 1}`,
-            options: (step.options || []).map(opt => typeof opt === 'string' ? { label: opt, value: opt } : opt)
-          }));
-        }
-      } catch (err) {
-        console.error("Error parseando opcionesConfig de producto en Caja:", err);
-      }
-    }
+    const pasosConfigurados = parsePasosOpciones(prod);
+    if (pasosConfigurados.length > 0) return pasosConfigurados;
 
     // 3. Si el plato NO requiere guarnición explícitamente, NO genera pasos forzados. Directo al delivery!
     if (prod.requiereGuarnicion === false && !prod.opcionesConfig) {
@@ -1756,8 +1745,10 @@ export default function CajaPage({ currentUser }) {
     agregarItemDeliveryDirecto(prod, null);
   };
 
-  const agregarItemDeliveryDirecto = (prod, notas = null) => {
+  const agregarItemDeliveryDirecto = (prod, notas = null, extras = null) => {
     const cleanNotas = notas && String(notas).trim() ? String(notas).trim() : null;
+    const opcionesElegidas = extras?.opciones || [];
+    const precioExtra = extras?.precioExtra || 0;
     const idx = itemsDelivery.findIndex(i => i.id === String(prod.id) && i.notas === cleanNotas);
     
     // Contabilizar total de este producto en delivery actual (evita fuga de stock con notas distintas)
@@ -1771,7 +1762,8 @@ export default function CajaPage({ currentUser }) {
       return;
     }
 
-    const precioFinal = prod.precioOferta !== null && prod.precioOferta !== undefined ? prod.precioOferta : prod.precio;
+    const precioBase = prod.precioOferta !== null && prod.precioOferta !== undefined ? prod.precioOferta : prod.precio;
+    const precioFinal = precioBase + precioExtra;
 
     if (idx >= 0) {
       const nuevo = [...itemsDelivery];
@@ -1785,7 +1777,8 @@ export default function CajaPage({ currentUser }) {
         cant: 1,
         ofertaNombre: prod.ofertaNombre,
         precioOriginal: prod.precio,
-        notas: cleanNotas
+        notas: cleanNotas,
+        opciones: opcionesElegidas
       }]);
     }
   };
@@ -4877,7 +4870,7 @@ export default function CajaPage({ currentUser }) {
               notesArray.push(`(Nota: ${additionalNotes.trim()})`);
             }
             const finalNotes = notesArray.join(' · ');
-            agregarItemDeliveryDirecto(selectedProduct, finalNotes);
+            agregarItemDeliveryDirecto(selectedProduct, finalNotes, resolverSeleccion(steps, selections));
           } else if (selectedProduct.categoria === 'Menú' || selectedProduct.categoria?.toLowerCase().includes('menú')) {
             const notesArray = [];
             const entr = selections["entrada_menu"];

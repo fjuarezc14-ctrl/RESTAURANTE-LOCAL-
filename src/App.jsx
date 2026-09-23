@@ -1,10 +1,11 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { UtensilsCrossed, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Building2 } from 'lucide-react';
+import { UtensilsCrossed, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Building2, Share2, Copy, Check as CheckIcon, Wifi } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import logoUrl from './assets/logo.png';
 import { COMPANY_CONFIG } from './config/company';
 import { useCompany } from './context/CompanyContext';
 import { api } from './api';
+import { generateOfflineQrUrl } from './utils/qrOffline';
 import DashboardPage from './pages/DashboardPage';
 import SalonPage from './pages/SalonPage';
 import CocinaPage from './pages/CocinaPage';
@@ -222,10 +223,104 @@ function splitBrand(brand) {
   return [words.slice(0, -1).join(' '), words[words.length - 1]];
 }
 
+// Muestra las direcciones con las que los mozos entran desde su celular (se consultan al abrir,
+// así siempre reflejan la IP actual de la PC aunque el router se la haya cambiado).
+const ModalCompartirDireccion = ({ onClose }) => {
+  const [datos, setDatos] = useState(null);
+  const [error, setError] = useState('');
+  const [copiado, setCopiado] = useState('');
+
+  useEffect(() => {
+    let vigente = true;
+    api.getDireccionesRed()
+      .then(res => {
+        if (!vigente) return;
+        if (res?.error || !res?.urls) setError('No se pudieron obtener las direcciones.');
+        else setDatos(res);
+      })
+      .catch(() => vigente && setError('No se pudieron obtener las direcciones.'));
+    return () => { vigente = false; };
+  }, []);
+
+  const copiar = async (url) => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Sin permiso de portapapeles (o sin HTTPS): selección manual como respaldo
+      const tmp = document.createElement('textarea');
+      tmp.value = url;
+      document.body.appendChild(tmp);
+      tmp.select();
+      document.execCommand('copy');
+      document.body.removeChild(tmp);
+    }
+    setCopiado(url);
+    setTimeout(() => setCopiado(''), 2000);
+  };
+
+  const principal = datos?.urls?.[0];
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-slate-800">
+          <h3 className="text-white font-black text-sm uppercase tracking-wide flex items-center gap-2">
+            <Wifi className="w-4 h-4 text-cyan-400" /> Dirección para los mozos
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {error && <p className="text-xs text-rose-400 font-bold">{error}</p>}
+          {!datos && !error && <p className="text-xs text-slate-400 animate-pulse">Buscando direcciones...</p>}
+
+          {datos && (
+            <>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                El celular debe estar en el <strong className="text-slate-200">mismo WiFi</strong> que esta PC.
+                Escanea el código o copia el enlace y envíaselo.
+              </p>
+
+              {principal && (
+                <div className="flex justify-center">
+                  <img src={generateOfflineQrUrl(principal, 160)} alt="Código QR de acceso" className="bg-white p-2 rounded-xl w-40 h-40" />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {datos.urls.map(url => (
+                  <div key={url} className="flex items-center gap-2 bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-2">
+                    <span className="flex-1 text-xs font-mono text-cyan-300 truncate">{url}</span>
+                    <button
+                      onClick={() => copiar(url)}
+                      className="shrink-0 px-2.5 py-1.5 bg-slate-700 hover:bg-cyan-500 hover:text-slate-950 text-slate-200 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5"
+                    >
+                      {copiado === url ? <><CheckIcon className="w-3.5 h-3.5" /> Copiado</> : <><Copy className="w-3.5 h-3.5" /> Copiar</>}
+                    </button>
+                  </div>
+                ))}
+                {datos.urls.length === 0 && (
+                  <p className="text-xs text-amber-400 font-bold">Esta PC no está conectada a ninguna red WiFi o cable.</p>
+                )}
+              </div>
+
+              <p className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
+                Si el enlace deja de funcionar, es porque el router le cambió la IP a esta PC. Vuelve a abrir esta
+                ventana para ver la nueva, o pídele a tu proveedor de internet que le fije una IP siempre igual.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
   const location = useLocation();
   const { empresa } = useCompany();
   const [brandMain, brandHighlight] = splitBrand(empresa.brandShort);
+  const [compartirAbierto, setCompartirAbierto] = useState(false);
 
   // Mapeo dinámico de permisos para visualización
   const menuItems = [
@@ -311,6 +406,12 @@ const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
               <p className="text-cyan-400 font-mono text-[10px] uppercase font-black">{currentUser?.rol}</p>
             </div>
           </div>
+          <button
+            onClick={() => setCompartirAbierto(true)}
+            className="w-full py-2 bg-slate-800 hover:bg-cyan-500/10 hover:text-cyan-300 hover:border-cyan-500/20 border border-slate-700 text-slate-300 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2"
+          >
+            <Share2 className="w-4 h-4" /> Compartir dirección
+          </button>
           <button 
             onClick={onLogout}
             className="w-full py-2 bg-slate-800 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 border border-slate-700 text-slate-300 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2"
@@ -319,6 +420,8 @@ const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
           </button>
         </div>
       </aside>
+
+      {compartirAbierto && <ModalCompartirDireccion onClose={() => setCompartirAbierto(false)} />}
     </>
   );
 };

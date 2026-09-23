@@ -4,6 +4,7 @@ const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const company = require('./config/company');
 
@@ -175,6 +176,17 @@ function parseSelectionsFromNotes(notas) {
   return selections;
 }
 
+function parseJsonSafe(txt, fallback) {
+  if (!txt) return fallback;
+  try {
+    const parsed = typeof txt === 'string' ? JSON.parse(txt) : txt;
+    return parsed ?? fallback;
+  } catch (err) {
+    console.warn('[parseJsonSafe] JSON inválido:', err.message);
+    return fallback;
+  }
+}
+
 async function expandPedidoItemsForDb(itemsList) {
   const expandedList = [];
   const defaultProduct = await prisma.producto.findFirst({ where: { activo: true }, orderBy: { id: 'asc' } });
@@ -315,7 +327,49 @@ async function expandPedidoItemsForDb(itemsList) {
         notas: i.notas ? String(i.notas) : null,
       });
 
-      if (i.notas) {
+      const cantidadPadre = parseInt(i.cant || i.cantidad || 1);
+
+      // Combo armado con productos de la carta: cada componente va a su estación y descuenta su stock
+      const componentes = parseJsonSafe(validProd.componentes, []);
+      for (const comp of Array.isArray(componentes) ? componentes : []) {
+        const compId = parseInt(comp.productoId);
+        const compCant = parseInt(comp.cantidad || 1);
+        if (isNaN(compId) || compId <= 0 || isNaN(compCant) || compCant <= 0) continue;
+        const compProd = await prisma.producto.findUnique({ where: { id: compId } });
+        if (!compProd) continue;
+        expandedList.push({
+          productoId: compProd.id,
+          nombre: compProd.nombre,
+          precio: 0,
+          cantidad: compCant * cantidadPadre,
+          historial: false,
+          entregado: false,
+          notas: `(Incluido en ${prodNombre})`,
+        });
+      }
+
+      // Opciones elegidas que apuntan a un producto real de la carta (guarnición, bebida, postre...)
+      const opcionesElegidas = Array.isArray(i.opciones) ? i.opciones : [];
+      let expandidoPorOpciones = false;
+      for (const op of opcionesElegidas) {
+        const opId = parseInt(op?.productoId);
+        if (isNaN(opId) || opId <= 0) continue;
+        const opProd = await prisma.producto.findUnique({ where: { id: opId } });
+        if (!opProd) continue;
+        expandedList.push({
+          productoId: opProd.id,
+          nombre: opProd.nombre,
+          precio: 0,
+          cantidad: cantidadPadre,
+          historial: false,
+          entregado: false,
+          notas: `(${op.paso || 'Opción'} de ${prodNombre})`,
+        });
+        expandidoPorOpciones = true;
+      }
+
+      // Formato antiguo: deducir la bebida desde el texto de las notas
+      if (i.notas && !expandidoPorOpciones) {
         const parsedNotes = parseSelectionsFromNotes(i.notas);
         const drinkKeys = [
           "Elige la Bebida (1.5 Litros)",
@@ -493,6 +547,25 @@ app.get('/api/status', async (req, res) => {
     modoDemo,
     apisunatActivo: !modoDemo
   });
+});
+
+// GET /api/red/direcciones -> Direcciones para conectar celulares y tablets (se calculan al momento)
+app.get('/api/red/direcciones', (req, res) => {
+  try {
+    const puerto = PORT;
+    const ips = Object.values(os.networkInterfaces())
+      .flat()
+      .filter(i => i && i.family === 'IPv4' && !i.internal)
+      .map(i => i.address);
+    res.json({
+      puerto,
+      hostname: os.hostname(),
+      urls: ips.map(ip => `http://${ip}:${puerto}`),
+      urlHostname: `http://${os.hostname()}:${puerto}`,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'No se pudieron obtener las direcciones de red.' });
+  }
 });
 
 // ============================================================
@@ -1158,16 +1231,12 @@ app.post('/api/mesas/:num/pedido', async (req, res) => {
         },
       });
 
-      // Descontar stock de productos limitados de forma atómica
-      for (const item of itemsNuevos) {
-        const prodId = parseInt(item.productoId || item.id);
-        const qty = parseInt(item.cant || item.cantidad || 1);
-        if (!isNaN(prodId) && prodId > 0 && !isNaN(qty) && qty > 0) {
-          await tx.producto.updateMany({
-            where: { id: prodId, tipoStock: 'limitado' },
-            data: { stock: { decrement: qty } },
-          });
-        }
+      // Descontar stock de todo lo comandado, incluidos los componentes de un combo
+      for (const item of expandedItems) {
+        await tx.producto.updateMany({
+          where: { id: item.productoId, tipoStock: 'limitado' },
+          data: { stock: { decrement: item.cantidad } },
+        });
       }
 
       await tx.mesa.update({
@@ -1872,16 +1941,12 @@ app.post('/api/pedidos/llevar', async (req, res) => {
       },
     });
 
-    // Descontar stock limitado
-    for (const item of items) {
-      const prodId = parseInt(item.productoId || item.id);
-      const qty = parseInt(item.cant || item.cantidad || 1);
-      if (!isNaN(prodId) && prodId > 0 && !isNaN(qty) && qty > 0) {
-        await prisma.producto.updateMany({
-          where: { id: prodId, tipoStock: 'limitado' },
-          data: { stock: { decrement: qty } },
-        });
-      }
+    // Descontar stock limitado (incluye los componentes de un combo)
+    for (const item of expandedItems) {
+      await prisma.producto.updateMany({
+        where: { id: item.productoId, tipoStock: 'limitado' },
+        data: { stock: { decrement: item.cantidad } },
+      });
     }
 
     // Registrar venta inmediatamente
@@ -2159,12 +2224,11 @@ app.put('/api/pedidos/llevar/:id', async (req, res) => {
         }))
       });
 
-      // Descontar stock de productos limitados nuevos
-      const itemsNuevos = items.filter(i => !i.historial);
-      for (const item of itemsNuevos) {
+      // Descontar stock de lo nuevo (incluye los componentes de un combo)
+      for (const item of expandedItems) {
         await tx.producto.updateMany({
-          where: { id: parseInt(item.id), tipoStock: 'limitado' },
-          data: { stock: { decrement: item.cant || item.cantidad } }
+          where: { id: item.productoId, tipoStock: 'limitado' },
+          data: { stock: { decrement: item.cantidad } }
         });
       }
 
@@ -2316,7 +2380,7 @@ app.get('/api/productos', async (req, res) => {
 
 app.post('/api/productos', async (req, res) => {
   try {
-    const { nombre, categoria, precio, tipoStock, stock, requiereGuarnicion, opcionesConfig } = req.body;
+    const { nombre, categoria, precio, tipoStock, stock, requiereGuarnicion, opcionesConfig, componentes } = req.body;
 
     const prod = await prisma.producto.create({
       data: {
@@ -2327,6 +2391,7 @@ app.post('/api/productos', async (req, res) => {
         stock: stock ? parseInt(stock) : 0,
         requiereGuarnicion: requiereGuarnicion !== undefined ? Boolean(requiereGuarnicion) : false,
         opcionesConfig: opcionesConfig !== undefined ? (typeof opcionesConfig === 'string' ? opcionesConfig : JSON.stringify(opcionesConfig)) : null,
+        componentes: componentes ? (typeof componentes === 'string' ? componentes : JSON.stringify(componentes)) : null,
       }
     });
     res.json(prod);
@@ -2343,6 +2408,9 @@ app.put('/api/productos/:id', async (req, res) => {
     if (req.body.requiereGuarnicion !== undefined) data.requiereGuarnicion = Boolean(req.body.requiereGuarnicion);
     if (req.body.opcionesConfig !== undefined) {
       data.opcionesConfig = req.body.opcionesConfig ? (typeof req.body.opcionesConfig === 'string' ? req.body.opcionesConfig : JSON.stringify(req.body.opcionesConfig)) : null;
+    }
+    if (req.body.componentes !== undefined) {
+      data.componentes = req.body.componentes ? (typeof req.body.componentes === 'string' ? req.body.componentes : JSON.stringify(req.body.componentes)) : null;
     }
     if (req.body.precio !== undefined) data.precio = parseFloat(req.body.precio);
     if (req.body.tipoStock !== undefined) data.tipoStock = String(req.body.tipoStock);

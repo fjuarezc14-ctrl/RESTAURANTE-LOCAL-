@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChefHat, CheckCircle, PlusCircle, Receipt, X, Edit3, ShoppingBag, User, AlertTriangle, Clock, Trash, Lock, Tag, Percent, Link2, Bell, Settings, Plus, Utensils, Save, Trash2, Search, Check, ChevronRight, Wifi, WifiOff, LayoutGrid, List, Sparkles, Flame, Minus } from 'lucide-react';
 import { api } from '../api';
+import { parsePasosOpciones, resolverSeleccion } from '../utils/combos';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 
 const LIMITE_CANCELACION_MS = 5 * 60 * 1000;
@@ -415,20 +416,8 @@ export default function SalonPage({ currentUser }) {
     if (!prod) return [];
 
     // 1. OPCIONES Y MODIFICADORES PERSONALIZADOS DEL CLIENTE (MÁXIMA PRIORIDAD)
-    if (prod && prod.opcionesConfig) {
-      try {
-        const parsed = typeof prod.opcionesConfig === 'string' ? JSON.parse(prod.opcionesConfig) : prod.opcionesConfig;
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((step, sIdx) => ({
-            name: step.name || `Paso ${sIdx + 1}`,
-            key: step.key || `opcion_${sIdx + 1}`,
-            options: (step.options || []).map(opt => typeof opt === 'string' ? { label: opt, value: opt } : opt)
-          }));
-        }
-      } catch (err) {
-        console.error("Error parseando opcionesConfig de producto:", err);
-      }
-    }
+    const pasosConfigurados = parsePasosOpciones(prod);
+    if (pasosConfigurados.length > 0) return pasosConfigurados;
 
     // 2. Variantes agrupadas de carne (Tallarines Verdes)
     if (prod.esAgrupado && Array.isArray(prod.variantes)) {
@@ -581,7 +570,9 @@ export default function SalonPage({ currentUser }) {
     agregarAlTicketDirecto(prod, '');
   };
 
-  const agregarAlTicketDirecto = (prod, notas = '') => {
+  const agregarAlTicketDirecto = (prod, notas = '', extras = null) => {
+    const opcionesElegidas = extras?.opciones || [];
+    const precioExtra = extras?.precioExtra || 0;
     setTicketActual(prevItems => {
       let nuevosItems = [...prevItems];
       const index = nuevosItems.findIndex(t => String(t.id) === String(prod.id) && !t.yaEnviado && t.notas === notas);
@@ -596,7 +587,8 @@ export default function SalonPage({ currentUser }) {
         return prevItems;
       }
       
-      const precioFinal = prod.precioOferta !== null && prod.precioOferta !== undefined ? prod.precioOferta : prod.precio;
+      const precioBase = prod.precioOferta !== null && prod.precioOferta !== undefined ? prod.precioOferta : prod.precio;
+      const precioFinal = precioBase + precioExtra;
       
       if (index >= 0) {
         nuevosItems[index] = {
@@ -612,6 +604,7 @@ export default function SalonPage({ currentUser }) {
           yaEnviado: false, 
           historial: false, 
           notas: notas,
+          opciones: opcionesElegidas,
           ofertaNombre: prod.ofertaNombre || null,
           precioOriginal: prod.precio
         });
@@ -1745,7 +1738,7 @@ export default function SalonPage({ currentUser }) {
               notesArray.push(`(Nota: ${additionalNotes.trim()})`);
             }
             const finalNotes = notesArray.join(' · ');
-            agregarAlTicketDirecto(selectedProduct, finalNotes);
+            agregarAlTicketDirecto(selectedProduct, finalNotes, resolverSeleccion(steps, selections));
           } else if (isMenuProduct(selectedProduct)) {
             const notesArray = [];
             const entr = selections["entrada_menu"];

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PlusCircle, Utensils, CupSoda, Wine, AlertCircle, Trash2, BookOpen, Save, X, Tag, ToggleLeft, ToggleRight, Edit2, ChevronDown, ChevronUp, Percent, DollarSign, Search, Sliders, Sparkles, FolderPlus } from 'lucide-react';
 import { api } from '../api';
+import { parseComponentes, calcularPrecioComponentes, normalizarOpcion } from '../utils/combos';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, TODAS_CATEGORIAS as MASTER_TODAS_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 
 // --- SISTEMA DE BÚSQUEDA INTELIGENTE Y FONÉTICA ---
@@ -163,10 +164,15 @@ export default function CartaPage({ currentUser }) {
       try {
         const raw = typeof p.opcionesConfig === 'string' ? JSON.parse(p.opcionesConfig) : p.opcionesConfig;
         if (Array.isArray(raw)) {
-          parsedOpciones = raw.map(step => ({
-            name: step.name || '',
-            options: Array.isArray(step.options) ? step.options.join(', ') : String(step.options || '')
-          }));
+          parsedOpciones = raw.map(step => {
+            const opts = (Array.isArray(step.options) ? step.options : []).map(normalizarOpcion);
+            return {
+              name: step.name || '',
+              // Las opciones ligadas a un producto de la carta se editan como fichas aparte
+              vinculadas: opts.filter(o => o.productoId),
+              options: opts.filter(o => !o.productoId).map(o => o.label).join(', '),
+            };
+          });
         }
       } catch (e) {
         parsedOpciones = [];
@@ -185,7 +191,8 @@ export default function CartaPage({ currentUser }) {
           stock: String(p.stock),
           requiereGuarnicion: !!p.requiereGuarnicion,
           tieneOpciones: parsedOpciones.length > 0,
-          opcionesConfig: parsedOpciones
+          opcionesConfig: parsedOpciones,
+          componentes: parseComponentes(p),
         }
       : {
           id: '',
@@ -196,7 +203,8 @@ export default function CartaPage({ currentUser }) {
           stock: '',
           requiereGuarnicion: false,
           tieneOpciones: false,
-          opcionesConfig: []
+          opcionesConfig: [],
+          componentes: [],
         }
     );
     setCreandoNuevaCat(false);
@@ -247,12 +255,76 @@ export default function CartaPage({ currentUser }) {
     }
   };
 
+  // Productos que se pueden usar como opción o como parte de un combo
+  const productosSeleccionables = productos
+    .filter(p => p.activo !== false && String(p.id) !== String(editProd.id))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+  const componentesActuales = editProd.componentes || [];
+  const sumaComponentes = calcularPrecioComponentes(componentesActuales, productos);
+
+  const agregarComponente = (productoId) => {
+    const id = parseInt(productoId);
+    if (!id) return;
+    setEditProd(prev => {
+      const actuales = prev.componentes || [];
+      const idx = actuales.findIndex(c => c.productoId === id);
+      const nuevos = idx >= 0
+        ? actuales.map((c, i) => (i === idx ? { ...c, cantidad: c.cantidad + 1 } : c))
+        : [...actuales, { productoId: id, cantidad: 1 }];
+      return { ...prev, componentes: nuevos };
+    });
+  };
+
+  const cambiarCantidadComponente = (productoId, cantidad) => {
+    const cant = parseInt(cantidad);
+    setEditProd(prev => ({
+      ...prev,
+      componentes: (prev.componentes || []).map(c => (c.productoId === productoId ? { ...c, cantidad: cant > 0 ? cant : 1 } : c)),
+    }));
+  };
+
+  const quitarComponente = (productoId) => {
+    setEditProd(prev => ({ ...prev, componentes: (prev.componentes || []).filter(c => c.productoId !== productoId) }));
+  };
+
+  const agregarOpcionVinculada = (idx, productoId) => {
+    const prod = productos.find(p => String(p.id) === String(productoId));
+    if (!prod) return;
+    setEditProd(prev => {
+      const pasos = [...(prev.opcionesConfig || [])];
+      const vinculadas = pasos[idx].vinculadas || [];
+      if (vinculadas.some(v => v.productoId === prod.id)) return prev;
+      pasos[idx] = { ...pasos[idx], vinculadas: [...vinculadas, { productoId: prod.id, label: prod.nombre, precioExtra: 0 }] };
+      return { ...prev, opcionesConfig: pasos };
+    });
+  };
+
+  const cambiarExtraOpcion = (idx, productoId, precioExtra) => {
+    setEditProd(prev => {
+      const pasos = [...(prev.opcionesConfig || [])];
+      pasos[idx] = {
+        ...pasos[idx],
+        vinculadas: (pasos[idx].vinculadas || []).map(v => (v.productoId === productoId ? { ...v, precioExtra: parseFloat(precioExtra) || 0 } : v)),
+      };
+      return { ...prev, opcionesConfig: pasos };
+    });
+  };
+
+  const quitarOpcionVinculada = (idx, productoId) => {
+    setEditProd(prev => {
+      const pasos = [...(prev.opcionesConfig || [])];
+      pasos[idx] = { ...pasos[idx], vinculadas: (pasos[idx].vinculadas || []).filter(v => v.productoId !== productoId) };
+      return { ...prev, opcionesConfig: pasos };
+    });
+  };
+
   const agregarPasoOpcion = () => {
     setEditProd(prev => ({
       ...prev,
       opcionesConfig: [
         ...(prev.opcionesConfig || []),
-        { name: "", options: "" }
+        { name: "", options: "", vinculadas: [] }
       ]
     }));
   };
@@ -291,11 +363,20 @@ export default function CartaPage({ currentUser }) {
     
     if (editProd.tieneOpciones && Array.isArray(editProd.opcionesConfig)) {
       const pasosValidos = editProd.opcionesConfig
-        .filter(s => s.name && s.name.trim() && s.options && s.options.trim())
+        .filter(s => s.name && s.name.trim() && ((s.options && s.options.trim()) || (s.vinculadas || []).length > 0))
         .map((s, idx) => ({
           name: s.name.trim(),
           key: `opcion_${idx + 1}`,
-          options: s.options.split(',').map(o => o.trim()).filter(Boolean)
+          options: [
+            // Ligadas a un producto: llegan solas a cocina o barra y descuentan su stock
+            ...(s.vinculadas || []).map(v => ({
+              label: v.label,
+              value: v.label,
+              productoId: v.productoId,
+              precioExtra: parseFloat(v.precioExtra) || 0,
+            })),
+            ...String(s.options || '').split(',').map(o => o.trim()).filter(Boolean),
+          ],
         }))
         .filter(s => s.options.length > 0);
 
@@ -317,7 +398,8 @@ export default function CartaPage({ currentUser }) {
         tipoStock: editProd.tipoStock,
         stock: parseInt(editProd.stock) || 0,
         requiereGuarnicion: requiereGuarnicionBool,
-        opcionesConfig: opcionesPayload
+        opcionesConfig: opcionesPayload,
+        componentes: componentesActuales.length > 0 ? JSON.stringify(componentesActuales) : null,
       };
       if (editProd.id) {
         await api.editarProducto(editProd.id, body);
@@ -886,13 +968,46 @@ export default function CartaPage({ currentUser }) {
                           </div>
                           <div>
                             <label className="block text-[11px] font-bold text-slate-500 mb-0.5">
-                              Opciones a elegir (separadas por coma)
+                              Opciones de la carta (llegan solas a Cocina o Barra y descuentan stock)
+                            </label>
+                            <div className="flex flex-wrap gap-1.5 mb-1.5">
+                              {(paso.vinculadas || []).map(v => (
+                                <span key={v.productoId} className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg pl-2 pr-1 py-1 text-[11px] font-bold">
+                                  {v.label}
+                                  <span className="text-emerald-600 font-normal">+S/</span>
+                                  <input
+                                    type="number"
+                                    step="0.5"
+                                    min="0"
+                                    value={v.precioExtra}
+                                    onChange={e => cambiarExtraOpcion(idx, v.productoId, e.target.value)}
+                                    title="Precio extra si el cliente elige esta opción"
+                                    className="w-12 border border-emerald-200 rounded px-1 py-0.5 text-[11px] text-emerald-900 focus:outline-none focus:border-emerald-500"
+                                  />
+                                  <button type="button" onClick={() => quitarOpcionVinculada(idx, v.productoId)} className="text-emerald-500 hover:text-red-600 p-0.5">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                            <select
+                              value=""
+                              onChange={e => { agregarOpcionVinculada(idx, e.target.value); e.target.value = ''; }}
+                              className="w-full border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-700 bg-white focus:outline-none focus:border-amber-500"
+                            >
+                              <option value="">+ Agregar producto de la carta como opción...</option>
+                              {productosSeleccionables.map(p => (
+                                <option key={p.id} value={p.id}>{p.nombre} — S/ {p.precio.toFixed(2)} ({p.categoria})</option>
+                              ))}
+                            </select>
+                            <label className="block text-[11px] font-bold text-slate-500 mt-2 mb-0.5">
+                              Opciones libres, separadas por coma (solo texto en la comanda)
                             </label>
                             <input
                               type="text"
                               value={paso.options}
                               onChange={e => actualizarPasoOpcion(idx, 'options', e.target.value)}
-                              placeholder="Ej: Sopa del Día, Ensalada Fresca, Papa Huancaína, Sin Entrada"
+                              placeholder="Ej: Término Medio, Bien Cocido, Sin Bebida"
                               className="w-full border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-700 focus:outline-none focus:border-amber-500"
                             />
                           </div>
@@ -909,6 +1024,88 @@ export default function CartaPage({ currentUser }) {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* COMBO ARMADO CON PRODUCTOS DE LA CARTA */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                <div>
+                  <span className="text-sm text-slate-800 font-black flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-emerald-500" />
+                    Combo: unir productos de la carta
+                  </span>
+                  <span className="text-[11px] text-slate-500 block">
+                    Cada producto que agregues se prepara en su estación y descuenta su propio stock.
+                  </span>
+                </div>
+
+                {componentesActuales.length > 0 && (
+                  <div className="space-y-1.5">
+                    {componentesActuales.map(c => {
+                      const prod = productos.find(p => p.id === c.productoId);
+                      return (
+                        <div key={c.productoId} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
+                          <input
+                            type="number"
+                            min="1"
+                            value={c.cantidad}
+                            onChange={e => cambiarCantidadComponente(c.productoId, e.target.value)}
+                            className="w-12 border border-slate-200 rounded px-1 py-0.5 text-xs text-center font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
+                          />
+                          <span className="flex-1 text-xs font-bold text-slate-700 truncate">
+                            {prod ? prod.nombre : `Producto #${c.productoId} (eliminado)`}
+                          </span>
+                          <span className="text-xs text-slate-500 tabular-nums">
+                            S/ {((prod?.precio || 0) * c.cantidad).toFixed(2)}
+                          </span>
+                          <button type="button" onClick={() => quitarComponente(c.productoId)} className="text-slate-400 hover:text-red-600 p-1">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <select
+                  value=""
+                  onChange={e => { agregarComponente(e.target.value); e.target.value = ''; }}
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 bg-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="">+ Agregar producto al combo...</option>
+                  {productosSeleccionables.map(p => (
+                    <option key={p.id} value={p.id}>{p.nombre} — S/ {p.precio.toFixed(2)} ({p.categoria})</option>
+                  ))}
+                </select>
+
+                {componentesActuales.length > 0 && (() => {
+                  const precioCombo = parseFloat(editProd.precio) || 0;
+                  const ahorro = sumaComponentes - precioCombo;
+                  return (
+                    <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-1.5">
+                      <div className="flex justify-between text-xs text-slate-600">
+                        <span>Suma de los productos:</span>
+                        <span className="font-black text-slate-800 tabular-nums">S/ {sumaComponentes.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-slate-600">
+                        <span>Precio del combo (arriba):</span>
+                        <span className="font-black text-slate-800 tabular-nums">S/ {precioCombo.toFixed(2)}</span>
+                      </div>
+                      {precioCombo > 0 && (
+                        <div className={`flex justify-between text-xs font-black ${ahorro > 0 ? 'text-emerald-600' : ahorro < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                          <span>{ahorro > 0 ? 'Ahorro para el cliente:' : ahorro < 0 ? 'Recargo sobre la suma:' : 'Sin descuento:'}</span>
+                          <span className="tabular-nums">S/ {Math.abs(ahorro).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setEditProd(prev => ({ ...prev, precio: sumaComponentes.toFixed(2) }))}
+                        className="w-full mt-1 py-1.5 bg-slate-100 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-lg text-[11px] font-bold text-slate-600 hover:text-emerald-700 transition-colors"
+                      >
+                        Usar la suma como precio (sin descuento)
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
 
               <p className="text-xs text-slate-400 flex items-center gap-1">

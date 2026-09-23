@@ -119,6 +119,8 @@ export const api = {
   confirmarEntrega: (id) => apiRequest(`/api/pedidos/${id}/entregar`, { method: 'PATCH' }),
 
   // Productos
+  getDireccionesRed: () => apiRequest('/api/red/direcciones'),
+
   getProductos: () => apiRequest('/api/productos'),
   crearProducto: (body) => apiRequest('/api/productos', {
     method: 'POST', body: JSON.stringify(body)
