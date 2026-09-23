@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Receipt, X, Banknote, Search, CheckCircle, Clock, Sparkles, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Tag, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, KeyRound, Flame, FileText, History, ExternalLink } from 'lucide-react';
+import { Receipt, X, Banknote, Search, CheckCircle, Clock, Sparkles, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Tag, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, KeyRound, Flame, FileText, History, ExternalLink, ChevronDown } from 'lucide-react';
 
 import { api } from '../api';
 import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
@@ -514,12 +514,33 @@ export default function CajaPage({ currentUser }) {
   const [deliveryModal, setDeliveryModal] = useState(false);
   const [codigoPY, setCodigoPY] = useState('');
   const [cajeroNombre, setCajeroNombre] = useState(currentUser?.nombre || 'María');
+  const [usuariosSistema, setUsuariosSistema] = useState([]);
+  const [modoOtroCajero, setModoOtroCajero] = useState(false);
+
+  const cajerosDisponibles = React.useMemo(() => {
+    if (!usuariosSistema || usuariosSistema.length === 0) return [];
+    const activos = usuariosSistema.filter(u => u.activo !== false);
+    return [...activos].sort((a, b) => {
+      const peso = (rol) => (rol === 'Cajero' ? 1 : rol === 'Administrador' ? 2 : 3);
+      return peso(a.rol) - peso(b.rol) || a.nombre.localeCompare(b.nombre);
+    });
+  }, [usuariosSistema]);
 
   useEffect(() => {
     if (currentUser?.nombre) {
       setCajeroNombre(currentUser.nombre);
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!cajaEstado.abierto && cajerosDisponibles.length > 0 && !modoOtroCajero) {
+      const match = cajerosDisponibles.find(u => u.nombre.toLowerCase() === (cajeroNombre || '').toLowerCase());
+      if (!match) {
+        const defaultUser = cajerosDisponibles.find(u => u.rol === 'Cajero') || cajerosDisponibles[0];
+        if (defaultUser) setCajeroNombre(defaultUser.nombre);
+      }
+    }
+  }, [cajerosDisponibles, cajaEstado.abierto, modoOtroCajero]);
 
   const [deliverySearchQuery, setDeliverySearchQuery] = useState('');
   const [deliveryCategoriaFiltro, setDeliveryCategoriaFiltro] = useState('🔥 Más Pedidos');
@@ -571,7 +592,7 @@ export default function CajaPage({ currentUser }) {
 
   const fetchCajaData = useCallback(async () => {
     try {
-      const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList, ultimoCierreRes, estadoCajaRes] = await Promise.all([
+      const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList, ultimoCierreRes, estadoCajaRes, usuariosList] = await Promise.all([
         api.getMesas().catch(() => null),
         api.getResumenVentas().catch(() => ({ atendidas: 0, ingresos: 0 })),
         api.getPedidosLlevar().catch(() => null),
@@ -582,12 +603,14 @@ export default function CajaPage({ currentUser }) {
         api.getCompras().catch(() => []),
         api.getUltimoCierre().catch(() => null),
         api.getEstadoCaja().catch(() => null),
+        api.getUsuarios().catch(() => []),
       ]);
       if (mesasData) setMesas(mesasData);
       if (llevarData) setPedidosLlevar(llevarData);
       if (resumenData) setStats({ atendidas: resumenData.atendidas || 0, ingresos: resumenData.ingresos || 0 });
       if (ventasData) setVentas(ventasData);
       if (prods) setProductosMenu(prods);
+      if (usuariosList && Array.isArray(usuariosList)) setUsuariosSistema(usuariosList);
       setClientes(clientsList || []);
       setAbonos(abonosList || []);
       setComprasTurno(comprasList || []);
@@ -640,6 +663,7 @@ export default function CajaPage({ currentUser }) {
       }
 
       setModalAperturaOpen(false);
+      setModoOtroCajero(false);
       setMontoInicialInput('');
       setNotaAperturaInput('');
       await fetchCajaData();
@@ -5554,7 +5578,7 @@ export default function CajaPage({ currentUser }) {
                 </div>
               </div>
               <button
-                onClick={() => setModalAperturaOpen(false)}
+                onClick={() => { setModalAperturaOpen(false); setModoOtroCajero(false); setErrorApertura(''); }}
                 className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -5570,17 +5594,57 @@ export default function CajaPage({ currentUser }) {
 
             <form onSubmit={handleAbrirCaja} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5">
-                  Nombre del Cajero(a):
+                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5 flex justify-between items-center">
+                  <span>Cajero(a) a quien se le aperturará la caja:</span>
+                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Personal Registrado
+                  </span>
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={cajeroNombre}
-                  onChange={(e) => setCajeroNombre(e.target.value)}
-                  placeholder="Ej. María Sánchez"
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:outline-none"
-                />
+                <div className="relative">
+                  <select
+                    required
+                    value={modoOtroCajero ? '__OTRO__' : cajeroNombre}
+                    onChange={(e) => {
+                      if (e.target.value === '__OTRO__') {
+                        setModoOtroCajero(true);
+                        setCajeroNombre('');
+                      } else {
+                        setModoOtroCajero(false);
+                        setCajeroNombre(e.target.value);
+                      }
+                    }}
+                    className="w-full bg-slate-50 hover:bg-slate-100/80 border border-slate-200 focus:border-emerald-500 focus:bg-white rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:outline-none transition-all cursor-pointer appearance-none pr-9 shadow-2xs"
+                  >
+                    <option value="" disabled>-- Selecciona el Cajero(a) --</option>
+                    {cajerosDisponibles.map((u) => (
+                      <option key={u.id} value={u.nombre}>
+                        {u.nombre} · ({u.rol || 'Personal'})
+                      </option>
+                    ))}
+                    {cajerosDisponibles.length === 0 && (
+                      <option value={cajeroNombre || 'María'}>{cajeroNombre || 'María'} (Cajero)</option>
+                    )}
+                    <option value="__OTRO__">✍️ Ingresar otro nombre manualmente...</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
+                </div>
+
+                {modoOtroCajero && (
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      required
+                      value={cajeroNombre}
+                      onChange={(e) => setCajeroNombre(e.target.value)}
+                      placeholder="Escribe el nombre del cajero(a)..."
+                      autoFocus
+                      className="w-full bg-white border-2 border-emerald-500 rounded-xl px-3.5 py-2 text-sm font-bold text-slate-800 focus:outline-none shadow-xs"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Escribe el nombre del cajero responsable para este turno.</p>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -5636,7 +5700,7 @@ export default function CajaPage({ currentUser }) {
               <div className="pt-2 flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setModalAperturaOpen(false)}
+                  onClick={() => { setModalAperturaOpen(false); setModoOtroCajero(false); setErrorApertura(''); }}
                   className="w-1/3 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-widest transition-colors"
                 >
                   Cancelar
