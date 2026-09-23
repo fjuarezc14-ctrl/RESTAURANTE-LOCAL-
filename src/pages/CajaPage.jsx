@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Receipt, X, Banknote, Search, CheckCircle, Clock, Sparkles, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Tag, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, KeyRound, Flame, FileText, History } from 'lucide-react';
+import { Receipt, X, Banknote, Search, CheckCircle, Clock, Sparkles, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Tag, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, KeyRound, Flame, FileText, History, ExternalLink } from 'lucide-react';
 
 import { api } from '../api';
 import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
@@ -395,15 +395,6 @@ export default function CajaPage({ currentUser }) {
   const [deliveryClienteNombre, setDeliveryClienteNombre] = useState('');
   const [deliveryNumDocumento, setDeliveryNumDocumento] = useState('');
 
-  // Campos para Corregir Datos de Cliente / Facturación en Historial
-  const [editClienteVenta, setEditClienteVenta] = useState(null);
-  const [editClienteTipoComprobante, setEditClienteTipoComprobante] = useState('Ticket');
-  const [editClienteNumDoc, setEditClienteNumDoc] = useState('');
-  const [editClienteNombre, setEditClienteNombre] = useState('');
-  const [editClienteDireccion, setEditClienteDireccion] = useState('');
-  const [editClientePin, setEditClientePin] = useState('');
-  const [editClienteError, setEditClienteError] = useState('');
-  const [editClienteCargando, setEditClienteCargando] = useState(false);
 
   // Modal Anular / Registrar Devolución de Venta Entregada
   const [anularVentaModal, setAnularVentaModal] = useState(false);
@@ -1381,107 +1372,6 @@ export default function CajaPage({ currentUser }) {
     }
   };
 
-  // --- Corregir Datos de Cliente / Facturación en Historial ---
-  const abrirModalEditarClienteVenta = (v) => {
-    setEditClienteVenta(v);
-    setEditClienteTipoComprobante(v.tipoComprobante || 'Ticket');
-    setEditClienteNumDoc(v.numDocumento || '');
-    setEditClienteNombre(v.nombreCliente || '');
-    setEditClienteDireccion(v.clienteDireccion || '');
-    setEditClientePin('');
-    setEditClienteError('');
-    setEditClienteCargando(false);
-  };
-
-  const buscarClienteEdicion = async () => {
-    if (!editClienteNumDoc) return;
-    setIsBuscando(true);
-    setEditClienteError('');
-    const doc = editClienteNumDoc.trim();
-    
-    // Fallbacks locales rápidos de prueba en desarrollo
-    if (doc === '20613857321') {
-      setEditClienteNombre('FIRST FISH S.A.C.');
-      setEditClienteDireccion('LT. 05 DPTO. LIMA MZ. J COOP. CAJABAMBA - LIMA LIMA LOS OLIVOS');
-      setEditClienteTipoComprobante('Factura');
-      setIsBuscando(false);
-      return;
-    } else if (doc === '10404040404') {
-      setEditClienteNombre('JUAN PEREZ SOTO');
-      setEditClienteDireccion('CALLE SAN MARTÍN 109');
-      setEditClienteTipoComprobante('Boleta');
-      setIsBuscando(false);
-      return;
-    }
-
-    try {
-      const data = await api.consultarCliente(doc);
-      const isRUC = doc.length === 11;
-      if (isRUC) {
-        setEditClienteNombre(data.razonSocial || '');
-        setEditClienteDireccion(data.direccion || '');
-        setEditClienteTipoComprobante('Factura');
-      } else {
-        setEditClienteNombre(data.nombre || '');
-        setEditClienteDireccion(data.direccion || '');
-        setEditClienteTipoComprobante('Boleta');
-      }
-    } catch (err) {
-      console.error("Error consultando API de DNI/RUC en edición:", err);
-      setEditClienteError('No se encontró el documento en SUNAT/RENIEC.');
-    } finally {
-      setIsBuscando(false);
-    }
-  };
-
-  const handleGuardarClienteVenta = async () => {
-    if (!editClientePin.trim()) {
-      setEditClienteError('Ingresa el PIN de Administrador.');
-      return;
-    }
-
-    if (editClienteTipoComprobante === 'Factura') {
-      if (!editClienteNumDoc || editClienteNumDoc.trim().length !== 11) {
-        setEditClienteError('Para Factura, el RUC debe tener 11 dígitos.');
-        return;
-      }
-      if (!editClienteNombre || !editClienteNombre.trim()) {
-        setEditClienteError('La Razón Social del cliente es obligatoria.');
-        return;
-      }
-      if (!editClienteDireccion || !editClienteDireccion.trim()) {
-        setEditClienteError('La Dirección fiscal del cliente es obligatoria.');
-        return;
-      }
-    }
-
-    setEditClienteCargando(true);
-    setEditClienteError('');
-
-    try {
-      const res = await api.actualizarClienteVenta(editClienteVenta.id, {
-        tipoComprobante: editClienteTipoComprobante,
-        numDocumento: editClienteNumDoc.trim() || null,
-        nombreCliente: editClienteNombre.trim() || null,
-        clienteDireccion: editClienteDireccion.trim() || null,
-        pin: editClientePin.trim()
-      });
-
-      if (res.error) {
-        setEditClienteError(res.error);
-        return;
-      }
-
-      await fetchCajaData();
-      setEditClienteVenta(null);
-      setEditClientePin('');
-      alert('✅ Datos de facturación del cliente actualizados correctamente.');
-    } catch (err) {
-      setEditClienteError('Error al guardar datos: ' + err.message);
-    } finally {
-      setEditClienteCargando(false);
-    }
-  };
 
   const reintentarVentaIndividual = async (ventaId) => {
     try {
@@ -2722,13 +2612,16 @@ export default function CajaPage({ currentUser }) {
                                         </span>
                                       )}
                                       {v.tipoComprobante === 'Ticket' && (
-                                        <button
-                                          title="Corregir datos de facturación (requiere PIN)"
-                                          onClick={() => abrirModalEditarClienteVenta(v)}
-                                          className="p-0.5 rounded bg-slate-100 hover:bg-amber-100 text-slate-400 hover:text-amber-600 border border-slate-200 hover:border-amber-300 transition-all shrink-0"
+                                        <a
+                                          href="https://ww1.sunat.gob.pe/ol-ti-itfesimpopciones/FESimpSunat.htm"
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Abrir Portal de SUNAT para emitir Boleta / Factura"
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-800 border border-blue-200 hover:border-blue-300 text-[9px] font-black uppercase tracking-wider transition-all shrink-0 active:scale-95 shadow-2xs"
                                         >
-                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
-                                        </button>
+                                          <ExternalLink className="w-3 h-3 text-blue-500 shrink-0" />
+                                          Hacer Boleta
+                                        </a>
                                       )}
                                       {FACTURACION_ELECTRONICA && v.estadoNubefact === 'PENDIENTE_REINTENTO' ? (
                                         <div className="flex items-center gap-1.5">
@@ -6395,158 +6288,6 @@ export default function CajaPage({ currentUser }) {
                 >
                   {cambioTipoCambiando ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
                   {cambioTipoCambiando ? 'Guardando...' : 'Confirmar Cambio'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Corregir Datos de Facturación / Cliente */}
-      {editClienteVenta && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[260] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-up">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-teal-500 to-emerald-600 p-5 text-white flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-sm uppercase tracking-wider flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
-                  Corregir Datos del Cliente
-                </h3>
-                <p className="text-xs font-bold opacity-80 mt-0.5">Venta #{editClienteVenta.id} · S/ {editClienteVenta.total.toFixed(2)}</p>
-              </div>
-              <button onClick={() => { setEditClienteVenta(null); setEditClientePin(''); setEditClienteError(''); }} className="bg-black/20 hover:bg-black/30 p-2 rounded-xl transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 flex flex-col gap-4 max-h-[80vh] overflow-y-auto">
-              {/* Tipo de Comprobante */}
-              <div>
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-2">Tipo de Comprobante</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {['Ticket', 'Boleta', 'Factura'].map(tc => (
-                    <button
-                      key={tc}
-                      type="button"
-                      onClick={() => {
-                        setEditClienteTipoComprobante(tc);
-                        setEditClienteError('');
-                      }}
-                      className={`py-3 px-2 rounded-2xl text-xs font-black uppercase border-2 transition-all ${
-                        editClienteTipoComprobante === tc
-                          ? 'bg-emerald-600 border-emerald-700 text-white shadow-lg shadow-emerald-500/20'
-                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                      }`}
-                    >
-                      {tc}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Campos del Documento */}
-              {(editClienteTipoComprobante === 'Boleta' || editClienteTipoComprobante === 'Factura') && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col gap-3">
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
-                      {editClienteTipoComprobante === 'Factura' ? 'RUC del Cliente:' : 'DNI del Cliente:'}
-                    </label>
-                    <div className="flex gap-1.5">
-                      <input
-                        type="text"
-                        value={editClienteNumDoc}
-                        onChange={e => setEditClienteNumDoc(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); buscarClienteEdicion(); } }}
-                        placeholder={editClienteTipoComprobante === 'Factura' ? '11 dígitos' : '8 dígitos'}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-slate-800 focus:outline-none transition-all"
-                      />
-                      <button
-                        type="button"
-                        onClick={buscarClienteEdicion}
-                        disabled={isBuscando}
-                        className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white px-2.5 rounded-xl text-xs font-black flex items-center justify-center transition-colors shrink-0 shadow-sm"
-                      >
-                        {isBuscando ? (
-                          <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                        ) : (
-                          <Search className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
-                      {editClienteTipoComprobante === 'Factura' ? 'Razón Social:' : 'Nombres del Cliente:'}
-                    </label>
-                    <input
-                      type="text"
-                      value={editClienteNombre}
-                      onChange={e => setEditClienteNombre(e.target.value)}
-                      placeholder="Nombre / Razón Social"
-                      className="w-full bg-white border border-slate-200 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none transition-all uppercase"
-                    />
-                  </div>
-                  {editClienteTipoComprobante === 'Factura' && (
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
-                        Dirección Fiscal:
-                      </label>
-                      <input
-                        type="text"
-                        value={editClienteDireccion}
-                        onChange={e => setEditClienteDireccion(e.target.value)}
-                        placeholder="Ej. Av. Hoyos Rubio Nro. 338"
-                        className="w-full bg-white border border-slate-200 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none transition-all uppercase"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* PIN Autorización */}
-              <div>
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-2">🔐 PIN de Autorización (Administrador)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={editClientePin}
-                  onChange={e => { setEditClientePin(e.target.value); setEditClienteError(''); }}
-                  onKeyDown={e => e.key === 'Enter' && handleGuardarClienteVenta()}
-                  placeholder="••••••"
-                  className="w-full bg-slate-50 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white rounded-2xl px-4 py-2.5 text-center text-xl font-black tracking-[0.5em] text-slate-800 placeholder:tracking-normal placeholder:text-slate-300 focus:outline-none transition-all"
-                  style={{ WebkitTextSecurity: 'disc', textSecurity: 'disc' }}
-                  autoComplete="off"
-                  name="edit-cliente-pin-auth"
-                />
-              </div>
-
-              {/* Mensaje de Error */}
-              {editClienteError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-black px-4 py-2.5 rounded-2xl uppercase tracking-wide flex items-center gap-2">
-                  <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                  {editClienteError}
-                </div>
-              )}
-
-              {/* Botones de Acción */}
-              <div className="flex gap-3 mt-2">
-                <button
-                  type="button"
-                  onClick={() => { setEditClienteVenta(null); setEditClientePin(''); setEditClienteError(''); }}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase rounded-2xl transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGuardarClienteVenta}
-                  disabled={editClienteCargando || !editClientePin.trim()}
-                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase rounded-2xl transition-all flex items-center justify-center gap-2 shadow-md"
-                >
-                  {editClienteCargando ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
-                  {editClienteCargando ? 'Guardando...' : 'Guardar y Recalcular'}
                 </button>
               </div>
             </div>
