@@ -3577,6 +3577,160 @@ app.get('/api/ventas/resumen', async (req, res) => {
 // CIERRES DE CAJA Y ARQUEOS PERSISTENTES (PostgreSQL)
 // ============================================================
 
+// GET /api/caja/estado → Estado en vivo de la caja (ABIERTO / CERRADO) y supervisión en tiempo real
+app.get('/api/caja/estado', async (req, res) => {
+  try {
+    const turnoAbierto = await prisma.cierreCaja.findFirst({
+      where: { estado: 'ABIERTO' },
+      orderBy: { fechaApertura: 'desc' },
+    });
+
+    const ultimoCerrado = await prisma.cierreCaja.findFirst({
+      where: { estado: 'CERRADO' },
+      orderBy: { fechaCierre: 'desc' },
+    });
+
+    if (!turnoAbierto) {
+      return res.json({
+        ok: true,
+        abierto: false,
+        turno: null,
+        ultimoCierre: ultimoCerrado,
+      });
+    }
+
+    // Si hay un turno abierto, calcular métricas en vivo desde fechaApertura
+    const desde = turnoAbierto.fechaApertura;
+    const [ventas, compras, abonos] = await Promise.all([
+      prisma.venta.findMany({
+        where: {
+          createdAt: { gte: desde },
+          anulado: false,
+          pedido: { estado: { not: 'Cancelado' } },
+        },
+        select: {
+          total: true,
+          montoEfectivo: true,
+          montoTarjeta: true,
+          montoYape: true,
+          metodoPago: true,
+        },
+      }),
+      prisma.compra.findMany({
+        where: {
+          creadoEn: { gte: desde },
+          metodoPago: 'Efectivo',
+        },
+        select: { total: true },
+      }),
+      prisma.abonoCredito.findMany({
+        where: {
+          creadoEn: { gte: desde },
+        },
+        select: { montoEfectivo: true, monto: true, metodoPago: true },
+      }),
+    ]);
+
+    let ventasEfectivo = 0;
+    let ventasTarjeta = 0;
+    let ventasYape = 0;
+    let ventasPedidosYa = 0;
+    let ventasConsumo = 0;
+    let totalVentas = 0;
+
+    for (const v of ventas) {
+      totalVentas += Number(v.total) || 0;
+      let efec = Number(v.montoEfectivo) || (v.metodoPago === 'Efectivo' ? v.total : 0);
+      let tarj = Number(v.montoTarjeta) || (v.metodoPago === 'Tarjeta' ? v.total : 0);
+      let yape = Number(v.montoYape) || (v.metodoPago === 'Yape' ? v.total : 0);
+      if (v.metodoPago === 'Mixto' && (efec + tarj + yape) < v.total) {
+        efec += (v.total - (efec + tarj + yape));
+      }
+
+      ventasEfectivo += efec;
+      ventasTarjeta += tarj;
+      ventasYape += yape;
+      if (v.metodoPago === 'PedidosYa') ventasPedidosYa += Number(v.total) || 0;
+      if (v.metodoPago === 'Consumo' || v.metodoPago === 'Cortesía') ventasConsumo += Number(v.total) || 0;
+    }
+
+    const egresosEfectivo = compras.reduce((s, c) => s + (Number(c.total) || 0), 0);
+    const abonosEfectivo = abonos.reduce((s, a) => s + (Number(a.montoEfectivo) || (a.metodoPago === 'Efectivo' ? Number(a.monto) : 0)), 0);
+
+    const fondoInicial = Number(turnoAbierto.montoInicial) || 0;
+    const efectivoEsperadoEnGaveta = fondoInicial + ventasEfectivo + abonosEfectivo - egresosEfectivo;
+
+    res.json({
+      ok: true,
+      abierto: true,
+      turno: turnoAbierto,
+      ultimoCierre: ultimoCerrado,
+      resumenEnVivo: {
+        montoInicial: fondoInicial,
+        cajeroNombre: turnoAbierto.cajeroNombre,
+        fechaApertura: turnoAbierto.fechaApertura,
+        ventasEfectivo,
+        ventasTarjeta,
+        ventasYape,
+        ventasPedidosYa,
+        ventasConsumo,
+        totalVentas,
+        cantidadVentas: ventas.length,
+        egresosEfectivo,
+        abonosEfectivo,
+        efectivoEsperadoEnGaveta,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/caja/apertura → Registrar la apertura formal de turno con fondo inicial
+app.post('/api/caja/apertura', async (req, res) => {
+  try {
+    const { cajeroNombre, montoInicial, notaApertura } = req.body;
+
+    if (!cajeroNombre || !String(cajeroNombre).trim()) {
+      return res.status(400).json({ error: 'El nombre del cajero es obligatorio para abrir la caja.' });
+    }
+
+    // Verificar si ya existe un turno abierto
+    const turnoExistente = await prisma.cierreCaja.findFirst({
+      where: { estado: 'ABIERTO' },
+    });
+
+    if (turnoExistente) {
+      return res.status(400).json({
+        error: `Ya existe un turno abierto por "${turnoExistente.cajeroNombre}" desde las ${new Date(turnoExistente.fechaApertura).toLocaleTimeString('es-PE')}. Debe cerrarse antes de abrir uno nuevo.`,
+        turno: turnoExistente,
+      });
+    }
+
+    const fondo = parseFloat(montoInicial || 0);
+
+    const nuevoTurno = await prisma.cierreCaja.create({
+      data: {
+        estado: 'ABIERTO',
+        fechaApertura: new Date(),
+        fechaCierre: null,
+        cajeroNombre: String(cajeroNombre).trim(),
+        montoInicial: Math.max(0, isNaN(fondo) ? 0 : fondo),
+        notaApertura: notaApertura ? String(notaApertura).trim() : null,
+        efectivoVentas: 0,
+        efectivoEsperado: 0,
+        efectivoContado: 0,
+        diferencia: 0,
+      },
+    });
+
+    console.log(`🔓 Turno de Caja ABIERTO por ${cajeroNombre} con Fondo Inicial S/ ${nuevoTurno.montoInicial.toFixed(2)}`);
+    res.json({ ok: true, turno: nuevoTurno });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/caja/cierre → Registrar un arqueo y cierre de turno
 app.post('/api/caja/cierre', async (req, res) => {
   try {
@@ -3584,6 +3738,7 @@ app.post('/api/caja/cierre', async (req, res) => {
       fechaApertura,
       fechaCierre,
       cajeroNombre,
+      montoInicial,
       efectivoVentas,
       efectivoEsperado,
       efectivoContado,
@@ -3601,27 +3756,104 @@ app.post('/api/caja/cierre', async (req, res) => {
       return res.status(400).json({ error: 'El nombre del cajero es obligatorio.' });
     }
 
-    const cierre = await prisma.cierreCaja.create({
-      data: {
-        fechaApertura: fechaApertura ? new Date(fechaApertura) : new Date(),
-        fechaCierre: fechaCierre ? new Date(fechaCierre) : new Date(),
-        cajeroNombre: String(cajeroNombre).trim(),
-        efectivoVentas: parseFloat(efectivoVentas || 0),
-        efectivoEsperado: parseFloat(efectivoEsperado || 0),
-        efectivoContado: parseFloat(efectivoContado || 0),
-        diferencia: parseFloat(diferencia || 0),
-        totalTarjeta: parseFloat(totalTarjeta || 0),
-        totalYape: parseFloat(totalYape || 0),
-        totalConsumo: parseFloat(totalConsumo || 0),
-        totalPedidosYa: parseFloat(totalPedidosYa || 0),
-        egresosEfectivo: parseFloat(egresosEfectivo || 0),
-        abonosEfectivo: parseFloat(abonosEfectivo || 0),
-        nota: nota ? String(nota).trim() : null,
-      },
+    // Buscar si hay un turno ABIERTO para actualizarlo o crear uno nuevo
+    const turnoAbierto = await prisma.cierreCaja.findFirst({
+      where: { estado: 'ABIERTO' },
+      orderBy: { fechaApertura: 'desc' },
     });
+
+    let cierre;
+    if (turnoAbierto) {
+      cierre = await prisma.cierreCaja.update({
+        where: { id: turnoAbierto.id },
+        data: {
+          estado: 'CERRADO',
+          fechaCierre: fechaCierre ? new Date(fechaCierre) : new Date(),
+          cajeroNombre: String(cajeroNombre).trim(),
+          montoInicial: parseFloat(montoInicial || turnoAbierto.montoInicial || 0),
+          efectivoVentas: parseFloat(efectivoVentas || 0),
+          efectivoEsperado: parseFloat(efectivoEsperado || 0),
+          efectivoContado: parseFloat(efectivoContado || 0),
+          diferencia: parseFloat(diferencia || 0),
+          totalTarjeta: parseFloat(totalTarjeta || 0),
+          totalYape: parseFloat(totalYape || 0),
+          totalConsumo: parseFloat(totalConsumo || 0),
+          totalPedidosYa: parseFloat(totalPedidosYa || 0),
+          egresosEfectivo: parseFloat(egresosEfectivo || 0),
+          abonosEfectivo: parseFloat(abonosEfectivo || 0),
+          nota: nota ? String(nota).trim() : null,
+        },
+      });
+    } else {
+      cierre = await prisma.cierreCaja.create({
+        data: {
+          estado: 'CERRADO',
+          fechaApertura: fechaApertura ? new Date(fechaApertura) : new Date(),
+          fechaCierre: fechaCierre ? new Date(fechaCierre) : new Date(),
+          cajeroNombre: String(cajeroNombre).trim(),
+          montoInicial: parseFloat(montoInicial || 0),
+          efectivoVentas: parseFloat(efectivoVentas || 0),
+          efectivoEsperado: parseFloat(efectivoEsperado || 0),
+          efectivoContado: parseFloat(efectivoContado || 0),
+          diferencia: parseFloat(diferencia || 0),
+          totalTarjeta: parseFloat(totalTarjeta || 0),
+          totalYape: parseFloat(totalYape || 0),
+          totalConsumo: parseFloat(totalConsumo || 0),
+          totalPedidosYa: parseFloat(totalPedidosYa || 0),
+          egresosEfectivo: parseFloat(egresosEfectivo || 0),
+          abonosEfectivo: parseFloat(abonosEfectivo || 0),
+          nota: nota ? String(nota).trim() : null,
+        },
+      });
+    }
 
     console.log(`🔒 Cierre de Caja registrado exitosamente por ${cajeroNombre}: Esperado S/ ${cierre.efectivoEsperado.toFixed(2)}, Contado S/ ${cierre.efectivoContado.toFixed(2)}, Dif: S/ ${cierre.diferencia.toFixed(2)}`);
     res.json({ ok: true, cierre });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/caja/cierre-forzado → Cierre administrativo por parte del Administrador
+app.post('/api/caja/cierre-forzado', async (req, res) => {
+  try {
+    const { adminNombre, adminPin, motivo } = req.body;
+
+    // Validar PIN de administrador
+    const admin = await prisma.usuario.findFirst({
+      where: {
+        pin: String(adminPin).trim(),
+        rol: 'Administrador',
+        activo: true,
+      },
+    });
+
+    if (!admin) {
+      return res.status(403).json({ error: 'PIN de Administrador inválido o no autorizado.' });
+    }
+
+    const turnoAbierto = await prisma.cierreCaja.findFirst({
+      where: { estado: 'ABIERTO' },
+      orderBy: { fechaApertura: 'desc' },
+    });
+
+    if (!turnoAbierto) {
+      return res.status(400).json({ error: 'No hay ninguna caja abierta en este momento.' });
+    }
+
+    const now = new Date();
+    const cierre = await prisma.cierreCaja.update({
+      where: { id: turnoAbierto.id },
+      data: {
+        estado: 'CERRADO',
+        fechaCierre: now,
+        cerradoPorAdmin: true,
+        nota: `[CIERRE FORZADO POR ADMINISTRADOR: ${admin.nombre}] Motivo: ${motivo || 'Cierre de turno por administración'}`,
+      },
+    });
+
+    console.log(`⚠️ Turno #${turnoAbierto.id} cerrado administrativamente por Admin ${admin.nombre}`);
+    res.json({ ok: true, mensaje: 'Turno cerrado forzosamente por Administrador con éxito.', cierre });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -3631,6 +3863,7 @@ app.post('/api/caja/cierre', async (req, res) => {
 app.get('/api/caja/ultimo-cierre', async (req, res) => {
   try {
     const ultimo = await prisma.cierreCaja.findFirst({
+      where: { estado: 'CERRADO' },
       orderBy: { fechaCierre: 'desc' },
     });
     res.json({ ok: true, ultimoCierre: ultimo });
@@ -3644,7 +3877,7 @@ app.get('/api/caja/cierres', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit || 30);
     const cierres = await prisma.cierreCaja.findMany({
-      orderBy: { fechaCierre: 'desc' },
+      orderBy: { id: 'desc' },
       take: Math.min(limit, 100),
     });
     res.json({ ok: true, cierres });

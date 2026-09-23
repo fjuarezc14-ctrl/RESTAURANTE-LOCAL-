@@ -1,0 +1,11 @@
+-- AlterTable
+ALTER TABLE "CierreCaja" ADD COLUMN IF NOT EXISTS "estado" TEXT NOT NULL DEFAULT 'CERRADO';
+ALTER TABLE "CierreCaja" ADD COLUMN IF NOT EXISTS "montoInicial" DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE "CierreCaja" ADD COLUMN IF NOT EXISTS "notaApertura" TEXT;
+ALTER TABLE "CierreCaja" ADD COLUMN IF NOT EXISTS "cerradoPorAdmin" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "CierreCaja" ALTER COLUMN "fechaCierre" DROP NOT NULL;
+ALTER TABLE "CierreCaja" ALTER COLUMN "efectivoVentas" SET DEFAULT 0;
+ALTER TABLE "CierreCaja" ALTER COLUMN "efectivoEsperado" SET DEFAULT 0;
+
+-- CreateIndex
+CREATE INDEX IF NOT EXISTS "CierreCaja_estado_idx" ON "CierreCaja"("estado");

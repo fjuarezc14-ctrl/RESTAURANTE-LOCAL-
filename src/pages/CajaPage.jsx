@@ -416,6 +416,15 @@ export default function CajaPage({ currentUser }) {
   // Historial de Ventas y Arqueo/Cierre de Caja
   const [ventas, setVentas] = useState([]);
   const [cierreModalOpen, setCierreModalOpen] = useState(false);
+
+  // Control de Turno y Apertura de Caja (PostgreSQL)
+  const [cajaEstado, setCajaEstado] = useState({ abierto: false, turno: null, cargando: true });
+  const [modalAperturaOpen, setModalAperturaOpen] = useState(false);
+  const [montoInicialInput, setMontoInicialInput] = useState('');
+  const [notaAperturaInput, setNotaAperturaInput] = useState('');
+  const [guardandoApertura, setGuardandoApertura] = useState(false);
+  const [errorApertura, setErrorApertura] = useState('');
+
   const [ultimoCierre, setUltimoCierre] = useState(() => {
     const stored = localStorage.getItem('ultimoCierre');
     if (stored) {
@@ -571,7 +580,7 @@ export default function CajaPage({ currentUser }) {
 
   const fetchCajaData = useCallback(async () => {
     try {
-      const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList, ultimoCierreRes] = await Promise.all([
+      const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList, ultimoCierreRes, estadoCajaRes] = await Promise.all([
         api.getMesas().catch(() => null),
         api.getResumenVentas().catch(() => ({ atendidas: 0, ingresos: 0 })),
         api.getPedidosLlevar().catch(() => null),
@@ -581,6 +590,7 @@ export default function CajaPage({ currentUser }) {
         api.getAbonos().catch(() => []),
         api.getCompras().catch(() => []),
         api.getUltimoCierre().catch(() => null),
+        api.getEstadoCaja().catch(() => null),
       ]);
       if (mesasData) setMesas(mesasData);
       if (llevarData) setPedidosLlevar(llevarData);
@@ -590,7 +600,20 @@ export default function CajaPage({ currentUser }) {
       setClientes(clientsList || []);
       setAbonos(abonosList || []);
       setComprasTurno(comprasList || []);
-      if (ultimoCierreRes?.ultimoCierre?.fechaCierre) {
+
+      if (estadoCajaRes && typeof estadoCajaRes.abierto === 'boolean') {
+        setCajaEstado(estadoCajaRes);
+        if (estadoCajaRes.abierto && estadoCajaRes.turno?.cajeroNombre) {
+          setCajeroNombre(estadoCajaRes.turno.cajeroNombre);
+        }
+        if (estadoCajaRes.abierto && estadoCajaRes.turno?.fechaApertura) {
+          const fAperturaISO = new Date(estadoCajaRes.turno.fechaApertura).toISOString();
+          setUltimoCierre(fAperturaISO);
+        } else if (estadoCajaRes.ultimoCierre?.fechaCierre) {
+          const fCierreISO = new Date(estadoCajaRes.ultimoCierre.fechaCierre).toISOString();
+          setUltimoCierre(fCierreISO);
+        }
+      } else if (ultimoCierreRes?.ultimoCierre?.fechaCierre) {
         const fechaDbISO = new Date(ultimoCierreRes.ultimoCierre.fechaCierre).toISOString();
         setUltimoCierre(prev => (prev !== fechaDbISO ? fechaDbISO : prev));
         localStorage.setItem('ultimoCierre', fechaDbISO);
@@ -601,6 +624,41 @@ export default function CajaPage({ currentUser }) {
       setLoading(false);
     }
   }, []);
+
+  const handleAbrirCaja = async (e) => {
+    e?.preventDefault();
+    setErrorApertura('');
+    const cajero = cajeroNombre || currentUser?.nombre || 'Cajero';
+    const monto = parseFloat(montoInicialInput || 0);
+    if (isNaN(monto) || monto < 0) {
+      setErrorApertura('El fondo inicial debe ser un número válido mayor o igual a 0.');
+      return;
+    }
+
+    setGuardandoApertura(true);
+    try {
+      const res = await api.abrirCaja({
+        cajeroNombre: cajero,
+        montoInicial: monto,
+        notaApertura: notaAperturaInput.trim() || null,
+      });
+
+      if (res.error) {
+        setErrorApertura(res.error);
+        return;
+      }
+
+      setModalAperturaOpen(false);
+      setMontoInicialInput('');
+      setNotaAperturaInput('');
+      await fetchCajaData();
+      addToast(`🔓 Turno iniciado exitosamente por ${cajero}. Fondo inicial: S/ ${monto.toFixed(2)}`, 'success');
+    } catch (err) {
+      setErrorApertura('Error al abrir caja: ' + err.message);
+    } finally {
+      setGuardandoApertura(false);
+    }
+  };
 
   useEffect(() => {
     fetchCajaData();
@@ -1480,6 +1538,10 @@ export default function CajaPage({ currentUser }) {
 
   // --- Modal PedidosYa ---
   const abrirDeliveryModal = async () => {
+    if (!cajaEstado.abierto) {
+      setModalAperturaOpen(true);
+      return;
+    }
     if (productosMenu.length === 0) {
       const prods = await api.getProductos();
       setProductosMenu(prods);
@@ -2226,6 +2288,63 @@ export default function CajaPage({ currentUser }) {
         </button>
       </div>
 
+      {/* BANNER DE ESTADO DEL TURNO (CAJA ABIERTA / CERRADA) */}
+      {!cajaEstado.cargando && (
+        cajaEstado.abierto ? (
+          <div className="mb-6 p-4 rounded-3xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-transparent border-2 border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center gap-3.5">
+              <span className="relative flex h-3.5 w-3.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+              </span>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-black uppercase text-emerald-800 tracking-wider">Turno Abierto</span>
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-md uppercase">
+                    Cajero(a): {cajaEstado.turno?.cajeroNombre || cajeroNombre}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Apertura: {cajaEstado.turno?.fechaApertura ? new Date(cajaEstado.turno.fechaApertura).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '--'} · Fondo Inicial: <span className="font-bold text-slate-800 font-mono">S/ {Number(cajaEstado.turno?.montoInicial || 0).toFixed(2)}</span>
+                  {cajaEstado.turno?.notaApertura ? ` · "${cajaEstado.turno.notaApertura}"` : ''}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setCierreModalOpen(true)}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5 shrink-0"
+            >
+              <CheckCircle className="w-4 h-4 text-emerald-400" /> Arqueo y Cierre
+            </button>
+          </div>
+        ) : (
+          <div className="mb-6 p-4.5 rounded-3xl bg-gradient-to-r from-rose-500/15 via-amber-500/10 to-transparent border-2 border-rose-400/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center font-black shrink-0 shadow-md">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black uppercase text-rose-700 tracking-wider">🔴 Caja Cerrada</span>
+                  <span className="bg-rose-100 text-rose-800 text-[9px] font-black px-2 py-0.5 rounded uppercase">
+                    Turno Inactivo
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  La caja no tiene un turno activo. Inicie turno ingresando el fondo de sencillo para habilitar cobros y pedidos.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setModalAperturaOpen(true)}
+              className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 whitespace-nowrap shrink-0"
+            >
+              🔓 Abrir Caja / Iniciar Turno
+            </button>
+          </div>
+        )
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         <div className="lg:col-span-2 space-y-6">
 
@@ -2309,6 +2428,10 @@ export default function CajaPage({ currentUser }) {
                       <td className="px-6 py-4 text-center">
                         <button
                           onClick={() => {
+                            if (!cajaEstado.abierto) {
+                              setModalAperturaOpen(true);
+                              return;
+                            }
                             setMesaSeleccionada(m);
                             setTipoComprobante('Boleta');
                             setMetodoPago('Efectivo');
@@ -5259,6 +5382,9 @@ export default function CajaPage({ currentUser }) {
           }
         });
 
+        // Fondo inicial registrado en la apertura del turno actual
+        const fondoInicialTurno = Number(cajaEstado.turno?.montoInicial || 0);
+
         // Egresos en efectivo durante el turno
         const egresosEfectivo = (comprasTurno || [])
           .filter(c => {
@@ -5267,8 +5393,8 @@ export default function CajaPage({ currentUser }) {
           })
           .reduce((s, c) => s + parseFloat(c.total || 0), 0);
 
-        // Total Efectivo Esperado en Gaveta = (Ventas Efec + Abonos Efec) - Compras Efec
-        const totalEfectivoEsperado = Math.max(0, totalEfectivo - egresosEfectivo);
+        // Total Efectivo Esperado en Gaveta = Fondo Inicial + (Ventas Efec + Abonos Efec) - Compras Efec
+        const totalEfectivoEsperado = Math.max(0, fondoInicialTurno + totalEfectivo - egresosEfectivo);
 
         // Total Caja = ingresos reales cobrados en caja (efectivo neto + tarjeta + yape)
         const totalCalculado = totalEfectivoEsperado + totalTarjeta + totalYape;
@@ -5305,11 +5431,17 @@ export default function CajaPage({ currentUser }) {
                 <div className="space-y-1.5 border-b border-dashed border-slate-300 pb-3 mb-4 text-slate-600 font-bold">
                   <div className="flex justify-between"><span>FECHA:</span><span>{new Date().toLocaleDateString('es-PE')}</span></div>
                   <div className="flex justify-between"><span>HORA IMP:</span><span>{new Date().toLocaleTimeString('es-PE')}</span></div>
-                  <div className="flex justify-between"><span>CAJERO:</span><span className="uppercase">{cajeroNombre}</span></div>
-                  <div className="flex justify-between"><span>ESTADO:</span><span className="text-emerald-700">DESPACHADO</span></div>
+                  <div className="flex justify-between"><span>CAJERO:</span><span className="uppercase">{cajaEstado.turno?.cajeroNombre || cajeroNombre}</span></div>
+                  <div className="flex justify-between"><span>ESTADO:</span><span className="text-emerald-700">FINALIZADO</span></div>
                 </div>
 
                 <div className="space-y-3 mb-4 border-b border-dashed border-slate-300 pb-3">
+                  {fondoInicialTurno > 0 && (
+                    <div className="flex justify-between font-bold text-slate-700">
+                      <span>💼 FONDO INICIAL (APERTURA):</span>
+                      <span className="font-black text-emerald-800">+ S/ {fondoInicialTurno.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-bold text-slate-700">
                     <span>💵 EFECTIVO VENTAS:</span>
                     <span className="font-black text-slate-900">S/ {totalEfectivo.toFixed(2)}</span>
@@ -5320,9 +5452,9 @@ export default function CajaPage({ currentUser }) {
                       <span className="font-black text-rose-600">- S/ {egresosEfectivo.toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between font-bold text-slate-700">
-                    <span>💵 EFECTIVO ESPERADO:</span>
-                    <span className="font-black text-slate-900">S/ {totalEfectivoEsperado.toFixed(2)}</span>
+                  <div className="flex justify-between font-bold text-slate-700 bg-emerald-50/80 p-1.5 rounded-lg border border-emerald-200">
+                    <span>💵 EFECTIVO TOTAL ESPERADO:</span>
+                    <span className="font-black text-emerald-800">S/ {totalEfectivoEsperado.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between font-bold text-slate-700">
                     <span>💳 TARJETA POS:</span>
@@ -5376,7 +5508,7 @@ export default function CajaPage({ currentUser }) {
                 </div>
 
                 <div className="flex justify-between items-center text-sm font-black text-slate-900 uppercase">
-                  <span>💰 TOTAL ESPERADO:</span>
+                  <span>💰 TOTAL RECAUDACIÓN:</span>
                   <span className="text-base text-emerald-700">S/ {totalCalculado.toFixed(2)}</span>
                 </div>
                 {totalPedidosYa > 0 && (
@@ -5464,6 +5596,7 @@ export default function CajaPage({ currentUser }) {
                         fechaApertura: ultimoCierre || new Date(Date.now() - 8 * 3600 * 1000).toISOString(),
                         fechaCierre: newCierreISO,
                         cajeroNombre: cajeroNombre || currentUser?.nombre || 'Cajero',
+                        montoInicial: fondoInicialTurno,
                         efectivoVentas: totalEfectivo,
                         efectivoEsperado: totalEfectivoEsperado,
                         efectivoContado: tieneConteoFisico ? montoFisicoNum : totalEfectivoEsperado,
@@ -5480,10 +5613,13 @@ export default function CajaPage({ currentUser }) {
                       localStorage.setItem('ultimoCierre', newCierreISO);
                       setUltimoCierre(newCierreISO);
                       setMostrarTodoElDia(false);
+                      setCajaEstado({ abierto: false, turno: null, cargando: false });
+                      await fetchCajaData();
+
                       const diffMsg = tieneConteoFisico 
                         ? `\nEfectivo Contado: S/ ${montoFisicoNum.toFixed(2)}\nDiferencia: S/ ${diferenciaEfectivo.toFixed(2)}`
                         : '';
-                      alert(`✅ ¡Cierre de Turno registrado con éxito en la Base de Datos!\n\nTotal en Caja (esperado): S/ ${totalCalculado.toFixed(2)}${diffMsg}\n${totalPedidosYa > 0 ? `PedidosYa (cobro semanal): S/ ${totalPedidosYa.toFixed(2)}\n` : ''}El turno ha sido guardado e inicializado.`);
+                      alert(`✅ ¡Cierre de Turno registrado con éxito en la Base de Datos!\n\nTotal en Gaveta (esperado): S/ ${totalEfectivoEsperado.toFixed(2)}${diffMsg}\n${totalPedidosYa > 0 ? `PedidosYa (cobro semanal): S/ ${totalPedidosYa.toFixed(2)}\n` : ''}El turno ha sido cerrado.`);
                       setEfectivoFisicoContado('');
                       setCierreModalOpen(false);
                     } catch (err) {
@@ -5492,6 +5628,7 @@ export default function CajaPage({ currentUser }) {
                       localStorage.setItem('ultimoCierre', newCierreISO);
                       setUltimoCierre(newCierreISO);
                       setMostrarTodoElDia(false);
+                      setCajaEstado({ abierto: false, turno: null, cargando: false });
                       alert(`⚠️ El turno se cerró localmente (aviso: sincronización con base de datos falló: ${err.message || 'error de conexión'}).`);
                       setEfectivoFisicoContado('');
                       setCierreModalOpen(false);
@@ -5508,6 +5645,121 @@ export default function CajaPage({ currentUser }) {
           </div>
         );
       })()}
+
+      {/* MODAL DE APERTURA DE CAJA / INICIO DE TURNO */}
+      {modalAperturaOpen && (
+        <div className="fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col animate-slide-up border border-slate-100">
+            <div className="flex justify-between items-center mb-5 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-sm">
+                  <Banknote className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight leading-none">Apertura de Caja</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Iniciar nuevo turno y registrar fondo inicial</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setModalAperturaOpen(false)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {errorApertura && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{errorApertura}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAbrirCaja} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5">
+                  Nombre del Cajero(a):
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={cajeroNombre}
+                  onChange={(e) => setCajeroNombre(e.target.value)}
+                  placeholder="Ej. María Sánchez"
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5 flex justify-between">
+                  <span>Fondo Inicial en Gaveta (Sencillo):</span>
+                  <span className="text-slate-400 font-normal">Billetes / Monedas</span>
+                </label>
+                <div className="relative mb-2">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-slate-400 text-base">S/</span>
+                  <input
+                    type="number"
+                    step="0.50"
+                    min="0"
+                    placeholder="0.00"
+                    value={montoInicialInput}
+                    onChange={(e) => setMontoInicialInput(e.target.value)}
+                    className="w-full bg-white border-2 border-slate-200 focus:border-emerald-500 rounded-xl pl-9 pr-3.5 py-2.5 text-lg font-black text-slate-900 focus:outline-none shadow-inner"
+                  />
+                </div>
+
+                {/* Accesos directos de fondo de caja */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[0, 50, 100, 150].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setMontoInicialInput(String(val))}
+                      className={`py-1.5 rounded-lg text-xs font-black transition-all border ${
+                        montoInicialInput === String(val)
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-600 shadow-sm'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      {val === 0 ? 'Sin Sencillo' : `S/ ${val}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5">
+                  Observación / Nota de Apertura (opcional):
+                </label>
+                <input
+                  type="text"
+                  value={notaAperturaInput}
+                  onChange={(e) => setNotaAperturaInput(e.target.value)}
+                  placeholder="Ej. Sencillo recibido para inicio de labores..."
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-700 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setModalAperturaOpen(false)}
+                  className="w-1/3 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-widest transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardandoApertura}
+                  className="w-2/3 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black rounded-xl text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {guardandoApertura ? 'Abriendo...' : 'Confirmar Apertura'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DE HISTORIAL DE CIERRES DE CAJA (POSTGRESQL) */}
       {historialCierresModalOpen && (

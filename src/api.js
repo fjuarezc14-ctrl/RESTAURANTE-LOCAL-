@@ -159,9 +159,16 @@ export const api = {
     return apiRequest(`/api/ventas${qs}`);
   },
 
-  // Cierre de Caja y Arqueos (PostgreSQL)
+  // Cierre y Apertura de Caja / Turnos (PostgreSQL)
+  getEstadoCaja: () => apiRequest('/api/caja/estado'),
+  abrirCaja: (body) => apiRequest('/api/caja/apertura', {
+    method: 'POST', body: JSON.stringify(body)
+  }),
   getUltimoCierre: () => apiRequest('/api/caja/ultimo-cierre'),
   registrarCierre: (body) => apiRequest('/api/caja/cierre', {
+    method: 'POST', body: JSON.stringify(body)
+  }),
+  cerrarCajaForzado: (body) => apiRequest('/api/caja/cierre-forzado', {
     method: 'POST', body: JSON.stringify(body)
   }),
   getHistorialCierres: (limit = 30) => apiRequest(`/api/caja/cierres?limit=${limit}`),

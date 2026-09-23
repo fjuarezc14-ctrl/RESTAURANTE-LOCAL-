@@ -247,22 +247,27 @@ model EmpresaConfig {
 // CIERRES DE CAJA Y ARQUEOS HISTÓRICOS
 // ============================================================
 model CierreCaja {
-  id               Int      @id @default(autoincrement())
+  id               Int       @id @default(autoincrement())
+  estado           String    @default("CERRADO") // "ABIERTO" | "CERRADO"
   fechaApertura    DateTime
-  fechaCierre      DateTime @default(now())
+  fechaCierre      DateTime?
   cajeroNombre     String
-  efectivoVentas   Float
-  efectivoEsperado Float
-  efectivoContado  Float    @default(0)
-  diferencia       Float    @default(0)
-  totalTarjeta     Float    @default(0)
-  totalYape        Float    @default(0)
-  totalConsumo     Float    @default(0)
-  totalPedidosYa   Float    @default(0)
-  egresosEfectivo  Float    @default(0)
-  abonosEfectivo   Float    @default(0)
+  montoInicial     Float     @default(0) // Fondo de sencillo inicial en efectivo
+  notaApertura     String?
+  efectivoVentas   Float     @default(0)
+  efectivoEsperado Float     @default(0)
+  efectivoContado  Float     @default(0)
+  diferencia       Float     @default(0)
+  totalTarjeta     Float     @default(0)
+  totalYape        Float     @default(0)
+  totalConsumo     Float     @default(0)
+  totalPedidosYa   Float     @default(0)
+  egresosEfectivo  Float     @default(0)
+  abonosEfectivo   Float     @default(0)
   nota             String?
-  creadoEn         DateTime @default(now())
+  cerradoPorAdmin  Boolean   @default(false)
+  creadoEn         DateTime  @default(now())
 
   @@index([fechaCierre])
+  @@index([estado])
 }
