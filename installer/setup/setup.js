@@ -17,6 +17,9 @@ const LOGS_DIR = path.join(ROOT, 'logs');
 const ENV_FILE = path.join(BACKEND_DIR, '.env');
 const NODE_EXE = process.execPath;
 const CLIENTE_JSON = path.join(__dirname, 'cliente.json'); // datos y PINs del cliente (solo si el build fue de un cliente)
+// Marca una base recién creada que todavía no tiene su contraseña guardada en .env:
+// si una instalación falla a medias, la siguiente puede rehacerla sin riesgo de borrar ventas.
+const MARCA_BASE_NUEVA = path.join(__dirname, 'base-sin-configurar.tmp');
 
 const PG_PORT = 5446;
 const APP_PORT = 5188;
@@ -69,6 +72,7 @@ function initDatabaseCluster(password) {
   const pwFile = path.join(os.tmpdir(), `valetec-pw-${process.pid}.txt`);
   fs.writeFileSync(pwFile, password);
   try {
+    fs.writeFileSync(MARCA_BASE_NUEVA, new Date().toISOString());
     run(pgExe('initdb'), ['-D', DATA_DIR, '-U', 'postgres', '-E', 'UTF8', '--locale=C', '-A', 'scram-sha-256', `--pwfile=${pwFile}`]);
   } finally {
     fs.rmSync(pwFile, { force: true });
@@ -93,6 +97,27 @@ function psql(password, sql, db = 'postgres') {
     env: { PGPASSWORD: password },
     capture: true,
   }).stdout;
+}
+
+// -U ausente = la cuenta del sistema (LocalSystem), que puede leer cualquier carpeta
+function registrarServicioDB(cuenta) {
+  const args = ['register', '-N', DB_SERVICE, '-D', DATA_DIR, '-S', 'auto'];
+  if (cuenta) args.push('-U', cuenta);
+  run(pgExe('pg_ctl'), args);
+}
+
+// Arranca el servicio y espera a que la base acepte conexiones. Devuelve false si no lo logra.
+async function iniciarServicioDB(timeoutMs = 45000) {
+  const inicio = run('net.exe', ['start', DB_SERVICE], { allowFail: true, capture: true });
+  if (inicio.status !== 0) log(`net start ${DB_SERVICE}: ${inicio.stdout.replace(/\s+/g, ' ').trim()}`);
+  const limite = Date.now() + timeoutMs;
+  while (Date.now() < limite) {
+    if (run(pgExe('pg_isready'), ['-h', 'localhost', '-p', String(PG_PORT)], { allowFail: true, capture: true }).status === 0) {
+      return true;
+    }
+    await sleep(1500);
+  }
+  return false;
 }
 
 function writeAppServiceConfig() {
@@ -131,26 +156,43 @@ async function main() {
 
   // 1. Base de datos (se conserva en actualizaciones)
   let password = readEnvPassword();
-  const clusterExists = fs.existsSync(path.join(DATA_DIR, 'PG_VERSION'));
+  let clusterExists = fs.existsSync(path.join(DATA_DIR, 'PG_VERSION'));
+  if (clusterExists && !password) {
+    if (!fs.existsSync(MARCA_BASE_NUEVA)) {
+      throw new Error(`Existe ${DATA_DIR} pero falta ${ENV_FILE} con la contraseña. No se puede continuar sin perder datos.`);
+    }
+    // Base a medio crear de una instalación anterior fallida: se rehace desde cero
+    log('Se encontró una base incompleta de un intento anterior. Se vuelve a crear...');
+    run('net.exe', ['stop', DB_SERVICE], { allowFail: true, capture: true });
+    run(pgExe('pg_ctl'), ['unregister', '-N', DB_SERVICE], { allowFail: true });
+    await sleep(2000);
+    fs.rmSync(DATA_DIR, { recursive: true, force: true });
+    clusterExists = false;
+  }
   if (!clusterExists) {
     password = crypto.randomBytes(18).toString('hex');
     initDatabaseCluster(password);
-  } else if (!password) {
-    throw new Error(`Existe ${DATA_DIR} pero falta ${ENV_FILE} con la contraseña. No se puede continuar sin perder datos.`);
   }
 
-  // NetworkService (cuenta del servicio de PostgreSQL) necesita control total sobre data
+  // La cuenta del servicio necesita leer los binarios y escribir en data. Si la instalación
+  // quedó dentro de C:\Users\<usuario>, NetworkService no alcanza los archivos por herencia.
+  run('icacls.exe', [ROOT, '/grant', `${NETWORK_SERVICE_SID}:(OI)(CI)RX`, '/T', '/Q'], { allowFail: true });
   run('icacls.exe', [DATA_DIR, '/grant', `${NETWORK_SERVICE_SID}:(OI)(CI)F`, '/T', '/Q']);
 
-  // 2. Servicio de PostgreSQL
-  if (!serviceExists(DB_SERVICE)) {
-    run(pgExe('pg_ctl'), ['register', '-N', DB_SERVICE, '-D', DATA_DIR, '-U', 'NT AUTHORITY\\NetworkService', '-S', 'auto', '-w']);
+  // 2. Servicio de PostgreSQL: primero con NetworkService y, si Windows niega el arranque
+  // (típico al instalar dentro del perfil del usuario), se reintenta con la cuenta del sistema.
+  if (!serviceExists(DB_SERVICE)) registrarServicioDB('NT AUTHORITY\\NetworkService');
+  if (!(await iniciarServicioDB())) {
+    log('El servicio no arrancó con NetworkService. Reintentando con la cuenta del sistema (LocalSystem)...');
+    run('net.exe', ['stop', DB_SERVICE], { allowFail: true, capture: true });
+    run(pgExe('pg_ctl'), ['unregister', '-N', DB_SERVICE], { allowFail: true });
+    await sleep(2000);
+    registrarServicioDB(null);
+    if (!(await iniciarServicioDB())) {
+      const estado = run('sc.exe', ['query', DB_SERVICE], { allowFail: true, capture: true }).stdout;
+      throw new Error(`PostgreSQL no respondió en el puerto ${PG_PORT}. Estado del servicio:\n${estado}`);
+    }
   }
-  run('net.exe', ['start', DB_SERVICE], { allowFail: true });
-  await waitFor(
-    () => run(pgExe('pg_isready'), ['-h', 'localhost', '-p', String(PG_PORT)], { allowFail: true, capture: true }).status === 0,
-    'PostgreSQL no respondió'
-  );
 
   if (psql(password, `SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'`) !== '1') {
     psql(password, `CREATE DATABASE ${DB_NAME}`);
@@ -167,6 +209,7 @@ async function main() {
       '',
     ].join(os.EOL));
   }
+  fs.rmSync(MARCA_BASE_NUEVA, { force: true }); // la contraseña ya está guardada: la base deja de ser descartable
 
   // 4. Migraciones
   // Rutas explícitas de los motores para que Prisma no intente descargarlos (instalación sin internet)
