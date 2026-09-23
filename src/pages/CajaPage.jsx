@@ -3,6 +3,10 @@ import { Receipt, X, Banknote, Search, CheckCircle, Clock, Sparkles, CreditCard,
 
 import { api } from '../api';
 import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
+
+// El sistema solo emite TICKETS DE VENTA. La boleta o factura la emite la empresa
+// directamente en el portal de SUNAT, así que aquí no se envía nada.
+const FACTURACION_ELECTRONICA = false;
 import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
@@ -360,7 +364,7 @@ export default function CajaPage({ currentUser }) {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [mesaSeleccionada, setMesaSeleccionada] = useState(null);
-  const [tipoComprobante, setTipoComprobante] = useState('Boleta');
+  const [tipoComprobante, setTipoComprobante] = useState('Ticket');
   const [metodoPago, setMetodoPago] = useState('Efectivo');
   const [mixtoEfectivo, setMixtoEfectivo] = useState('');
   const [mixtoTarjeta, setMixtoTarjeta] = useState('');
@@ -865,7 +869,8 @@ export default function CajaPage({ currentUser }) {
       }
     }
     
-    const mensaje = `Estimado cliente *${v.nombreCliente || 'Consumidor Final'}*, le hacemos entrega de su comprobante electrónico *${v.tipoComprobante === 'Factura' ? 'FACTURA' : 'BOLETA'} ${serie}-${correlativoStr}* por un monto total de *S/ ${v.total.toFixed(2)}*.\n\nPuede consultar y descargar su documento oficial desde aquí:\n${enlace}\n\n¡Gracias por su preferencia en *${COMPANY_CONFIG.name}*!`;
+    const detalle = (v.itemsResumen || '').trim();
+    const mensaje = `Hola *${v.nombreCliente || 'Estimado cliente'}*, le enviamos el detalle de su consumo en *${COMPANY_CONFIG.name}*:\n\n${detalle ? detalle + '\n\n' : ''}Total: *S/ ${v.total.toFixed(2)}*\nTicket de venta N° ${v.id}\n\n¡Gracias por su preferencia!`;
     
     const waURL = `https://api.whatsapp.com/send?phone=51${cleanedPhone}&text=${encodeURIComponent(mensaje)}`;
     window.open(waURL, '_blank');
@@ -2575,7 +2580,7 @@ export default function CajaPage({ currentUser }) {
                                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
                                         </button>
                                       )}
-                                      {v.estadoNubefact === 'PENDIENTE_REINTENTO' ? (
+                                      {FACTURACION_ELECTRONICA && v.estadoNubefact === 'PENDIENTE_REINTENTO' ? (
                                         <div className="flex items-center gap-1.5">
                                           <span className="bg-amber-100 text-amber-800 text-[9px] font-black px-1.5 py-0.5 rounded border border-amber-200 animate-pulse flex items-center gap-1">
                                             <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></span> ⚠️ CONTINGENCIA
@@ -2588,7 +2593,7 @@ export default function CajaPage({ currentUser }) {
                                             Reintentar
                                           </button>
                                         </div>
-                                      ) : (v.tipoComprobante === 'Boleta' || v.tipoComprobante === 'Factura') && (!v.estadoNubefact || !v.estadoNubefact.startsWith('ACEPTADO:')) ? (
+                                      ) : FACTURACION_ELECTRONICA && (v.tipoComprobante === 'Boleta' || v.tipoComprobante === 'Factura') && (!v.estadoNubefact || !v.estadoNubefact.startsWith('ACEPTADO:')) ? (
                                         <div className="flex items-center gap-1.5">
                                           <span className="bg-slate-100 text-slate-600 text-[9px] font-black px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-1">
                                             <span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span> ⏳ NO ENVIADO
@@ -2601,7 +2606,7 @@ export default function CajaPage({ currentUser }) {
                                             Enviar
                                           </button>
                                         </div>
-                                      ) : v.estadoNubefact && v.estadoNubefact.startsWith('ACEPTADO:') ? (
+                                      ) : FACTURACION_ELECTRONICA && v.estadoNubefact && v.estadoNubefact.startsWith('ACEPTADO:') ? (
                                         <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
                                           <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span> ✅ ENVIADO
                                         </span>
@@ -3057,7 +3062,7 @@ export default function CajaPage({ currentUser }) {
                 <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-900"><Banknote className="w-5 h-5" /></div>
                 <div>
                   <h2 className="font-black text-lg uppercase tracking-tight leading-none">Cobro Mesa <span className="text-emerald-400">{mesaSeleccionada.num}</span></h2>
-                  <p className="text-xs text-slate-400">Emisión de Facturación Electrónica</p>
+                  <p className="text-xs text-slate-400">Cobro y emisión de ticket de venta</p>
                 </div>
               </div>
               <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-xl transition-colors"><X className="w-5 h-5" /></button>
@@ -3066,38 +3071,22 @@ export default function CajaPage({ currentUser }) {
             <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar bg-slate-50 flex-1 grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
               <div className="space-y-5">
                 <div>
-                  <label className="block text-slate-500 font-bold mb-2 text-[10px] tracking-widest uppercase">Tipo de Comprobante:</label>
-                  <select 
-                    value={tipoComprobante} 
-                    onChange={(e) => handleComprobanteChange(e.target.value)} 
-                    disabled={metodoPago === 'Consumo'}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500 font-bold text-slate-800 transition-all text-sm disabled:opacity-60"
-                  >
-                    {metodoPago === 'Consumo' ? (
-                      <option value="Ticket">👤 Consumo Personal (Descuento Planilla)</option>
-                    ) : (
-                      <>
-                        <option value="Boleta">Boleta Electrónica (DNI)</option>
-                        <option value="Factura">Factura Electrónica (RUC)</option>
-                        <option value="Ticket">Ticket Interno (Simple)</option>
-                      </>
-                    )}
-                  </select>
+                  <label className="block text-slate-500 font-bold mb-2 text-[10px] tracking-widest uppercase">Comprobante:</label>
+                  <div className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 text-sm flex items-center justify-between gap-2">
+                    <span>{metodoPago === 'Consumo' ? '👤 Consumo Personal (Descuento Planilla)' : '🧾 Ticket de Venta'}</span>
+                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider text-right leading-tight">
+                      Boleta o factura<br />se emite en SUNAT
+                    </span>
+                  </div>
                 </div>
-                {metodoPago !== 'Consumo' && (tipoComprobante === 'Boleta' || tipoComprobante === 'Factura') && (
+                {metodoPago !== 'Consumo' && (
                   <div className="bg-white p-4 rounded-2xl border border-slate-200/60 shadow-sm space-y-4">
                     <div>
-                      <label className="block text-slate-500 font-bold mb-2 text-[10px] tracking-widest uppercase">{tipoComprobante === 'Factura' ? 'RUC del Cliente' : 'DNI del Cliente'}:</label>
-                      <div className="flex gap-2">
-                        <input type="text" value={numDocumento} onChange={(e) => handleDocumentoChange(e.target.value)} placeholder={tipoComprobante === 'Factura' ? 'Ej. 20496009259' : 'Ej. 70443322'} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-500 font-mono" />
-
-                        <button onClick={buscarCliente} disabled={!numDocumento || isBuscando} className="bg-slate-900 text-white px-4 py-2 rounded-xl hover:bg-cyan-500 hover:text-slate-900 transition-colors disabled:opacity-50 flex items-center justify-center shrink-0 shadow-md">
-                          {isBuscando ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : <Search className="w-4 h-4" />}
-                        </button>
-                      </div>
+                      <label className="block text-slate-500 font-bold mb-2 text-[10px] tracking-widest uppercase">DNI o RUC del cliente (opcional):</label>
+                      <input type="text" value={numDocumento} onChange={(e) => handleDocumentoChange(e.target.value)} placeholder="Solo si el cliente lo pide en el ticket" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-500 font-mono" />
                     </div>
                     <div>
-                      <label className="block text-slate-500 font-bold mb-1 text-[10px] tracking-widest uppercase">Razón Social / Nombres:</label>
+                      <label className="block text-slate-500 font-bold mb-1 text-[10px] tracking-widest uppercase">Nombre del cliente (opcional):</label>
                       <input type="text" value={clienteNombre} onChange={(e) => setClienteNombre(e.target.value)} placeholder="Consumidor Final" className="w-full bg-white border border-slate-200 text-slate-700 font-bold rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-500" />
                     </div>
                     <div>
@@ -6111,8 +6100,7 @@ export default function CajaPage({ currentUser }) {
                 <Receipt className="w-5 h-5 text-amber-500" /> {
                   activeComprobante.metodoPago === 'Consumo' ? '👤 CONSUMO PERSONAL 👤' :
                   activeComprobante.metodoPago === 'Cortesía' ? '🎁 TICKET DE CORTESÍA 🎁' :
-                  activeComprobante.tipo === 'Factura' ? 'FACTURA ELECTRÓNICA' :
-                  activeComprobante.tipo === 'Ticket' ? 'TICKET DE VENTA' : 'BOLETA ELECTRÓNICA'
+                  'TICKET DE VENTA'
                 }
               </h3>
               <button onClick={() => setSunatModalOpen(false)} className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-xl transition-colors">
@@ -6140,13 +6128,12 @@ export default function CajaPage({ currentUser }) {
               <div className="text-center font-bold mb-1" style={{ fontSize: '11px' }}>{
                 activeComprobante.metodoPago === 'Consumo' ? '👤 VALE DE CONSUMO PERSONAL' :
                 activeComprobante.metodoPago === 'Cortesía' ? '🎁 CORTESÍA / CONSUMO INTERNO' :
-                activeComprobante.tipo === 'Factura' ? 'FACTURA ELECTRÓNICA' :
-                activeComprobante.tipo === 'Ticket' ? 'TICKET DE VENTA' : 'BOLETA ELECTRÓNICA'
+                'TICKET DE VENTA'
               }</div>
               <div className="text-center font-bold mb-3" style={{ fontSize: '13px' }}>{
                 activeComprobante.metodoPago === 'Consumo' ? `CONS-00${activeComprobante.mesaNum || 'SM'}-${activeComprobante.correlativo}` :
                 activeComprobante.metodoPago === 'Cortesía' ? `COR-00${activeComprobante.mesaNum || 'SM'}` :
-                `${activeComprobante.serie}-${activeComprobante.correlativo}`
+                `N° ${activeComprobante.correlativo}`
               }</div>
               
               <div className="flex justify-between border-t border-b border-dashed border-slate-300 py-1.5 mb-2 font-bold">
@@ -6236,8 +6223,6 @@ export default function CajaPage({ currentUser }) {
                     </div>
                   </>
                 )}
-                <div className="flex justify-between"><span>SUBTOTAL</span> <span>S/ {activeComprobante.subtotal.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>I.G.V (10.5%)</span> <span>S/ {activeComprobante.igv.toFixed(2)}</span></div>
                 <div className="flex justify-between" style={{ fontSize: '12px', fontWeight: '900' }}><span>TOTAL</span> <span>S/ {activeComprobante.total.toFixed(2)}</span></div>
               </div>
               
@@ -6250,11 +6235,6 @@ export default function CajaPage({ currentUser }) {
                 </div>
               )}
               
-              {activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' && activeComprobante.hashResumen && (
-                <div className="mb-3">
-                  <strong>CÓDIGO HASH:</strong> <span className="font-mono text-[10px]">{activeComprobante.hashResumen}</span>
-                </div>
-              )}
               
               <div>
                 <strong>FORMA DE PAGO:</strong> <span className="uppercase">{
@@ -6279,7 +6259,7 @@ export default function CajaPage({ currentUser }) {
                 </div>
               )}
               
-              {activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' ? (
+              {FACTURACION_ELECTRONICA && activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' ? (
                 <div className="flex justify-center my-5">
                   <img 
                     src={activeComprobante.qrImageUrl} 
@@ -6326,11 +6306,11 @@ export default function CajaPage({ currentUser }) {
                 {
                   activeComprobante.metodoPago === 'Consumo' ? 'VALE INTERNO AUTORIZADO DE COLABORADOR' :
                   activeComprobante.metodoPago === 'Cortesía' ? 'TICKET DE CONSUMO INTERNO AUTORIZADO' :
-                  'Representación impresa del comprobante electrónico. Consulte su validez en el portal de la SUNAT.'
+                  'Documento interno de control. No es comprobante de pago: solicite su boleta o factura en caja.'
                 }
               </div>
 
-              {activeComprobante.enlacePdf && activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' && (
+              {FACTURACION_ELECTRONICA && activeComprobante.enlacePdf && activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' && (
                 <div className="text-center text-[10px] mt-4 font-bold no-print pt-2 border-t border-slate-100">
                   <a href={activeComprobante.enlacePdf} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800 flex items-center justify-center gap-1.5">
                     📄 Descargar Comprobante SUNAT (PDF)

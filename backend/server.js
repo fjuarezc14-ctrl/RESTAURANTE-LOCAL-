@@ -1983,13 +1983,12 @@ app.post('/api/pedidos/llevar', async (req, res) => {
       else finalNombreCliente = 'CONSUMIDOR FINAL';
     }
 
-    // Calcular correlativo para apisunat.pe si es Boleta o Factura
-    const finalTipoComprobante = tipoComprobante || 'Ticket';
-    const initEstadoSunat = (finalTipoComprobante === 'Boleta' || finalTipoComprobante === 'Factura') ? 'PENDIENTE' : 'NO_APLICA';
+    const finalTipoComprobante = 'Ticket'; // solo tickets de venta
+    const initEstadoSunat = 'NO_APLICA';
 
-    // Correlativo y venta en la misma transacción para que el bloqueo por serie sea efectivo
     let venta = await prisma.$transaction(async (tx) => {
-      const { serie, numero } = await obtenerSiguienteSerieYNumero(finalTipoComprobante, tx);
+      const serie = null;
+      const numero = null;
       return tx.venta.create({
       data: {
         pedidoId: pedido.id,
@@ -2025,55 +2024,6 @@ app.post('/api/pedidos/llevar', async (req, res) => {
       },
       });
     });
-
-    let apisunatResponse = null;
-
-    // Si es Boleta o Factura, intentamos enviar a apisunat.pe
-    if (finalTipoComprobante === 'Boleta' || finalTipoComprobante === 'Factura') {
-      try {
-        const mappedItems = items.map(i => ({
-          productoId: parseInt(i.id),
-          nombre: String(i.nombre),
-          precio: parseFloat(i.precio),
-          cantidad: parseInt(i.cant),
-        }));
-
-        // Agregar cargo por delivery al detalle de items si corresponde para que cuadre el total en SUNAT
-        if (shippingFee > 0) {
-          mappedItems.push({
-            productoId: parseInt(items[0]?.id || 1),
-            nombre: "SERVICIO DE DELIVERY",
-            precio: shippingFee,
-            cantidad: 1,
-          });
-        }
-
-        const response = await enviarAApisunat({ ...venta, clienteDireccion }, mappedItems);
-
-        const mappedData = {
-          serie: venta.serie,
-          numero: venta.numero,
-          key: response.payload?.hash || '',
-          enlace_del_pdf: response.payload?.pdf?.ticket || response.payload?.pdf?.a4 || '',
-          cadena_para_codigo_qr: `${(await getEmpresaConfig()).ruc}|${venta.tipoComprobante === 'Factura' ? '01' : '03'}|${venta.serie}|${String(venta.numero).padStart(4, '0')}|${venta.igv.toFixed(2)}|${venta.total.toFixed(2)}|${new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(venta.createdAt))}|${venta.tipoComprobante === 'Factura' ? '6' : (venta.numDocumento?.length === 8 ? '1' : '0')}|${venta.numDocumento || '00000000'}|${response.payload?.hash || ''}`
-        };
-
-        const strAceptado = `ACEPTADO:${JSON.stringify(mappedData)}`;
-
-        venta = await prisma.venta.update({
-          where: { id: venta.id },
-          data: {
-            estadoNubefact: strAceptado,
-            estadoSunat: 'ACEPTADO',
-            urlPdf: mappedData.enlace_del_pdf,
-            urlXml: response.payload?.xml || null,
-          },
-        });
-        apisunatResponse = mappedData;
-      } catch (apiErr) {
-        console.error("Error al enviar a APISUNAT en pedido directo:", apiErr);
-      }
-    }
 
     res.json({
       ok: true,
@@ -3007,51 +2957,19 @@ app.patch('/api/ventas/:ventaId/datos-cliente', async (req, res) => {
     });
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada.' });
 
-    // Validar si ya fue emitida como Boleta o Factura
-    if (venta.tipoComprobante === 'Boleta' || venta.tipoComprobante === 'Factura') {
-      return res.status(400).json({ error: 'No se pueden corregir datos de una Boleta o Factura ya emitida. Solo se permite actualizar comprobantes de tipo Ticket.' });
-    }
 
     // Actualizar datos
     const ventaActualizada = await prisma.$transaction(async (tx) => {
-      let newSerie = venta.serie;
-      let newNumero = venta.numero;
-      let newEstado = venta.estadoSunat;
-      let newEstadoNube = venta.estadoNubefact;
-
-      if (tipoComprobante !== venta.tipoComprobante) {
-        if (tipoComprobante === 'Boleta' || tipoComprobante === 'Factura') {
-          // Obtener la siguiente serie y correlativo dentro de la transacción
-          const isFactura = tipoComprobante === 'Factura';
-          const serieDefault = isFactura ? (process.env.SERIE_FACTURA || 'F001') : (process.env.SERIE_BOLETA || 'B001');
-          const minCorrelativo = isFactura ? 2 : 0; // Factura inicia en F001-0003, Boleta en B001-0001
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${serieDefault}))`;
-
-          const ultimaVenta = await tx.venta.findFirst({
-            where: { tipoComprobante, serie: serieDefault, numero: { not: null } },
-            orderBy: { numero: 'desc' }
-          });
-
-          const siguienteNumero = ultimaVenta
-            ? Math.max(ultimaVenta.numero + 1, minCorrelativo + 1)
-            : (minCorrelativo + 1);
-
-          newSerie = serieDefault;
-          newNumero = siguienteNumero;
-          newEstado = 'PENDIENTE';
-          newEstadoNube = 'PENDIENTE';
-        } else {
-          newSerie = null;
-          newNumero = null;
-          newEstado = 'NO_APLICA';
-          newEstadoNube = 'NO_APLICA';
-        }
-      }
+      // Se conserva como ticket de venta: no se emiten comprobantes electrónicos
+      const newSerie = null;
+      const newNumero = null;
+      const newEstado = 'NO_APLICA';
+      const newEstadoNube = 'NO_APLICA';
 
       return await tx.venta.update({
         where: { id: venta.id },
         data: {
-          tipoComprobante,
+          tipoComprobante: 'Ticket',
           numDocumento: numDocumento || null,
           nombreCliente: nombreCliente || null,
           clienteDireccion: clienteDireccion || null,
@@ -3321,11 +3239,10 @@ app.post('/api/ventas', async (req, res) => {
         throw new Error('Debe seleccionar al menos un cliente para registrar la venta a crédito.');
       }
 
-      // Calcular correlativo para apisunat.pe si es Boleta o Factura
-      const { serie, numero } = await obtenerSiguienteSerieYNumero(tipoComprobante, tx);
-
-      // Crear Venta principal (inicialmente PENDIENTE si es factura/boleta)
-      const initEstadoSunat = (tipoComprobante === 'Boleta' || tipoComprobante === 'Factura') ? 'PENDIENTE' : 'NO_APLICA';
+      // Solo se emiten tickets de venta: la boleta o factura la emite la empresa en el portal de SUNAT
+      const serie = null;
+      const numero = null;
+      const initEstadoSunat = 'NO_APLICA';
 
       let descAplicado = descuentoAplicado ? parseFloat(descuentoAplicado) : 0;
       let descDescrip = ofertaDescripcion ? String(ofertaDescripcion) : null;
@@ -3347,7 +3264,7 @@ app.post('/api/ventas', async (req, res) => {
       const ventaCreada = await tx.venta.create({
         data: {
           pedidoId: idPrincipal,
-          tipoComprobante,
+          tipoComprobante: 'Ticket',
           numDocumento,
           nombreCliente: (metodoPago === 'Cortesía' || metodoPago === 'Consumo') 
             ? (nombreCliente || 'CONSUMO PERSONAL / CORTESÍA') 
@@ -3405,71 +3322,6 @@ app.post('/api/ventas', async (req, res) => {
         numero: venta.numero,
         yaCobrado: true
       });
-    }
-
-    // Si es Boleta o Factura, intentamos enviar a apisunat.pe
-    if (tipoComprobante === 'Boleta' || tipoComprobante === 'Factura') {
-      try {
-        const pedidoConItems = await prisma.pedido.findUnique({
-          where: { id: idPrincipal },
-          include: { items: true }
-        });
-
-        // Llamar a apisunat.pe
-        const response = await enviarAApisunat({ ...venta, clienteDireccion }, pedidoConItems.items);
-
-        // Mapear respuesta para compatibilidad con el front
-        const mappedData = {
-          serie: venta.serie,
-          numero: venta.numero,
-          key: response.payload?.hash || '',
-          enlace_del_pdf: response.payload?.pdf?.ticket || response.payload?.pdf?.a4 || '',
-          cadena_para_codigo_qr: `${(await getEmpresaConfig()).ruc}|${venta.tipoComprobante === 'Factura' ? '01' : '03'}|${venta.serie}|${String(venta.numero).padStart(4, '0')}|${venta.igv.toFixed(2)}|${venta.total.toFixed(2)}|${new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(venta.createdAt))}|${venta.tipoComprobante === 'Factura' ? '6' : (venta.numDocumento?.length === 8 ? '1' : '0')}|${venta.numDocumento || '00000000'}|${response.payload?.hash || ''}`
-        };
-
-        const strAceptado = `ACEPTADO:${JSON.stringify(mappedData)}`;
-
-        // Si tiene éxito, actualizamos a ACEPTADO y guardamos la respuesta
-        const ventaActualizada = await prisma.venta.update({
-          where: { id: venta.id },
-          data: {
-            estadoNubefact: strAceptado,
-            estadoSunat: strAceptado,
-            urlPdf: mappedData.enlace_del_pdf,
-            urlXml: response.payload?.xml || null
-          }
-        });
-
-        return res.json({
-          ok: true,
-          ventaId: venta.id,
-          estadoNubefact: ventaActualizada.estadoSunat,
-          serie: venta.serie,
-          numero: venta.numero
-        });
-      } catch (sunatErr) {
-        console.error("⚠️ Error al facturar con apisunat.pe. Entrando en modo contingencia (Offline-First):", sunatErr.message);
-
-        // Guardar estado de contingencia
-        const ventaActualizada = await prisma.venta.update({
-          where: { id: venta.id },
-          data: {
-            estadoNubefact: 'PENDIENTE_REINTENTO',
-            estadoSunat: 'PENDIENTE_REINTENTO'
-          }
-        });
-
-        // Retornamos éxito al POS para liberar la mesa sin trabas e indicando contingencia
-        return res.json({
-          ok: true,
-          ventaId: venta.id,
-          estadoNubefact: ventaActualizada.estadoSunat,
-          serie: venta.serie,
-          numero: venta.numero,
-          contingencia: true,
-          mensaje: "Comprobante emitido en contingencia. El envío a la SUNAT se completará automáticamente en segundo plano."
-        });
-      }
     }
 
     res.json({ ok: true, ventaId: venta.id, estadoNubefact: venta.estadoSunat, serie: venta.serie || null, numero: venta.numero || null });
@@ -4783,8 +4635,9 @@ async function procesarVentasPendientes() {
   }
 }
 
-// Iniciar worker de reintentos cada 5 minutos (300000ms)
-setInterval(procesarVentasPendientes, 300000);
+// El worker de reintentos queda desactivado: el sistema solo emite tickets de venta.
+// Se conserva procesarVentasPendientes por si en el futuro se reactiva la facturación electrónica.
+void procesarVentasPendientes;
 
 // ============================================================
 // FRONTEND COMPILADO (INSTALADOR WINDOWS)

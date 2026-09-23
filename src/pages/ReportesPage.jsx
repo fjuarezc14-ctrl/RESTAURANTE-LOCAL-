@@ -6,6 +6,9 @@ import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
 
+// Igual que en Caja: el sistema solo emite tickets de venta
+const FACTURACION_ELECTRONICA = false;
+
 const BARRA_CATEGORIAS = (COMPANY_CONFIG.barraCategorias && Array.isArray(COMPANY_CONFIG.barraCategorias))
   ? COMPANY_CONFIG.barraCategorias
   : DEFAULT_BARRA_CATEGORIAS;
@@ -232,7 +235,7 @@ export default function ReportesPage() {
     const serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
     const correlativoStr = String(v.id % 10000).padStart(4, '0');
     
-    const mensaje = `Estimado cliente *${v.nombreCliente || 'Consumidor Final'}*, le hacemos entrega de su comprobante electrónico *${v.tipoComprobante === 'Factura' ? 'FACTURA' : 'BOLETA'} ${serie}-${correlativoStr}* por un monto total de *S/ ${v.total.toFixed(2)}*.\n\n¡Gracias por su preferencia en *${COMPANY_CONFIG.name}*!`;
+    const mensaje = `Hola *${v.nombreCliente || 'Estimado cliente'}*, el total de su consumo en *${COMPANY_CONFIG.name}* fue de *S/ ${v.total.toFixed(2)}* (ticket de venta N° ${v.id}).\n\n¡Gracias por su preferencia!`;
     
     const waURL = `https://api.whatsapp.com/send?phone=51${cleanedPhone}&text=${encodeURIComponent(mensaje)}`;
     window.open(waURL, '_blank');
@@ -1571,8 +1574,7 @@ export default function ReportesPage() {
                 <Receipt className="w-5 h-5 text-amber-500" /> {
                   activeComprobante.metodoPago === 'Consumo' ? '👤 CONSUMO PERSONAL 👤' :
                   activeComprobante.metodoPago === 'Cortesía' ? '🎁 TICKET DE CORTESÍA 🎁' :
-                  activeComprobante.tipo === 'Factura' ? 'FACTURA ELECTRÓNICA' :
-                  activeComprobante.tipo === 'Ticket' ? 'TICKET DE VENTA' : 'BOLETA ELECTRÓNICA'
+                  'TICKET DE VENTA'
                 }
               </h3>
               <button onClick={() => setSunatModalOpen(false)} className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-xl transition-colors">
@@ -1596,7 +1598,7 @@ export default function ReportesPage() {
               <div className="text-center font-bold mb-3" style={{ fontSize: '13px' }}>{
                 activeComprobante.metodoPago === 'Consumo' ? `CONS-00${activeComprobante.mesaNum || 'SM'}-${activeComprobante.correlativo}` :
                 activeComprobante.metodoPago === 'Cortesía' ? `COR-00${activeComprobante.mesaNum || 'SM'}` :
-                `${activeComprobante.serie}-${activeComprobante.correlativo}`
+                `N° ${activeComprobante.correlativo}`
               }</div>
               
               <div className="flex justify-between border-t border-b border-dashed border-slate-300 py-1.5 mb-2 font-bold">
@@ -1686,8 +1688,6 @@ export default function ReportesPage() {
                     </div>
                   </>
                 )}
-                <div className="flex justify-between"><span>SUBTOTAL</span> <span>S/ {activeComprobante.subtotal.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>I.G.V (10.5%)</span> <span>S/ {activeComprobante.igv.toFixed(2)}</span></div>
                 <div className="flex justify-between" style={{ fontSize: '12px', fontWeight: '900' }}><span>TOTAL</span> <span>S/ {activeComprobante.total.toFixed(2)}</span></div>
               </div>
               
@@ -1700,11 +1700,6 @@ export default function ReportesPage() {
                 </div>
               )}
               
-              {activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' && activeComprobante.hashResumen && (
-                <div className="mb-3">
-                  <strong>CÓDIGO HASH:</strong> <span className="font-mono text-[10px]">{activeComprobante.hashResumen}</span>
-                </div>
-              )}
               
               <div>
                 <strong>FORMA DE PAGO:</strong> <span className="uppercase">{
@@ -1729,7 +1724,7 @@ export default function ReportesPage() {
                 </div>
               )}
               
-              {activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' ? (
+              {FACTURACION_ELECTRONICA && activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' ? (
                 <div className="flex justify-center my-5">
                   <img 
                     src={activeComprobante.qrImageUrl} 
@@ -1760,7 +1755,7 @@ export default function ReportesPage() {
                 {
                   activeComprobante.metodoPago === 'Consumo' ? 'VALE INTERNO AUTORIZADO DE COLABORADOR' :
                   activeComprobante.metodoPago === 'Cortesía' ? 'TICKET DE CONSUMO INTERNO AUTORIZADO' :
-                  'Representación impresa del comprobante electrónico. Consulte su validez en el portal de la SUNAT.'
+                  'Documento interno de control. No es comprobante de pago: solicite su boleta o factura en caja.'
                 }
               </div>
 
