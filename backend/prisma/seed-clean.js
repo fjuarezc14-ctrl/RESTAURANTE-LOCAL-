@@ -101,6 +101,28 @@ async function main() {
     }
   });
 
+  // 5. Carta del cliente (si el instalador la incluyó junto a cliente.json)
+  const rutaCarta = process.env.SEED_CARTA_JSON;
+  if (rutaCarta && fs.existsSync(rutaCarta)) {
+    const platos = JSON.parse(fs.readFileSync(rutaCarta, 'utf8'));
+    console.log(`🍽️  Cargando la carta del cliente (${platos.length} platos, precio en S/ 0)...`);
+    for (const p of platos) {
+      await prisma.producto.create({
+        data: {
+          nombre: String(p.nombre),
+          categoria: String(p.categoria || 'Otros'),
+          precio: parseFloat(p.precio || 0),
+          tipoStock: p.tipoStock === 'limitado' ? 'limitado' : 'ilimitado',
+          stock: parseInt(p.stock || 0),
+          requiereGuarnicion: Boolean(p.requiereGuarnicion),
+          opcionesConfig: p.opcionesConfig ? JSON.stringify(p.opcionesConfig) : null,
+          componentes: p.componentes ? JSON.stringify(p.componentes) : null,
+          complementos: p.complementos ? JSON.stringify(p.complementos) : null,
+        }
+      });
+    }
+  }
+
   console.log('\n============================================================');
   console.log('✨ SISTEMA INICIALIZADO CON ÉXITO EN MODO VIRGEN / PLANTILLA');
   console.log('============================================================');
@@ -111,7 +133,9 @@ async function main() {
     console.log(`👉 PIN de Acceso:        "${process.env.INITIAL_ADMIN_PIN || '1234'}"`);
   }
   console.log('👉 Mesas activas:        12 mesas libres');
-  console.log('👉 Carta:                Vacía (Lista para ingresar platos en /carta)');
+  console.log(rutaCarta && fs.existsSync(rutaCarta)
+    ? '👉 Carta:                Cargada con precios en S/ 0 (complétalos en /carta)'
+    : '👉 Carta:                Vacía (Lista para ingresar platos en /carta)');
   console.log('👉 Empresa:              Configurada por defecto (Ajustable en /configuracion)');
   console.log('============================================================\n');
 }

@@ -1,0 +1,1372 @@
+[
+  {
+    "nombre": "Pollo a la Brasa Entero",
+    "categoria": "Pollos a la Brasa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "complementos": [
+      {
+        "nombre": "Papa Frita",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Ensalada",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Cremas",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Aguadito",
+        "incluido": true,
+        "precio": 0
+      }
+    ]
+  },
+  {
+    "nombre": "1/2 Pollo a la Brasa",
+    "categoria": "Pollos a la Brasa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "complementos": [
+      {
+        "nombre": "Papa Frita",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Ensalada",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Cremas",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Aguadito",
+        "incluido": true,
+        "precio": 0
+      }
+    ]
+  },
+  {
+    "nombre": "1/4 de Pollo a la Brasa",
+    "categoria": "Pollos a la Brasa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "complementos": [
+      {
+        "nombre": "Papa Frita",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Ensalada",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Cremas",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Aguadito",
+        "incluido": true,
+        "precio": 0
+      }
+    ]
+  },
+  {
+    "nombre": "1/8 de Pollo a la Brasa",
+    "categoria": "Pollos a la Brasa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "complementos": [
+      {
+        "nombre": "Papa Frita",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Ensalada",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Cremas",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Aguadito",
+        "incluido": true,
+        "precio": 0
+      }
+    ]
+  },
+  {
+    "nombre": "Mostrito Entero",
+    "categoria": "Brasa Mostritos",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "complementos": [
+      {
+        "nombre": "Papa Frita",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Arroz Chaufa",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Ensalada",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Cremas",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Aguadito",
+        "incluido": true,
+        "precio": 0
+      }
+    ]
+  },
+  {
+    "nombre": "1/2 Mostrito",
+    "categoria": "Brasa Mostritos",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "complementos": [
+      {
+        "nombre": "Papa Frita",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Arroz Chaufa",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Ensalada",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Cremas",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Aguadito",
+        "incluido": true,
+        "precio": 0
+      }
+    ]
+  },
+  {
+    "nombre": "1/4 de Mostrito",
+    "categoria": "Brasa Mostritos",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "complementos": [
+      {
+        "nombre": "Papa Frita",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Arroz Chaufa",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Ensalada",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Cremas",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Aguadito",
+        "incluido": true,
+        "precio": 0
+      }
+    ]
+  },
+  {
+    "nombre": "1/8 de Mostrito",
+    "categoria": "Brasa Mostritos",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "complementos": [
+      {
+        "nombre": "Papa Frita",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Arroz Chaufa",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Ensalada",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Cremas",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Aguadito",
+        "incluido": true,
+        "precio": 0
+      }
+    ]
+  },
+  {
+    "nombre": "Menú Combinado de Pollo",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Menú Combinado de Carne",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Menú Pollo Saltado",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Menú Carne Saltada",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Menú Tallarín Saltado con Pollo",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Menú Tallarín Saltado con Carne",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Menú Salteados con Aeropuerto",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Menú Pechuga a la Plancha",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Menú Mostrito con Pollo a la Brasa",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Menú 1/8 de Pollo a la Brasa",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Menú Pollo Broster",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Menú Mostrito con Pollo Broaster",
+    "categoria": "Menú Criollo",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Chaufa de Pollo",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Chaufa con Carne",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Chaufa con Chancho",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Chaufa con Langostino",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Chaufa Especial",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Aeropuerto con Pollo",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Aeropuerto con Carne",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Aeropuerto con Chancho",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Aeropuerto con Langostino",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Aeropuerto Especial",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Pollo con Verduras",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Carne con Verduras",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Chancho con Verduras",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Langostino con Verduras",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Taypa",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Pollo en Trozo con Verduras",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Pollo con Champiñones",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Carne con Champiñones",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Chancho con Champiñones",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Pollo Tic Pa Kay",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Pollo con Piña",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Pollo con Durazno",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Chancho con Piña",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Chancho con Durazno",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Kam Lu Wantán",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Pollo Chijau Kay",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Pollo Enrollado",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Alitas en Salsa de Ostión",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Tortilla con Pollo",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Tortilla con Carne",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Tortilla con Chancho",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Tortilla Especial",
+    "categoria": "Menú Chifa",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "opcionesConfig": [
+      {
+        "name": "Sopa del Menú",
+        "key": "opcion_1",
+        "options": [
+          "Sopa Wantán",
+          "Wantán Frito"
+        ]
+      }
+    ],
+    "requiereGuarnicion": true
+  },
+  {
+    "nombre": "Combinado con Pollo",
+    "categoria": "Carta Criolla",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Combinado con Lomo Fino",
+    "categoria": "Carta Criolla",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Pollo Saltado a la Carta",
+    "categoria": "Carta Criolla",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Lomo Saltado Especial",
+    "categoria": "Carta Criolla",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Tallarín Saltado con Pollo a la Carta",
+    "categoria": "Carta Criolla",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Tallarín Saltado con Lomo Fino",
+    "categoria": "Carta Criolla",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Pechuga a la Parrilla",
+    "categoria": "Parrillas y Carnes",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "complementos": [
+      {
+        "nombre": "Papa Frita",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Ensalada",
+        "incluido": true,
+        "precio": 0
+      }
+    ]
+  },
+  {
+    "nombre": "Churrasco a la Parrilla",
+    "categoria": "Parrillas y Carnes",
+    "precio": 0,
+    "tipoStock": "ilimitado",
+    "complementos": [
+      {
+        "nombre": "Papa Frita",
+        "incluido": true,
+        "precio": 0
+      },
+      {
+        "nombre": "Ensalada",
+        "incluido": true,
+        "precio": 0
+      }
+    ]
+  },
+  {
+    "nombre": "Tallarín Verde con Pechuga",
+    "categoria": "Pastas y Tallarines",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Tallarín Verde con Churrasco",
+    "categoria": "Pastas y Tallarines",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Tallarín Verde con 1/4 de Pollo",
+    "categoria": "Pastas y Tallarines",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Tallarín Verde con 1/8 de Pollo",
+    "categoria": "Pastas y Tallarines",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Pescado en Salsa de Tausí al Vapor",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Pescado Natural al Vapor",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Pescado Agridulce",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Chancho en Salsa de Tausí",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Carne de Res en Salsa de Tausí",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Espárragos Salteados con Tocino",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Chijau Kay en Salsa de Ostión",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Costilla de Cerdo Agridulce",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Pollo al Mango",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Tallarín Sahofan",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Tallarín Maifan al Curry",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Berenjena Rellena en Salsa de Tausí",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Pollo con Verduras (Carta Oriental)",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Chaufa (Carta Oriental)",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Arroz Blanco (Carta Oriental)",
+    "categoria": "Carta Oriental",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Caldo de Gallina",
+    "categoria": "Sopas y Caldos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Sopa Wantán de Pollo",
+    "categoria": "Sopas y Caldos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Sopa Wantán al Kion",
+    "categoria": "Sopas y Caldos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Sopa Wantán Especial",
+    "categoria": "Sopas y Caldos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Papas Fritas",
+    "categoria": "Guarniciones y Porciones",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Arroz Blanco",
+    "categoria": "Guarniciones y Porciones",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Ensalada Clásica",
+    "categoria": "Guarniciones y Porciones",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Inca Kola 1/2 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Inca Kola 1 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Inca Kola Personal",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Inca Kola 2 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Coca Cola 1/2 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Coca Cola 1 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Coca Cola Personal",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Coca Cola 2 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Jarra de Limonada 1/2 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Jarra de Limonada 1 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Jarra de Chicha 1/2 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Jarra de Chicha 1 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Jarra de Maracuyá 1/2 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Jarra de Maracuyá 1 L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Cerveza Cusqueña Blanca",
+    "categoria": "Cervezas",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Cerveza Cusqueña Negra",
+    "categoria": "Cervezas",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Cerveza Pilsen",
+    "categoria": "Cervezas",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Vino Queirolo (Copa)",
+    "categoria": "Bar y Cocteles",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Vino Queirolo (Botella)",
+    "categoria": "Bar y Cocteles",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Vino Tabernero (Copa)",
+    "categoria": "Bar y Cocteles",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Vino Tabernero (Botella)",
+    "categoria": "Bar y Cocteles",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Vino Castillo del Diablo (Copa)",
+    "categoria": "Bar y Cocteles",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Vino Castillo del Diablo (Botella)",
+    "categoria": "Bar y Cocteles",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Vino Tacama Rosé (Copa)",
+    "categoria": "Bar y Cocteles",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Vino Tacama Rosé (Botella)",
+    "categoria": "Bar y Cocteles",
+    "precio": 0,
+    "tipoStock": "ilimitado"
+  }
+]

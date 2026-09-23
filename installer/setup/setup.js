@@ -17,6 +17,7 @@ const LOGS_DIR = path.join(ROOT, 'logs');
 const ENV_FILE = path.join(BACKEND_DIR, '.env');
 const NODE_EXE = process.execPath;
 const CLIENTE_JSON = path.join(__dirname, 'cliente.json'); // datos y PINs del cliente (solo si el build fue de un cliente)
+const CARTA_JSON = path.join(__dirname, 'carta.json'); // carta inicial del cliente (precios en S/ 0)
 // Marca una base recién creada que todavía no tiene su contraseña guardada en .env:
 // si una instalación falla a medias, la siguiente puede rehacerla sin riesgo de borrar ventas.
 const MARCA_BASE_NUEVA = path.join(__dirname, 'base-sin-configurar.tmp');
@@ -233,7 +234,11 @@ async function main() {
     log('Base vacía: creando usuarios, 12 mesas y configuración inicial de la empresa...');
     run(NODE_EXE, [path.join(BACKEND_DIR, 'prisma', 'seed-clean.js')], {
       cwd: BACKEND_DIR,
-      env: { ...prismaEnv, ...(hayCliente ? { SEED_CLIENTE_JSON: CLIENTE_JSON } : {}) },
+      env: {
+        ...prismaEnv,
+        ...(hayCliente ? { SEED_CLIENTE_JSON: CLIENTE_JSON } : {}),
+        ...(fs.existsSync(CARTA_JSON) ? { SEED_CARTA_JSON: CARTA_JSON } : {}),
+      },
     });
   }
   // Los PINs no deben quedar en disco después de crear los usuarios

@@ -172,9 +172,11 @@ async function main() {
   const iconCliente = path.join(CLIENTE_DIR, 'icon.ico');
   fs.copyFileSync(CLIENTE && fs.existsSync(iconCliente) ? iconCliente : path.join(INST, 'icon.ico'), path.join(STAGE, 'setup', 'icon.ico'));
 
-  // 6. Marca y usuarios del cliente
+  // 6. Marca, usuarios y carta del cliente
   if (CLIENTE) {
     const cliente = prepararUsuarios();
+    const carta = path.join(CLIENTE_DIR, 'carta.json');
+    if (fs.existsSync(carta)) fs.copyFileSync(carta, path.join(STAGE, 'setup', 'carta.json'));
     const logo = path.join(CLIENTE_DIR, 'logo.png');
     if (fs.existsSync(logo)) {
       // El logo reemplaza al genérico con el mismo nombre de archivo (incluido el hash de Vite)
