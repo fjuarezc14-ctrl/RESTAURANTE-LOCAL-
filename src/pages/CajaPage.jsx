@@ -507,6 +507,7 @@ export default function CajaPage({ currentUser }) {
   const [pedidoDetalleId, setPedidoDetalleId] = useState(null);
   const [busquedaVentas, setBusquedaVentas] = useState('');
   const [ventasLimite, setVentasLimite] = useState(20);
+  const [ingresosDesglose, setIngresosDesglose] = useState(false);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -2500,14 +2501,26 @@ export default function CajaPage({ currentUser }) {
         )}
 
         {/* RESUMEN DEL TURNO */}
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        <div className={`grid grid-cols-2 lg:grid-cols-6 gap-3 ${ingresosDesglose ? 'items-start' : ''}`}>
           <div className="col-span-2 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white p-4 sm:p-5 shadow-sm shadow-emerald-600/20">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-medium text-emerald-50/90">Ingresos en caja</p>
               <span className="w-8 h-8 rounded-lg bg-white/15 grid place-items-center"><Banknote className="w-4 h-4" /></span>
             </div>
-            <p className="mt-1 text-2xl sm:text-3xl font-semibold font-mono tabular-nums tracking-tight">{soles(activeIngresosCaja)}</p>
-            <div className="mt-3 pt-3 border-t border-white/20 grid grid-cols-3 gap-2 text-xs">
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <p className="text-2xl sm:text-3xl font-semibold font-mono tabular-nums tracking-tight truncate">{soles(activeIngresosCaja)}</p>
+              <button
+                type="button"
+                onClick={() => setIngresosDesglose(v => !v)}
+                className="h-7 pl-2.5 pr-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-[11px] font-medium inline-flex items-center gap-1 transition-colors shrink-0"
+                aria-expanded={ingresosDesglose}
+                title={ingresosDesglose ? 'Ocultar detalle' : 'Ver efectivo, tarjeta y Yape'}
+              >
+                Detalle <ChevronDown className={`w-4 h-4 transition-transform ${ingresosDesglose ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+            {ingresosDesglose && (
+            <div className="mt-3 pt-3 border-t border-white/20 grid grid-cols-3 gap-2 text-xs animate-fade-in">
               {[['Efectivo', activeEfectivo], ['Tarjeta', activeTarjeta], ['Yape', activeYape]].map(([label, monto]) => (
                 <div key={label} className="min-w-0">
                   <p className="text-emerald-50/75">{label}</p>
@@ -2515,6 +2528,7 @@ export default function CajaPage({ currentUser }) {
                 </div>
               ))}
             </div>
+            )}
           </div>
           {[
             { label: 'Ventas', valor: ventasTurno.length, hint: `${mesasPendientes.length + pedidosLlevar.length} por cobrar/entregar`, Icon: Receipt, color: 'bg-sky-50 text-sky-600', borde: 'border-t-sky-500' },
@@ -2730,6 +2744,7 @@ export default function CajaPage({ currentUser }) {
                               </p>
                               <p className="text-xs text-slate-500 truncate">
                                 <span className="font-mono">#VT-{v.id}</span> · {v.hora}
+                                {v.cajeroNombre && <> · <span className="text-slate-600">{v.cajeroNombre}</span></>}
                                 {v.descuentoAplicado > 0 && !v.anulado && <span className="text-blue-600"> · Desc.</span>}
                                 {conCortesia && !v.anulado && <span className="text-orange-600"> · Cortesía</span>}
                               </p>
@@ -2936,6 +2951,11 @@ export default function CajaPage({ currentUser }) {
                 <dt className="text-xs text-slate-400">Cliente</dt>
                 <dd className="text-slate-800 break-words">{clienteDeVenta(v)}</dd>
                 {v.numDocumento && !v.numDocumento.startsWith('DELIVERY -') && <dd className="text-xs font-mono text-slate-500">{v.numDocumento}</dd>}
+              </div>
+              <div className="min-w-0">
+                <dt className="text-xs text-slate-400">Cobrado por</dt>
+                <dd className="text-slate-800">{v.cajeroNombre || 'Cajero Principal'}</dd>
+                {v.mesero && <dd className="text-xs text-slate-500">Mesero: {v.mesero}</dd>}
               </div>
               <div className="min-w-0">
                 <dt className="text-xs text-slate-400">Origen</dt>
