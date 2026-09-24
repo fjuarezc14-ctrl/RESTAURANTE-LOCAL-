@@ -85,24 +85,72 @@ function formatCuentaRegresiva(ms) {
   return `${min}:${s.toString().padStart(2, '0')}`;
 }
 
-// Sintetizador Web Audio API de Campana de Restaurante Premium (G5 -> C6)
+// --- SISTEMA DE AUDIO Y VIBRACIÓN OPTIMIZADO PARA SALÓN / MOZOS ---
+let globalAudioCtx = null;
+
+function getAudioContext() {
+  if (typeof window === 'undefined') return null;
+  if (!globalAudioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      globalAudioCtx = new AudioContextClass();
+    }
+  }
+  if (globalAudioCtx && globalAudioCtx.state === 'suspended') {
+    globalAudioCtx.resume().catch(() => {});
+  }
+  return globalAudioCtx;
+}
+
+// Desbloquear AudioContext en el primer gesto del usuario (táctil, click o teclado)
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  };
+  ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(evt => {
+    window.addEventListener(evt, unlockAudio, { once: true, passive: true });
+  });
+}
+
+// Sintetizador Web Audio API de Campana de Restaurante Premium (E5 -> G5 -> C6) + Vibración Háptica
 function playChimeNotification() {
   try {
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const playTone = (freq, startTime, duration) => {
+    // 1. Vibración háptica en dispositivos móviles de mozos
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate([250, 100, 250]);
+      } catch (err) {}
+    }
+
+    // 2. Campana sonora Web Audio API
+    const audioCtx = getAudioContext();
+    if (!audioCtx) return;
+
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+
+    const now = audioCtx.currentTime;
+    const playTone = (freq, startTime, duration, gainLevel = 0.35) => {
       const osc = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, startTime);
-      gainNode.gain.setValueAtTime(0.15, startTime);
+      gainNode.gain.setValueAtTime(gainLevel, startTime);
       gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
       osc.connect(gainNode);
       gainNode.connect(audioCtx.destination);
       osc.start(startTime);
       osc.stop(startTime + duration);
     };
-    playTone(784, audioCtx.currentTime, 0.6);
-    playTone(1046.5, audioCtx.currentTime + 0.12, 0.8);
+
+    // Melodía de aviso de 3 notas brillantes (E5 -> G5 -> C6) con volumen audible
+    playTone(659.25, now, 0.45, 0.3);
+    playTone(783.99, now + 0.12, 0.55, 0.35);
+    playTone(1046.50, now + 0.25, 0.85, 0.4);
   } catch (e) {
     console.error('AudioContext bloqueado/no soportado:', e);
   }
@@ -656,7 +704,7 @@ export default function SalonPage({ currentUser }) {
     setTicketActual(nuevos);
   };
 
-  // Detector de mesas listas para el mesero activo (Sonido + Toast)
+  // Detector de pedidos y platos listos (Sonido + Vibración + Toast para personal de salón)
   useEffect(() => {
     if (mesas.length === 0) {
       if (prevMesasRef.current.length === 0) prevMesasRef.current = mesas;
@@ -664,53 +712,73 @@ export default function SalonPage({ currentUser }) {
     }
     if (prevMesasRef.current.length > 0) {
       const listasNuevas = [];
-      const activeMeseroName = currentUser?.nombre || meseroGlobal;
+      const activeMeseroName = (currentUser?.nombre || meseroGlobal || '').trim().toLowerCase();
 
-      // Avisar por cada plato o bebida que acaba de salir de su estación
+      // Avisar por cada plato o bebida que acaba de salir de su estación (Cocina o Barra)
       const reciénListos = [];
       mesas.forEach(m => {
         const ant = prevMesasRef.current.find(p => p.num === m.num);
         if (!ant || !m.pedidoData?.items) return;
-        const esMiMesa = m.pedidoData?.mesero === activeMeseroName || ['Administrador', 'Cajero'].includes(currentUser?.rol);
-        if (!esMiMesa) return;
+        const mesaMesero = (m.pedidoData?.mesero || '').trim().toLowerCase();
+        const esMiMesa = !!activeMeseroName && mesaMesero === activeMeseroName;
         const antesListos = new Set((ant.pedidoData?.items || []).filter(i => i.historial).map(i => i.itemId));
+
         m.pedidoData.items.forEach(i => {
           if (i.historial && !i.entregado && !antesListos.has(i.itemId)) {
-            reciénListos.push({ mesa: m.num, nombre: i.nombre, esBarra: BARRA_CATEGORIAS.includes(i.categoria) });
+            reciénListos.push({ 
+              mesa: m.num, 
+              nombre: i.nombre, 
+              esBarra: BARRA_CATEGORIAS.includes(i.categoria),
+              esMiMesa,
+              mesero: m.pedidoData?.mesero || 'Salón'
+            });
           }
         });
       });
+
       if (reciénListos.length > 0) {
+        // Alerta sonora y vibración para todo el equipo de salón
         playChimeNotification();
+
         reciénListos.slice(0, 4).forEach(item => {
           const toastId = Date.now() + Math.random();
+          const tituloEstacion = item.esBarra ? '🍹 Bebida lista en BARRA' : '🍽️ Plato listo en COCINA';
+          const detalleMesero = item.esMiMesa ? '⭐ ¡Tu Mesa!' : `Atiende: ${item.mesero}`;
           setToasts(prev => [...prev, {
             id: toastId,
             mesa: item.mesa,
-            mensaje: `${item.esBarra ? '🍹 Bebida lista en BARRA' : '🍽️ Plato listo en COCINA'}: ${item.nombre} · Mesa ${item.mesa}`,
+            esMiMesa: item.esMiMesa,
+            mensaje: `${tituloEstacion}: ${item.nombre} · Mesa ${item.mesa} (${detalleMesero})`,
           }]);
-          setTimeout(() => setToasts(prev => prev.filter(t => t.id !== toastId)), 6000);
+          setTimeout(() => setToasts(prev => prev.filter(t => t.id !== toastId)), 6500);
         });
       }
 
+      // Avisar si la mesa completa cambió de estado Cocina -> Servido
       mesas.forEach(m => {
         const ant = prevMesasRef.current.find(p => p.num === m.num);
         if (ant && ant.estado === 'Cocina' && m.estado === 'Servido') {
-          // Si corresponde a mi mesa, o si soy Administrador/Cajero, me alerta
-          const esMiMesa = m.pedidoData?.mesero === activeMeseroName || ['Administrador', 'Cajero'].includes(currentUser?.rol);
-          if (esMiMesa) {
-            listasNuevas.push(m.num);
-          }
+          const mesaMesero = (m.pedidoData?.mesero || '').trim().toLowerCase();
+          const esMiMesa = !!activeMeseroName && mesaMesero === activeMeseroName;
+          listasNuevas.push({
+            num: m.num,
+            esMiMesa,
+            mesero: m.pedidoData?.mesero || 'Salón'
+          });
         }
       });
+
       if (listasNuevas.length > 0) {
         playChimeNotification();
-        listasNuevas.forEach(num => {
+        listasNuevas.forEach(info => {
           const toastId = Date.now() + Math.random();
-          setToasts(prev => [...prev, { id: toastId, mesa: num, mensaje: `🛎️ ¡Mesa ${num} lista para servir!` }]);
+          const texto = info.esMiMesa 
+            ? `🛎️ ¡Tu Mesa ${info.num} está lista para servir!` 
+            : `🛎️ ¡Mesa ${info.num} lista para servir! (${info.mesero})`;
+          setToasts(prev => [...prev, { id: toastId, mesa: info.num, esMiMesa: info.esMiMesa, mensaje: texto }]);
           setTimeout(() => {
             setToasts(prev => prev.filter(t => t.id !== toastId));
-          }, 6000);
+          }, 6500);
         });
       }
     }
@@ -1008,14 +1076,14 @@ export default function SalonPage({ currentUser }) {
     </div>
   );
 
-  const activeMeseroName = currentUser?.nombre || meseroGlobal;
+  const activeMeseroName = (currentUser?.nombre || meseroGlobal || '').trim().toLowerCase();
   const isElevatedRole = ['Administrador', 'Cajero'].includes(currentUser?.rol);
 
   const platosListosDespacho = mesas.flatMap(m => {
     if (!m.pedidoData || !m.pedidoData.items) return [];
     
-    const esMiMesa = m.pedidoData.mesero === activeMeseroName || isElevatedRole;
-    if (!esMiMesa) return [];
+    const mesaMesero = (m.pedidoData.mesero || '').trim().toLowerCase();
+    const esMiMesa = !activeMeseroName || mesaMesero === activeMeseroName;
 
     // Listo para llevar a la mesa: lo despachado por cocina y también por barra
     const itemsListos = m.pedidoData.items.filter(i => i.historial && !i.entregado);
@@ -1024,6 +1092,7 @@ export default function SalonPage({ currentUser }) {
       ...item,
       mesaNum: m.num,
       mesero: m.pedidoData.mesero,
+      esMiMesa,
       pedidoId: item.pedidoId,
       estacion: BARRA_CATEGORIAS.includes(item.categoria) ? 'Barra' : 'Cocina',
     }));
@@ -2279,21 +2348,37 @@ export default function SalonPage({ currentUser }) {
           </div>
         </div>
       )}
-      {/* FLOATING TOASTS NOTIFICATIONS SYSTEM */}
-      <div className="fixed top-20 right-6 z-[250] flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+      {/* FLOATING TOASTS NOTIFICATIONS SYSTEM - RESPONSIVE MÓVIL Y TABLET */}
+      <div className="fixed top-3 inset-x-3 sm:top-20 sm:right-6 sm:inset-x-auto sm:max-w-sm z-[300] flex flex-col gap-2.5 pointer-events-none">
         {toasts.map(t => (
-          <div key={t.id} className="pointer-events-auto bg-slate-900 border border-emerald-500/20 text-white rounded-2xl shadow-2xl p-4 flex items-center gap-3 animate-slide-up relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent"></div>
-            <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center font-bold text-lg animate-bounce shrink-0 shadow-lg shadow-emerald-500/20">
-              🛎️
+          <div 
+            key={t.id} 
+            className={`pointer-events-auto border rounded-2xl shadow-2xl p-3.5 flex items-center gap-3 animate-slide-up relative overflow-hidden backdrop-blur-md transition-all ${
+              t.esMiMesa 
+                ? 'bg-slate-900 border-emerald-400 ring-2 ring-emerald-500/40 text-white' 
+                : 'bg-slate-900/95 border-amber-500/40 text-slate-100'
+            }`}
+          >
+            <div className={`absolute inset-0 ${t.esMiMesa ? 'bg-gradient-to-r from-emerald-500/15 to-transparent' : 'bg-gradient-to-r from-amber-500/10 to-transparent'}`}></div>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg animate-bounce shrink-0 shadow-lg ${
+              t.esMiMesa ? 'bg-emerald-500 text-white shadow-emerald-500/30' : 'bg-amber-500 text-white shadow-amber-500/20'
+            }`}>
+              {t.esMiMesa ? '🛎️' : '🔔'}
             </div>
-            <div className="flex-1 pr-2 relative z-10">
-              <h4 className="font-black text-xs text-emerald-400 uppercase tracking-widest leading-none mb-1">¡Pedido Listo!</h4>
-              <p className="font-bold text-sm text-slate-100">{t.mensaje}</p>
+            <div className="flex-1 pr-1 relative z-10 min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className={`font-black text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                  t.esMiMesa ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                }`}>
+                  {t.esMiMesa ? '⭐ Tu Pedido Listo' : '¡Pedido Listo!'}
+                </span>
+              </div>
+              <p className="font-bold text-xs sm:text-sm leading-tight text-white">{t.mensaje}</p>
             </div>
             <button 
               onClick={() => setToasts(prev => prev.filter(item => item.id !== t.id))}
               className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg transition-colors relative z-10 shrink-0"
+              aria-label="Cerrar notificación"
             >
               <X className="w-4 h-4" />
             </button>
@@ -2357,12 +2442,22 @@ export default function SalonPage({ currentUser }) {
                     }, {})
                   ).map(([mesaNum, items]) => {
                     const primerItem = items[0];
+                    const esMiMesaGrupo = items.some(i => i.esMiMesa);
                     return (
-                      <div key={mesaNum} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                      <div key={mesaNum} className={`bg-white border rounded-2xl p-4 shadow-sm transition-all ${
+                        esMiMesaGrupo ? 'border-emerald-300 ring-1 ring-emerald-400/30' : 'border-slate-200'
+                      }`}>
                         <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
                           <div>
-                            <h3 className="font-black text-slate-900 text-sm md:text-base uppercase tracking-tight">Mesa {mesaNum}</h3>
-                            <p className="text-[10px] text-slate-400 mt-0.5">Mozo: {primerItem.mesero}</p>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-black text-slate-900 text-sm md:text-base uppercase tracking-tight">Mesa {mesaNum}</h3>
+                              {esMiMesaGrupo && (
+                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                  ⭐ Mi Mesa
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Mozo: {primerItem.mesero || 'Salón'}</p>
                           </div>
                           <button
                             onClick={async () => {
