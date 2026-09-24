@@ -5,6 +5,7 @@ import { api } from '../api';
 import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
+import { exportarReporteExcel, construirCreditosPlanilla, montosVenta } from '../utils/exportarReporteExcel';
 
 // Igual que en Caja: el sistema solo emite tickets de venta
 const FACTURACION_ELECTRONICA = false;
@@ -112,6 +113,10 @@ export default function ReportesPage() {
   const [incluirGastos, setIncluirGastos] = useState(true);
   const [incluirPedidosYa, setIncluirPedidosYa] = useState(true);
   const [incluirPersonal, setIncluirPersonal] = useState(true);
+  const [incluirRecaudacion, setIncluirRecaudacion] = useState(true);
+  const [incluirCajeros, setIncluirCajeros] = useState(true);
+  const [incluirAnulaciones, setIncluirAnulaciones] = useState(true);
+  const [incluirCierres, setIncluirCierres] = useState(true);
 
   // Vista: comprobantes y detalle en modal
   const [ventaDetalleId, setVentaDetalleId] = useState(null);
@@ -309,243 +314,38 @@ export default function ReportesPage() {
   };
 
   const exportarLibroContableRCE = async () => {
+    if (!fechaDesde || !fechaHasta) {
+      alert('Por favor selecciona ambas fechas.');
+      return;
+    }
     try {
       setFiltrando(true);
-      // Obtener el historial real detallado de ventas y compras del periodo seleccionado
-      const [ventasData, comprasData] = await Promise.all([
+      // Datos frescos del rango elegido (aunque aún no se haya pulsado "Filtrar")
+      const [vts, cmps, rot, cajs, cancs, cierresRes, clients] = await Promise.all([
         api.getHistorialVentas(fechaDesde, fechaHasta),
-        api.getCompras(fechaDesde, fechaHasta)
+        api.getCompras(fechaDesde, fechaHasta),
+        api.getRotacion(fechaDesde, fechaHasta).catch(() => []),
+        api.getReporteCajeros(fechaDesde, fechaHasta).catch(() => []),
+        api.getCancelaciones(fechaDesde, fechaHasta).catch(() => []),
+        api.getHistorialCierres(500).catch(() => []),
+        api.getClientes().catch(() => []),
       ]);
-
-      const totalVentas = ventasData.reduce((s, v) => s + (Number(v.total) || 0), 0);
-      const baseVentas = ventasData.reduce((s, v) => s + (Number(v.subtotal) || 0), 0);
-      const igvVentas = ventasData.reduce((s, v) => s + (Number(v.igv) || 0), 0);
-
-      const totalCompras = comprasData.reduce((s, c) => s + (Number(c.total) || 0), 0);
-      const baseCompras = comprasData.reduce((s, c) => s + (Number(c.baseImponible) || 0), 0);
-      const igvCompras = comprasData.reduce((s, c) => s + (Number(c.igv) || 0), 0);
-
-      const margenOperativo = totalVentas - totalCompras;
-
-      // Desglose por métodos de pago en ventas
-      let ventasEfec = 0;
-      let ventasTarj = 0;
-      let ventasYape = 0;
-      let ventasOtros = 0;
-
-      ventasData.forEach(v => {
-        let e = Number(v.montoEfectivo) || (v.metodoPago === 'Efectivo' ? v.total : 0);
-        let t = Number(v.montoTarjeta) || (v.metodoPago === 'Tarjeta' ? v.total : 0);
-        let y = Number(v.montoYape) || (v.metodoPago === 'Yape' ? v.total : 0);
-        if (v.metodoPago === 'Mixto' && (e + t + y) < v.total) {
-          e += (v.total - (e + t + y));
-        }
-        ventasEfec += e;
-        ventasTarj += t;
-        ventasYape += y;
-        if (v.metodoPago === 'Consumo' || v.metodoPago === 'Cortesía' || v.metodoPago === 'Crédito') {
-          ventasOtros += Number(v.total) || 0;
-        }
+      await exportarReporteExcel({
+        empresa: COMPANY_CONFIG,
+        desde: fechaDesde,
+        hasta: fechaHasta,
+        ventas: vts || [],
+        compras: cmps || [],
+        rotacion: rot || [],
+        cajeros: cajs || [],
+        cancelaciones: cancs || [],
+        cierres: Array.isArray(cierresRes) ? cierresRes : (cierresRes?.cierres || []),
+        clientes: clients || [],
+        parseDeliveryInfo,
+        parsearCreditoSplit,
       });
-
-      // Filas de Ventas
-      const ventasRows = ventasData.map((v, idx) => {
-        const date = v.createdAt ? v.createdAt.split('T')[0] : '';
-        const serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
-        const correlativoStr = String(v.id % 10000).padStart(4, '0');
-        const numComp = `${serie}-${correlativoStr}`;
-        let efec = Number(v.montoEfectivo) || (v.metodoPago === 'Efectivo' ? v.total : 0);
-        let tarj = Number(v.montoTarjeta) || (v.metodoPago === 'Tarjeta' ? v.total : 0);
-        let yape = Number(v.montoYape) || (v.metodoPago === 'Yape' ? v.total : 0);
-        if (v.metodoPago === 'Mixto' && (efec + tarj + yape) < v.total) {
-          efec += (v.total - (efec + tarj + yape));
-        }
-
-        const bg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-        return `
-          <tr style="background-color: ${bg};">
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'\\@';">${idx + 1}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'yyyy-mm-dd';">${date}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${v.tipoComprobante || 'Ticket'}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; font-weight: bold; mso-number-format:'\\@';">${numComp}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'\\@';">${v.numDocumento || 'S/D'}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px;">${v.nombreCliente || 'PÚBLICO GENERAL'}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; font-weight: 600;">${v.metodoPago}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; font-weight: bold; mso-number-format:'\\@';">${v.cajeroNombre || 'Cajero Principal'}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${v.subtotal.toFixed(2)}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; color: #2563EB; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${v.igv.toFixed(2)}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; font-weight: bold; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${v.total.toFixed(2)}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${efec.toFixed(2)}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${tarj.toFixed(2)}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${yape.toFixed(2)}</td>
-          </tr>
-        `;
-      }).join('');
-
-      // Filas de Compras
-      const comprasRows = comprasData.map((c, idx) => {
-        const date = c.creadoEn ? c.creadoEn.split('T')[0] : '';
-        const bg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-        return `
-          <tr style="background-color: ${bg};">
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'\\@';">${idx + 1}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'yyyy-mm-dd';">${date}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${c.tipoDocumento || 'Factura'}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; font-weight: bold; mso-number-format:'\\@';">${c.serieNumero || '-'}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'\\@';">${c.ruc || 'S/D'}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; font-weight: 600;">${c.proveedor || 'Sin proveedor'}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px;">${c.categoria || 'Gastos Operativos'}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${c.baseImponible.toFixed(2)}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; color: #E11D48; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${c.igv.toFixed(2)}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; font-weight: bold; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${c.total.toFixed(2)}</td>
-            <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${c.metodoPago || 'Efectivo'}</td>
-          </tr>
-        `;
-      }).join('');
-
-      const excelHtml = `
-        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-          <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-          <!--[if gte mso 9]>
-          <xml>
-            <x:ExcelWorkbook>
-              <x:ExcelWorksheets>
-                <x:ExcelWorksheet>
-                  <x:Name>Libro Contable RCE-RVE</x:Name>
-                  <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-                </x:ExcelWorksheet>
-              </x:ExcelWorksheets>
-            </x:ExcelWorkbook>
-          </xml>
-          <![endif]-->
-          <style>
-            body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1E293B; }
-            .title { font-size: 16px; font-weight: 900; color: #0F172A; text-align: center; }
-            .subtitle { font-size: 11px; color: #64748B; text-align: center; }
-            .section-header { background-color: #0F172A; color: #FFFFFF; font-weight: 900; font-size: 12px; padding: 8px; text-align: left; }
-            .table-head th { background-color: #1E293B; color: #FFFFFF; font-weight: 800; font-size: 10px; text-transform: uppercase; padding: 6px; border: 1px solid #0F172A; }
-            .kpi-title { background-color: #F1F5F9; font-weight: 800; font-size: 10px; color: #475569; padding: 6px; border: 1px solid #CBD5E1; }
-            .kpi-val { background-color: #FFFFFF; font-weight: 900; font-size: 12px; color: #0F172A; text-align: right; padding: 6px; border: 1px solid #CBD5E1; }
-            .total-row td { background-color: #E2E8F0; font-weight: 900; font-size: 11px; color: #0F172A; border-top: 2px solid #0F172A; border-bottom: 3px double #0F172A; padding: 6px; }
-          </style>
-        </head>
-        <body>
-          <table>
-            <tr><td colspan="14" class="title">${COMPANY_CONFIG.legalName.toUpperCase()}</td></tr>
-            <tr><td colspan="14" class="subtitle">RUC: ${COMPANY_CONFIG.ruc} · ${COMPANY_CONFIG.address}</td></tr>
-            <tr><td colspan="14" class="subtitle" style="font-weight: bold; color: #334155; font-size: 13px;">LIBRO CONTABLE TRIBUTARIO Y FINANCIERO (RVE / RCE)</td></tr>
-            <tr><td colspan="14" class="subtitle">PERIODO EVALUADO: DESDE ${fechaDesde} HASTA ${fechaHasta} · EMISIÓN: ${new Date().toLocaleDateString('es-PE')} ${new Date().toLocaleTimeString('es-PE')}</td></tr>
-            <tr><td colspan="14"></td></tr>
-
-            <!-- DASHBOARD RESUMEN EJECUTIVO -->
-            <tr><td colspan="14" class="section-header" style="background-color: #334155;">📊 1. RESUMEN EJECUTIVO FINANCIERO DEL PERIODO</td></tr>
-            <tr>
-              <td colspan="3" class="kpi-title">TOTAL VENTAS (RVE)</td>
-              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${totalVentas.toFixed(2)}</td>
-              <td colspan="3" class="kpi-title">RECAUDACIÓN EFECTIVO</td>
-              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasEfec.toFixed(2)}</td>
-              <td colspan="4"></td>
-            </tr>
-            <tr>
-              <td colspan="3" class="kpi-title">TOTAL COMPRAS Y GASTOS (RCE)</td>
-              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00'; color: #E11D48;">S/ ${totalCompras.toFixed(2)}</td>
-              <td colspan="3" class="kpi-title">RECAUDACIÓN TARJETAS (POS)</td>
-              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasTarj.toFixed(2)}</td>
-              <td colspan="4"></td>
-            </tr>
-            <tr>
-              <td colspan="3" class="kpi-title" style="background-color: #FEF3C7; color: #92400E;">UTILIDAD BRUTA OPERATIVA</td>
-              <td colspan="2" class="kpi-val" style="background-color: #FEF3C7; color: ${margenOperativo >= 0 ? '#166534' : '#991B1B'}; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${margenOperativo.toFixed(2)}</td>
-              <td colspan="3" class="kpi-title">RECAUDACIÓN YAPE / PLIN</td>
-              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasYape.toFixed(2)}</td>
-              <td colspan="4"></td>
-            </tr>
-            <tr>
-              <td colspan="3" class="kpi-title">BASE IMPONIBLE VENTAS</td>
-              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${baseVentas.toFixed(2)}</td>
-              <td colspan="3" class="kpi-title">OTROS (CONSUMO / CRÉDITOS)</td>
-              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasOtros.toFixed(2)}</td>
-              <td colspan="4"></td>
-            </tr>
-            <tr>
-              <td colspan="3" class="kpi-title">IGV VENTAS (10.5%)</td>
-              <td colspan="2" class="kpi-val" style="mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${igvVentas.toFixed(2)}</td>
-              <td colspan="9"></td>
-            </tr>
-            <tr><td colspan="14"></td></tr>
-
-            <!-- SECCIÓN VENTAS RVE -->
-            <tr><td colspan="14" class="section-header">🍽️ 2. REGISTRO DETALLADO DE VENTAS E INGRESOS (RVE)</td></tr>
-            <tr class="table-head">
-              <th style="width: 40px;">N°</th>
-              <th style="width: 85px;">FECHA</th>
-              <th style="width: 75px;">TIPO</th>
-              <th style="width: 95px;">COMPROBANTE</th>
-              <th style="width: 95px;">DOC. CLIENTE</th>
-              <th style="width: 220px;">CLIENTE / RAZÓN SOCIAL</th>
-              <th style="width: 100px;">MEDIO PAGO</th>
-              <th style="width: 110px;">CAJERO</th>
-              <th style="width: 100px;">BASE IMP. (S/)</th>
-              <th style="width: 80px;">IGV (S/)</th>
-              <th style="width: 100px;">TOTAL (S/)</th>
-              <th style="width: 90px;">EFECTIVO</th>
-              <th style="width: 90px;">TARJETA</th>
-              <th style="width: 90px;">YAPE/PLIN</th>
-            </tr>
-            ${ventasRows}
-            <tr class="total-row">
-              <td colspan="8" style="text-align: right; padding-right: 12px;">TOTALES RVE VENTAS:</td>
-              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${baseVentas.toFixed(2)}</td>
-              <td style="text-align: right; color: #2563EB; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${igvVentas.toFixed(2)}</td>
-              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${totalVentas.toFixed(2)}</td>
-              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasEfec.toFixed(2)}</td>
-              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasTarj.toFixed(2)}</td>
-              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${ventasYape.toFixed(2)}</td>
-            </tr>
-            <tr><td colspan="14"></td></tr>
-
-            <!-- SECCIÓN COMPRAS RCE -->
-            <tr><td colspan="13" class="section-header" style="background-color: #BE123C;">🔻 3. REGISTRO DETALLADO DE COMPRAS Y GASTOS (RCE)</td></tr>
-            <tr class="table-head">
-              <th style="width: 40px; background-color: #881337;">N°</th>
-              <th style="width: 85px; background-color: #881337;">FECHA</th>
-              <th style="width: 75px; background-color: #881337;">TIPO</th>
-              <th style="width: 95px; background-color: #881337;">SERIE/NUM</th>
-              <th style="width: 95px; background-color: #881337;">RUC PROVEEDOR</th>
-              <th style="width: 220px; background-color: #881337;">PROVEEDOR / RAZÓN SOCIAL</th>
-              <th style="width: 130px; background-color: #881337;">CATEGORÍA / CONCEPTO</th>
-              <th style="width: 100px; background-color: #881337;">BASE IMP. (S/)</th>
-              <th style="width: 80px; background-color: #881337;">IGV (S/)</th>
-              <th style="width: 100px; background-color: #881337;">TOTAL GASTO (S/)</th>
-              <th style="width: 90px; background-color: #881337;">FORMA PAGO</th>
-              <th colspan="2" style="background-color: #881337;"></th>
-            </tr>
-            ${comprasRows}
-            <tr class="total-row">
-              <td colspan="7" style="text-align: right; padding-right: 12px;">TOTALES RCE COMPRAS:</td>
-              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${baseCompras.toFixed(2)}</td>
-              <td style="text-align: right; color: #E11D48; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${igvCompras.toFixed(2)}</td>
-              <td style="text-align: right; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">S/ ${totalCompras.toFixed(2)}</td>
-              <td colspan="3"></td>
-            </tr>
-          </table>
-        </body>
-        </html>
-      `;
-
-      const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const marca = (COMPANY_CONFIG.brandShort || 'EMPRESA').replace(/\s+/g, '_');
-      link.download = `Libro_Contable_RCE_RVE_${marca}_${fechaDesde}_AL_${fechaHasta}.xls`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Error al generar libro contable: ' + err.message);
+      alert('Error al generar el Excel: ' + err.message);
     } finally {
       setFiltrando(false);
     }
@@ -1921,174 +1721,183 @@ export default function ReportesPage() {
       )}
 
       {/* Modal Reporte Gerencial */}
-      {gerencialModalOpen && (
-        <div id="modal-reporte-gerencial-container" className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[95vh] animate-slide-up">
-            <div className="bg-slate-950 p-4 text-white flex justify-between items-center shrink-0 no-print">
-              <h3 className="font-black text-sm uppercase tracking-wider flex items-center gap-2">
-                <Printer className="w-5 h-5 text-amber-500" /> Reporte Gerencial Ejecutivo
-              </h3>
-              <div className="flex gap-2">
-                <button onClick={() => window.print()} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm active:scale-95">
-                  <Printer className="w-3.5 h-3.5" /> Imprimir / Guardar PDF
-                </button>
-                <button onClick={() => setGerencialModalOpen(false)} className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-xl transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
+      {gerencialModalOpen && (() => {
+        const secciones = [
+          ['balance', 'Balance / IGV', incluirBalance, setIncluirBalance],
+          ['recaudacion', 'Recaudación', incluirRecaudacion, setIncluirRecaudacion],
+          ['cajeros', 'Cajeros', incluirCajeros, setIncluirCajeros],
+          ['mozos', 'Mozos', incluirMozos, setIncluirMozos],
+          ['rotacion', 'Rotación de carta', incluirRotacion, setIncluirRotacion],
+          ['gastos', 'Compras y gastos', incluirGastos, setIncluirGastos],
+          ['pedidosya', 'PedidosYa', incluirPedidosYa, setIncluirPedidosYa],
+          ['personal', 'Créditos y planilla', incluirPersonal, setIncluirPersonal],
+          ['anulaciones', 'Anulaciones', incluirAnulaciones, setIncluirAnulaciones],
+          ['cierres', 'Cierres de caja', incluirCierres, setIncluirCierres],
+        ];
 
-            {/* Checkboxes para filtrar secciones del reporte */}
-            <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-col md:flex-row md:items-center gap-3.5 no-print shrink-0">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Incluir en el Reporte:</span>
-              <div className="flex flex-wrap gap-4">
-                <label className="flex items-center gap-2 text-xs font-black text-slate-700 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={incluirBalance}
-                    onChange={e => setIncluirBalance(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
-                  />
-                  Balance / IGV
-                </label>
-                <label className="flex items-center gap-2 text-xs font-black text-slate-700 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={incluirMozos}
-                    onChange={e => setIncluirMozos(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
-                  />
-                  Mozos
-                </label>
-                <label className="flex items-center gap-2 text-xs font-black text-slate-700 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={incluirRotacion}
-                    onChange={e => setIncluirRotacion(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
-                  />
-                  Rotación y Pollos
-                </label>
-                <label className="flex items-center gap-2 text-xs font-black text-slate-700 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={incluirGastos}
-                    onChange={e => setIncluirGastos(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
-                  />
-                  Compras y Gastos
-                </label>
-                <label className="flex items-center gap-2 text-xs font-black text-slate-700 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={incluirPedidosYa}
-                    onChange={e => setIncluirPedidosYa(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
-                  />
-                  PedidosYa
-                </label>
-                <label className="flex items-center gap-2 text-xs font-black text-slate-700 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={incluirPersonal}
-                    onChange={e => setIncluirPersonal(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
-                  />
-                  Personal (Planilla)
-                </label>
-              </div>
-            </div>
+        const recaudacion = { efectivo: 0, tarjeta: 0, yape: 0, credito: 0, pedidosYa: 0, consumo: 0, cortesia: 0 };
+        ventas.forEach(v => {
+          const m = montosVenta(v);
+          Object.keys(recaudacion).forEach(k => { recaudacion[k] += m[k]; });
+        });
+        const devueltas = ventas.filter(v => v.anulado || v.estadoPedido === 'Cancelado');
+        const { planilla, comercial } = construirCreditosPlanilla(ventas, clientes, parsearCreditoSplit);
+        const agrupar = (items) => Object.entries(items.reduce((acc, it) => {
+          const k = it.documento ? `${it.nombre} (${it.documento})` : it.nombre;
+          acc[k] = (acc[k] || 0) + it.monto;
+          return acc;
+        }, {})).sort((a, b) => b[1] - a[1]);
+        const totalPY = ventas.filter(esPedidosYa).reduce((s, v) => s + v.total, 0);
+        const nPY = ventas.filter(esPedidosYa).length;
+        const cierresRango = cierresHistorial.filter(c => {
+          if (!c.fechaCierre) return true;
+          const fStr = new Date(c.fechaCierre).toISOString().slice(0, 10);
+          return fStr >= fechaDesde && fStr <= fechaHasta;
+        });
 
-            <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-white text-slate-900 font-sans">
-              <div className="text-center border-b pb-6 mb-6">
-                <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">{COMPANY_CONFIG.name}</h1>
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mt-1">Reporte de Gestión Gerencial</p>
-                <p className="text-xs text-slate-400 mt-2 font-mono">Periodo: {fechaDesde} al {fechaHasta}</p>
-                <p className="text-[10px] text-slate-400 mt-1 font-mono">Generado el: {new Date().toLocaleString('es-PE')}</p>
+        let n = 0;
+        const titulo = (texto, color) => {
+          n += 1;
+          return (
+            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide border-b-2 pb-1.5 mb-3 flex items-center gap-2" style={{ borderColor: color }}>
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+              {n}. {texto}
+            </h2>
+          );
+        };
+        const th = 'px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500';
+        const td = 'px-3 py-1.5';
+
+        return (
+          <div id="modal-reporte-gerencial-container" className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[250] flex items-end sm:items-center justify-center sm:p-4 animate-fade-in">
+            <div className="bg-white w-full max-w-4xl h-[96dvh] sm:h-auto sm:max-h-[94dvh] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0 no-print">
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold text-slate-900">Reporte gerencial</h3>
+                  <p className="text-sm text-slate-500">Vista previa · {fechaDesde} al {fechaHasta}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button type="button" onClick={() => window.print()} className="h-10 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold inline-flex items-center gap-2 shadow-sm shadow-sky-600/25 transition-colors">
+                    <Printer className="w-4 h-4" /> <span className="hidden sm:inline">Imprimir / Guardar PDF</span><span className="sm:hidden">PDF</span>
+                  </button>
+                  <button type="button" onClick={() => setGerencialModalOpen(false)} className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors" aria-label="Cerrar">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
-              {incluirBalance && (
-                <div className="mb-8">
-                  <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b pb-2 mb-4 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
-                    1. Balance y Resumen Gerencial Ejecutivo
-                  </h2>
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="border rounded-2xl p-4 bg-slate-50/50">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Ventas</p>
-                      <p className="text-xl font-black font-mono text-slate-800 mt-1 font-sans">S/ {resumen.ventasTotal.toFixed(2)}</p>
-                      <div className="text-[10px] text-slate-500 mt-2 space-y-0.5 font-bold">
-                        <p>Base Imp.: S/ {resumen.ventasBase.toFixed(2)}</p>
-                        <p className="font-semibold text-emerald-600">IGV (10.5%): S/ {resumen.ventasIGV.toFixed(2)}</p>
-                      </div>
-                    </div>
-                    <div className="border rounded-2xl p-4 bg-slate-50/50">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Compras / Gastos</p>
-                      <p className="text-xl font-black font-mono text-slate-800 mt-1 font-sans">S/ {resumen.comprasTotal.toFixed(2)}</p>
-                      <div className="text-[10px] text-slate-500 mt-2 space-y-0.5 font-bold">
-                        <p>Base Imp.: S/ {resumen.comprasBase.toFixed(2)}</p>
-                        <p className="font-semibold text-rose-600">IGV (10.5%): S/ {resumen.comprasIGV.toFixed(2)}</p>
-                      </div>
-                    </div>
-                    <div className="border rounded-2xl p-4 bg-slate-900 text-white">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">IGV Neto a Liquidar</p>
-                      <p className="text-xl font-black font-mono text-amber-400 mt-1 font-sans">S/ {resumen.igvAPagar.toFixed(2)}</p>
-                      <p className="text-[9px] text-slate-400 mt-2">Diferencia entre débito fiscal y crédito fiscal.</p>
-                    </div>
-                    <div className="border rounded-2xl p-4 bg-purple-500/10 border-purple-500/20 text-purple-950">
-                      <p className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">Plato Estrella de la Carta</p>
-                      <p className="text-lg font-black text-purple-900 mt-1 truncate">
-                        {rotacion.length > 0 ? rotacion[0].nombre : 'Sin ventas'}
-                      </p>
-                      <p className="text-[11px] font-bold text-purple-700 mt-1">
-                        {rotacion.length > 0 ? `${rotacion[0].cantidad} platos vendidos · S/ ${rotacion[0].total.toFixed(2)}` : '0 platos'}
-                      </p>
-                      <p className="text-[9px] text-purple-600/80 mt-2 leading-tight">Plato con mayor volumen de rotación en el periodo.</p>
-                    </div>
+              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/70 no-print shrink-0">
+                <p className="text-xs font-medium text-slate-500 mb-2">Secciones a incluir</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {secciones.map(([id, label, activo, set]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => set(!activo)}
+                      className={`h-8 px-3 rounded-full text-xs font-medium inline-flex items-center gap-1.5 transition-colors ${activo ? 'bg-sky-600 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:text-slate-800'}`}
+                    >
+                      {activo && <span className="text-[10px]">✓</span>} {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-6 sm:p-8 overflow-y-auto custom-scrollbar flex-1 bg-white text-slate-900 text-xs">
+                <div className="flex items-start justify-between gap-4 border-b-2 border-slate-900 pb-4 mb-6">
+                  <div>
+                    <h1 className="text-xl font-bold tracking-tight text-slate-900 uppercase">{COMPANY_CONFIG.name}</h1>
+                    <p className="text-[11px] text-slate-500">{COMPANY_CONFIG.legalName} · RUC {COMPANY_CONFIG.ruc}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold uppercase tracking-wide text-slate-700">Reporte de gestión</p>
+                    <p className="text-[11px] font-mono text-slate-500">Periodo: {fechaDesde} al {fechaHasta}</p>
+                    <p className="text-[10px] font-mono text-slate-400">Generado: {new Date().toLocaleString('es-PE')}</p>
                   </div>
                 </div>
-              )}
 
-              {incluirMozos && (
-                <div className="mb-8">
-                  <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b pb-2 mb-4 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
-                    2. Rendimiento de Mozos (Mesas Atendidas)
-                  </h2>
-                  <div className="border rounded-2xl overflow-hidden">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b">
-                        <tr>
-                          <th className="px-4 py-3">Nombre Mozo</th>
-                          <th className="px-4 py-3 text-center">Mesas Activas</th>
-                          <th className="px-4 py-3 text-center">Mesas Atendidas y Cobradas</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y font-medium text-slate-700">
-                        {mozos.length > 0 ? mozos.map((m, idx) => (
-                          <tr key={idx}>
-                            <td className="px-4 py-3 font-bold text-slate-800">{m.nombre}</td>
-                            <td className="px-4 py-3 text-center">{m.mesasActivas}</td>
-                            <td className="px-4 py-3 text-center text-emerald-600 font-bold">{m.mesasAtendidas}</td>
-                          </tr>
-                        )) : (
-                          <tr>
-                            <td colSpan="3" className="px-4 py-3 text-center text-slate-400">Sin registros en el periodo</td>
-                          </tr>
-                        )}
+                {incluirBalance && (
+                  <div className="mb-7 break-inside-avoid">
+                    {titulo('Balance del periodo', '#0284c7')}
+                    <div className="grid grid-cols-4 gap-3">
+                      {[
+                        ['Ventas', resumen.ventasTotal, `Base ${soles(resumen.ventasBase)} · IGV ${soles(resumen.ventasIGV)}`],
+                        ['Compras / gastos', resumen.comprasTotal, `Base ${soles(resumen.comprasBase)} · IGV ${soles(resumen.comprasIGV)}`],
+                        ['IGV neto a liquidar', resumen.igvAPagar, 'Débito fiscal − crédito fiscal'],
+                        ['Margen operativo', resumen.ventasTotal - resumen.comprasTotal, `${ventas.length - devueltas.length} ventas · ticket prom. ${soles((ventas.length - devueltas.length) ? resumen.ventasTotal / (ventas.length - devueltas.length) : 0)}`],
+                      ].map(([label, valor, hint]) => (
+                        <div key={label} className="border border-slate-200 rounded-xl p-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                          <p className="text-lg font-bold font-mono text-slate-900 mt-0.5">{soles(valor)}</p>
+                          <p className="text-[10px] text-slate-500 mt-1">{hint}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {devueltas.length > 0 && (
+                      <p className="mt-2 text-[10px] text-rose-600">{devueltas.length} venta(s) devuelta(s) por {soles(devueltas.reduce((s, v) => s + (v.montoOriginal ?? v.total ?? 0), 0))} excluidas de la recaudación.</p>
+                    )}
+                  </div>
+                )}
+
+                {incluirRecaudacion && (
+                  <div className="mb-7 break-inside-avoid">
+                    {titulo('Recaudación por medio de cobro', '#059669')}
+                    <table className="w-full text-left border border-slate-200">
+                      <thead className="bg-slate-50 border-b border-slate-200"><tr><th className={th}>Medio</th><th className={`${th} text-right`}>Monto</th><th className={th}>Observación</th></tr></thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {[
+                          ['Efectivo', recaudacion.efectivo, 'Cuadre de caja'],
+                          ['Tarjeta / POS', recaudacion.tarjeta, 'Cuadre de caja'],
+                          ['Yape / Plin', recaudacion.yape, 'Cuadre de caja'],
+                          ['Crédito comercial', recaudacion.credito, 'Cuentas por cobrar'],
+                          ['PedidosYa', recaudacion.pedidosYa, 'Liquidación semanal'],
+                          ['Consumo de personal', recaudacion.consumo, 'Descuento por planilla'],
+                          ['Cortesías', recaudacion.cortesia, 'Valor referencial, sin cobro'],
+                        ].map(([m, monto, obs]) => (
+                          <tr key={m}><td className={`${td} font-medium`}>{m}</td><td className={`${td} text-right font-mono`}>{soles(monto)}</td><td className={`${td} text-slate-500`}>{obs}</td></tr>
+                        ))}
+                        <tr className="bg-slate-100 font-bold"><td className={td}>Ingresos en caja (efectivo + tarjeta + Yape)</td><td className={`${td} text-right font-mono`}>{soles(recaudacion.efectivo + recaudacion.tarjeta + recaudacion.yape)}</td><td className={td} /></tr>
                       </tbody>
                     </table>
                   </div>
-                </div>
-              )}
+                )}
 
-              {incluirRotacion && (
-                <div className="mb-8 break-inside-avoid-page">
-                  <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b pb-2 mb-4 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
-                    3. Rotación Detallada de Productos por Categoría
-                  </h2>
-                  <div className="space-y-6">
+                {incluirCajeros && cajeros.length > 0 && (
+                  <div className="mb-7 break-inside-avoid">
+                    {titulo('Ventas por cajero', '#9333ea')}
+                    <table className="w-full text-left border border-slate-200">
+                      <thead className="bg-slate-50 border-b border-slate-200"><tr>
+                        <th className={th}>Cajero</th><th className={`${th} text-center`}>Tickets</th><th className={`${th} text-right`}>Efectivo</th><th className={`${th} text-right`}>Tarjeta</th><th className={`${th} text-right`}>Yape</th><th className={`${th} text-right`}>Total</th>
+                      </tr></thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {cajeros.map((c, i) => (
+                          <tr key={i}>
+                            <td className={`${td} font-medium`}>{c.nombre}</td><td className={`${td} text-center`}>{c.cantidadTickets}</td>
+                            <td className={`${td} text-right font-mono`}>{soles(c.efectivo)}</td><td className={`${td} text-right font-mono`}>{soles(c.tarjeta)}</td>
+                            <td className={`${td} text-right font-mono`}>{soles(c.yape)}</td><td className={`${td} text-right font-mono font-bold`}>{soles(c.totalVentas)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {incluirMozos && (
+                  <div className="mb-7 break-inside-avoid">
+                    {titulo('Rendimiento de mozos', '#4f46e5')}
+                    <table className="w-full text-left border border-slate-200">
+                      <thead className="bg-slate-50 border-b border-slate-200"><tr><th className={th}>Mozo</th><th className={`${th} text-center`}>Mesas activas</th><th className={`${th} text-center`}>Mesas atendidas</th></tr></thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {mozos.length > 0 ? mozos.map((m, idx) => (
+                          <tr key={idx}><td className={`${td} font-medium`}>{m.nombre}</td><td className={`${td} text-center`}>{m.mesasActivas}</td><td className={`${td} text-center font-bold text-emerald-700`}>{m.mesasAtendidas}</td></tr>
+                        )) : <tr><td colSpan="3" className={`${td} text-center text-slate-400`}>Sin registros en el periodo</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {incluirRotacion && (
+                  <div className="mb-7">
+                    {titulo('Rotación de productos por categoría', '#d97706')}
                     {(() => {
                       const grouped = {};
                       rotacion.forEach(r => {
@@ -2096,187 +1905,168 @@ export default function ReportesPage() {
                         if (!grouped[cat]) grouped[cat] = [];
                         grouped[cat].push(r);
                       });
-
                       const categories = Object.keys(grouped).sort();
-                      if (categories.length === 0) {
-                        return <p className="text-xs text-slate-400 text-center py-4">Sin datos de rotación en el periodo.</p>;
-                      }
-
-                      return categories.map(cat => {
-                        const items = grouped[cat].sort((a, b) => b.cantidad - a.cantidad);
-                        const totalCatQty = items.reduce((sum, item) => sum + item.cantidad, 0);
-                        const totalCatRev = items.reduce((sum, item) => sum + item.total, 0);
-
-                        return (
-                          <div key={cat} className="border rounded-2xl overflow-hidden bg-slate-50/20 break-inside-avoid mb-4">
-                            <div className="bg-slate-100/80 px-4 py-2.5 border-b flex justify-between items-center">
-                              <span className="text-xs font-black text-slate-700 uppercase tracking-wider">{cat}</span>
-                              <div className="flex gap-4 text-[10px] font-bold text-slate-500 uppercase">
-                                <span>Cant. Total: <strong className="text-slate-800">{totalCatQty}</strong></span>
-                                <span>Total Ventas: <strong className="text-slate-800">S/ {totalCatRev.toFixed(2)}</strong></span>
-                              </div>
-                            </div>
-                            <table className="w-full text-left text-xs">
-                              <thead className="bg-slate-50 text-slate-455 text-[9px] font-black uppercase tracking-wider border-b">
-                                <tr>
-                                  <th className="px-4 py-2">Producto</th>
-                                  <th className="px-4 py-2 text-center">Cantidad Vendida</th>
-                                  <th className="px-4 py-2 text-right">Precio Prom.</th>
-                                  <th className="px-4 py-2 text-right">Recaudación (S/)</th>
+                      if (categories.length === 0) return <p className="text-slate-400 text-center py-3">Sin datos de rotación en el periodo.</p>;
+                      return (
+                        <table className="w-full text-left border border-slate-200">
+                          <thead className="bg-slate-50 border-b border-slate-200"><tr><th className={th}>Producto</th><th className={`${th} text-center`}>Cantidad</th><th className={`${th} text-right`}>Precio prom.</th><th className={`${th} text-right`}>Total</th></tr></thead>
+                          {categories.map(cat => {
+                            const items = grouped[cat].sort((a, b) => b.cantidad - a.cantidad);
+                            return (
+                              <tbody key={cat} className="divide-y divide-slate-100 break-inside-avoid">
+                                <tr className="bg-amber-50/70">
+                                  <td className={`${td} font-bold uppercase text-amber-900`}>{cat}</td>
+                                  <td className={`${td} text-center font-bold`}>{items.reduce((s, i) => s + i.cantidad, 0)}</td>
+                                  <td className={td} />
+                                  <td className={`${td} text-right font-mono font-bold`}>{soles(items.reduce((s, i) => s + i.total, 0))}</td>
                                 </tr>
-                              </thead>
-                              <tbody className="divide-y font-semibold text-slate-700 bg-white">
-                                {items.map((r, idx) => {
-                                  const precioProm = r.cantidad > 0 ? (r.total / r.cantidad) : r.precio;
-                                  return (
-                                    <tr key={idx} className="hover:bg-slate-50/20">
-                                      <td className="px-4 py-2 text-slate-850 font-bold">{r.nombre}</td>
-                                      <td className="px-4 py-2 text-center font-bold">{r.cantidad}</td>
-                                      <td className="px-4 py-2 text-right font-mono text-slate-600">
-                                        S/ {precioProm.toFixed(2)}
-                                      </td>
-                                      <td className="px-4 py-2 text-right font-mono text-slate-900 font-bold">S/ {r.total.toFixed(2)}</td>
-                                    </tr>
-                                  );
-                                })}
+                                {items.map((r, idx) => (
+                                  <tr key={idx}>
+                                    <td className={`${td} pl-6`}>{r.nombre}</td>
+                                    <td className={`${td} text-center`}>{r.cantidad}</td>
+                                    <td className={`${td} text-right font-mono text-slate-600`}>{soles(r.cantidad > 0 ? r.total / r.cantidad : r.precio)}</td>
+                                    <td className={`${td} text-right font-mono`}>{soles(r.total)}</td>
+                                  </tr>
+                                ))}
                               </tbody>
-                            </table>
-                          </div>
-                        );
-                      });
+                            );
+                          })}
+                        </table>
+                      );
                     })()}
                   </div>
-                </div>
-              )}
+                )}
 
-              {incluirGastos && (
-                <div className="mb-8 break-inside-avoid">
-                  <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b pb-2 mb-4 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-600"></span>
-                    4. Detalle de Compras y Gastos del Periodo
-                  </h2>
-                  <div className="border rounded-2xl overflow-hidden">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-slate-550 font-bold uppercase tracking-wider border-b">
-                        <tr>
-                          <th className="px-4 py-3">Fecha</th>
-                          <th className="px-4 py-3">Comprobante</th>
-                          <th className="px-4 py-3">Proveedor / RUC</th>
-                          <th className="px-4 py-3 text-right">Base Imp.</th>
-                          <th className="px-4 py-3 text-right">IGV (10.5%)</th>
-                          <th className="px-4 py-3 text-right">Total (S/)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y font-medium text-slate-700 bg-white">
+                {incluirGastos && (
+                  <div className="mb-7">
+                    {titulo('Compras y gastos', '#e11d48')}
+                    <table className="w-full text-left border border-slate-200">
+                      <thead className="bg-slate-50 border-b border-slate-200"><tr>
+                        <th className={th}>Fecha</th><th className={th}>Comprobante</th><th className={th}>Proveedor</th><th className={`${th} text-right`}>Base</th><th className={`${th} text-right`}>IGV</th><th className={`${th} text-right`}>Total</th>
+                      </tr></thead>
+                      <tbody className="divide-y divide-slate-100">
                         {compras.length > 0 ? compras.map((c, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50/50">
-                            <td className="px-4 py-3 font-mono text-[10px]">{c.creadoEn ? c.creadoEn.split('T')[0] : ''}</td>
-                            <td className="px-4 py-3 uppercase text-[10px] font-bold">{c.tipoDocumento || 'Factura'}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex flex-col">
-                                <span className="font-bold text-slate-800 uppercase text-[11px]">{c.proveedor}</span>
-                                <span className="text-[9px] text-slate-450 font-mono">{c.ruc || 'S/D'}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-right font-mono">S/ {c.baseImponible.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-right font-mono text-rose-600">S/ {c.igv.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">S/ {c.total.toFixed(2)}</td>
+                          <tr key={idx}>
+                            <td className={`${td} font-mono`}>{c.creadoEn ? c.creadoEn.split('T')[0] : ''}</td>
+                            <td className={td}>{c.tipoDocumento || 'Factura'} {c.serieNumero || ''}</td>
+                            <td className={td}><span className="font-medium">{c.proveedor}</span> <span className="text-slate-400 font-mono">{c.ruc || ''}</span></td>
+                            <td className={`${td} text-right font-mono`}>{soles(c.baseImponible)}</td>
+                            <td className={`${td} text-right font-mono`}>{soles(c.igv)}</td>
+                            <td className={`${td} text-right font-mono font-bold`}>{soles(c.total)}</td>
                           </tr>
-                        )) : (
-                          <tr>
-                            <td colSpan="6" className="px-4 py-4 text-center text-slate-400">Sin compras o gastos registrados en el periodo</td>
+                        )) : <tr><td colSpan="6" className={`${td} text-center text-slate-400`}>Sin compras en el periodo</td></tr>}
+                        {compras.length > 0 && (
+                          <tr className="bg-slate-100 font-bold">
+                            <td colSpan="3" className={`${td} text-right`}>Total</td>
+                            <td className={`${td} text-right font-mono`}>{soles(resumen.comprasBase)}</td>
+                            <td className={`${td} text-right font-mono`}>{soles(resumen.comprasIGV)}</td>
+                            <td className={`${td} text-right font-mono`}>{soles(resumen.comprasTotal)}</td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
-                </div>
-              )}
+                )}
 
-              {(incluirPedidosYa || incluirPersonal) && (
-                <div className={`grid ${incluirPedidosYa && incluirPersonal ? 'grid-cols-2' : 'grid-cols-1'} gap-6 mt-8 break-inside-avoid`}>
-                  {incluirPedidosYa && (
-                    <div>
-                      <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b pb-2 mb-4 flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
-                        5. Conciliación PedidosYa
-                      </h2>
-                      <div className="border rounded-2xl p-4 bg-indigo-50/20 flex flex-col justify-between h-[130px]">
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Recaudado PedidosYa</p>
-                          <p className="text-3xl font-black text-indigo-950 mt-2 font-mono">
-                            S/ {(() => {
-                              const totalPY = ventas
-                                .filter(v => v.metodoPago === 'PedidosYa' && v.codigoPedidosYa && !v.codigoPedidosYa.startsWith('DELIVERY -') && !v.codigoPedidosYa.startsWith('LLEVAR -'))
-                                .reduce((s, v) => s + v.total, 0);
-                              return totalPY.toFixed(2);
-                            })()}
-                          </p>
-                        </div>
-                        <p className="text-[10px] text-slate-400 leading-tight">
-                          Monto consolidado para conciliar la liquidación semanal del portal PedidosYa.
-                        </p>
-                      </div>
+                {incluirPedidosYa && (
+                  <div className="mb-7 break-inside-avoid">
+                    {titulo('Conciliación PedidosYa', '#e11d48')}
+                    <div className="border border-slate-200 rounded-xl p-3 flex items-center justify-between">
+                      <span className="text-slate-600">{nPY} pedido(s) para conciliar con la liquidación semanal</span>
+                      <span className="text-lg font-bold font-mono">{soles(totalPY)}</span>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {incluirPersonal && (
-                    <div>
-                      <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b pb-2 mb-4 flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
-                        6. Consumo de Personal (Planilla)
-                      </h2>
-                      <div className="border rounded-2xl overflow-hidden max-h-[130px] overflow-y-auto custom-scrollbar">
-                        <table className="w-full text-left text-xs">
-                          <thead className="bg-slate-50 text-slate-550 font-bold uppercase tracking-wider border-b sticky top-0">
-                            <tr>
-                              <th className="px-4 py-2">Colaborador</th>
-                              <th className="px-4 py-2 text-right">Monto</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y font-medium text-slate-700 bg-white">
-                            {(() => {
-                              const consumos = ventas.filter(v => v.metodoPago === 'Consumo' || v.metodoPago === 'Cortesía');
-                              const porMozo = {};
-                              consumos.forEach(v => {
-                                const mName = v.mesero || v.nombreCliente || 'Sin Nombre';
-                                porMozo[mName] = (porMozo[mName] || 0) + v.total;
-                              });
-                              const entries = Object.entries(porMozo);
-                              return entries.length > 0 ? entries.map(([mozo, total]) => (
-                                <tr key={mozo}>
-                                  <td className="px-4 py-2 font-bold text-slate-850 truncate max-w-[120px]">{mozo}</td>
-                                  <td className="px-4 py-2 text-right font-mono font-bold text-violet-700">S/ {total.toFixed(2)}</td>
-                                </tr>
-                              )) : (
-                                <tr>
-                                  <td colSpan="2" className="px-4 py-4 text-center text-slate-400">Sin consumos en el periodo</td>
-                                </tr>
-                              );
-                            })()}
+                {incluirPersonal && (
+                  <div className="mb-7 break-inside-avoid">
+                    {titulo('Créditos comerciales y consumo de personal', '#0d9488')}
+                    <div className="grid grid-cols-2 gap-4">
+                      {[['Créditos a clientes', comercial, '#0f766e'], ['Planilla (personal)', planilla, '#6d28d9']].map(([label, items, color]) => (
+                        <table key={label} className="w-full text-left border border-slate-200 self-start">
+                          <thead className="bg-slate-50 border-b border-slate-200"><tr><th className={th}>{label}</th><th className={`${th} text-right`}>Monto</th></tr></thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {items.length > 0 ? agrupar(items).map(([nombre, total]) => (
+                              <tr key={nombre}><td className={td}>{nombre}</td><td className={`${td} text-right font-mono`} style={{ color }}>{soles(total)}</td></tr>
+                            )) : <tr><td colSpan="2" className={`${td} text-center text-slate-400`}>Sin registros</td></tr>}
+                            {items.length > 0 && (
+                              <tr className="bg-slate-100 font-bold"><td className={td}>Total</td><td className={`${td} text-right font-mono`}>{soles(items.reduce((s, i) => s + i.monto, 0))}</td></tr>
+                            )}
                           </tbody>
                         </table>
-                      </div>
+                      ))}
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
 
-              <div className="mt-16 flex justify-around text-xs break-inside-avoid">
-                <div className="text-center w-48">
-                  <div className="border-b border-slate-300 h-10 mb-2"></div>
-                  <p className="font-bold text-slate-700">Firma Administrador</p>
-                </div>
-                <div className="text-center w-48">
-                  <div className="border-b border-slate-300 h-10 mb-2"></div>
-                  <p className="font-bold text-slate-700">Firma Propietario</p>
-                  <p className="text-[10px] text-slate-400">{COMPANY_CONFIG.name}</p>
+                {incluirAnulaciones && (
+                  <div className="mb-7">
+                    {titulo('Anulaciones y devoluciones', '#dc2626')}
+                    <table className="w-full text-left border border-slate-200">
+                      <thead className="bg-slate-50 border-b border-slate-200"><tr>
+                        <th className={th}>Fecha</th><th className={th}>Tipo</th><th className={th}>Origen</th><th className={th}>Responsable</th><th className={th}>Motivo</th><th className={`${th} text-right`}>Importe</th>
+                      </tr></thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {cancelaciones.length > 0 ? cancelaciones.map((c, i) => (
+                          <tr key={i}>
+                            <td className={`${td} font-mono whitespace-nowrap`}>{c.fecha || ''} {c.hora}</td>
+                            <td className={td}>{c.tipo || 'Comanda cancelada'}</td>
+                            <td className={td}>{c.mesa ? `Mesa ${c.mesa}` : (c.codigoPedidosYa || 'Delivery')}</td>
+                            <td className={td}>{c.canceladoPor || '—'}</td>
+                            <td className={`${td} italic text-slate-600`}>{c.motivoCancela || 'Sin motivo'}</td>
+                            <td className={`${td} text-right font-mono text-rose-600`}>−{soles(c.total)}</td>
+                          </tr>
+                        )) : <tr><td colSpan="6" className={`${td} text-center text-slate-400`}>Sin anulaciones en el periodo</td></tr>}
+                        {cancelaciones.length > 0 && (
+                          <tr className="bg-slate-100 font-bold"><td colSpan="5" className={`${td} text-right`}>Total</td><td className={`${td} text-right font-mono text-rose-600`}>−{soles(cancelaciones.reduce((s, c) => s + (Number(c.total) || 0), 0))}</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {incluirCierres && (
+                  <div className="mb-7">
+                    {titulo('Cierres de caja (arqueos)', '#7c3aed')}
+                    <table className="w-full text-left border border-slate-200">
+                      <thead className="bg-slate-50 border-b border-slate-200"><tr>
+                        <th className={th}>Fecha</th><th className={th}>Cajero</th><th className={`${th} text-right`}>Esperado</th><th className={`${th} text-right`}>Contado</th><th className={`${th} text-right`}>Diferencia</th><th className={`${th} text-right`}>Tarjeta + Yape</th>
+                      </tr></thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {cierresRango.length > 0 ? cierresRango.map(c => {
+                          const dif = Number(c.diferencia || 0);
+                          return (
+                            <tr key={c.id}>
+                              <td className={`${td} font-mono whitespace-nowrap`}>{new Date(c.fechaCierre).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                              <td className={td}>{c.cajeroNombre}</td>
+                              <td className={`${td} text-right font-mono`}>{soles(c.efectivoEsperado)}</td>
+                              <td className={`${td} text-right font-mono`}>{soles(c.efectivoContado)}</td>
+                              <td className={`${td} text-right font-mono font-bold ${dif < -0.01 ? 'text-rose-600' : dif > 0.01 ? 'text-blue-600' : 'text-emerald-600'}`}>{dif > 0.01 ? '+' : ''}{soles(dif)}</td>
+                              <td className={`${td} text-right font-mono`}>{soles(Number(c.totalTarjeta || 0) + Number(c.totalYape || 0))}</td>
+                            </tr>
+                          );
+                        }) : <tr><td colSpan="6" className={`${td} text-center text-slate-400`}>Sin cierres en el periodo</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="mt-14 flex justify-around break-inside-avoid">
+                  <div className="text-center w-48">
+                    <div className="border-b border-slate-400 h-10 mb-2" />
+                    <p className="font-semibold text-slate-700">Firma administrador</p>
+                  </div>
+                  <div className="text-center w-48">
+                    <div className="border-b border-slate-400 h-10 mb-2" />
+                    <p className="font-semibold text-slate-700">Firma propietario</p>
+                    <p className="text-[10px] text-slate-400">{COMPANY_CONFIG.name}</p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <style>{`
         @page {
