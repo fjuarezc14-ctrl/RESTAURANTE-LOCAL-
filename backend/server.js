@@ -565,18 +565,61 @@ app.get('/api/status', async (req, res) => {
   });
 });
 
+// ── Detección de la IP del servidor en la red local ──
+// Adaptadores que casi nunca son la red del local (WSL, Hyper-V, VirtualBox, VMware, Docker, VPN...)
+const INTERFAZ_VIRTUAL = /vethernet|wsl|hyper-v|virtualbox|vmware|vmnet|vbox|docker|br-|veth|virbr|tun|tap|vpn|zerotier|tailscale|hamachi|radmin|loopback|bluetooth|npcap/i;
+
+const interfacesIPv4 = () => Object.entries(os.networkInterfaces())
+  .flatMap(([nombre, lista]) => (lista || [])
+    .filter(i => i && i.family === 'IPv4' && !i.internal && !i.address.startsWith('169.254.'))
+    .map(i => ({ ip: i.address, interfaz: nombre, virtual: INTERFAZ_VIRTUAL.test(nombre) })));
+
+// IP que el sistema usa para salir a la red: un socket UDP "conectado" no envía ningún paquete,
+// solo le pide al sistema operativo que elija la interfaz de la ruta por defecto.
+const ipRutaPorDefecto = () => new Promise((resolve) => {
+  const sock = require('dgram').createSocket('udp4');
+  const fin = (ip) => { try { sock.close(); } catch { /* ya cerrado */ } resolve(ip); };
+  sock.on('error', () => fin(null));
+  try {
+    sock.connect(53, '8.8.8.8', () => {
+      try { fin(sock.address().address); } catch { fin(null); }
+    });
+  } catch { fin(null); }
+  setTimeout(() => fin(null), 500);
+});
+
+// Orden: IP fijada a mano > ruta por defecto > redes domésticas típicas > resto; las virtuales al final
+const puntajeIp = ({ ip, virtual }, ipRuta) => {
+  if (ip === ipRuta) return 0;
+  if (virtual) return 50;
+  if (ip.startsWith('192.168.')) return 10;
+  if (ip.startsWith('10.')) return 20;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return 30; // rango habitual de Docker/WSL
+  return 40;
+};
+
 // GET /api/red/direcciones -> Direcciones para conectar celulares y tablets (se calculan al momento)
-app.get('/api/red/direcciones', (req, res) => {
+app.get('/api/red/direcciones', async (req, res) => {
   try {
     const puerto = PORT;
-    const ips = Object.values(os.networkInterfaces())
-      .flat()
-      .filter(i => i && i.family === 'IPv4' && !i.internal)
-      .map(i => i.address);
+    const ipFija = (process.env.IP_SERVIDOR || '').trim();
+    const ipRuta = await ipRutaPorDefecto();
+    const lista = interfacesIPv4();
+
+    if (ipFija && !lista.some(i => i.ip === ipFija)) {
+      lista.push({ ip: ipFija, interfaz: 'IP_SERVIDOR', virtual: false });
+    }
+
+    const ordenadas = lista
+      .map(i => ({ ...i, principal: false, puntaje: i.ip === ipFija ? -1 : puntajeIp(i, ipRuta) }))
+      .sort((x, y) => x.puntaje - y.puntaje);
+    if (ordenadas[0]) ordenadas[0].principal = true;
+
     res.json({
       puerto,
       hostname: os.hostname(),
-      urls: ips.map(ip => `http://${ip}:${puerto}`),
+      ips: ordenadas.map(({ puntaje, ...i }) => i),
+      urls: ordenadas.map(i => `http://${i.ip}:${puerto}`),
       urlHostname: `http://${os.hostname()}:${puerto}`,
     });
   } catch (err) {
@@ -1106,6 +1149,11 @@ app.put('/api/mesas/:numero', async (req, res) => {
       return res.status(400).json({ error: 'No se puede modificar el número de una mesa con comandas activas.' });
     }
 
+    const unidasRename = await prisma.mesa.count({ where: { estado: `Unida a Mesa ${numeroActual}` } });
+    if (unidasRename > 0) {
+      return res.status(400).json({ error: `La Mesa ${numeroActual} tiene mesas unidas. Sepáralas antes de cambiar su número.` });
+    }
+
     if (numeroActual !== nuevoNum) {
       const existe = await prisma.mesa.findUnique({ where: { numero: nuevoNum } });
       if (existe) {
@@ -1139,6 +1187,11 @@ app.delete('/api/mesas/:numero', async (req, res) => {
       return res.status(400).json({ error: 'No se puede eliminar una mesa con comandas activas.' });
     }
 
+    const unidasDelete = await prisma.mesa.count({ where: { estado: `Unida a Mesa ${numero}` } });
+    if (unidasDelete > 0) {
+      return res.status(400).json({ error: `La Mesa ${numero} tiene mesas unidas. Sepáralas antes de eliminarla.` });
+    }
+
     await prisma.mesa.delete({ where: { numero } });
     res.json({ ok: true, mensaje: `Mesa ${numero} eliminada correctamente.` });
   } catch (err) {
@@ -1166,8 +1219,22 @@ app.post('/api/mesas/:num/unir', async (req, res) => {
       return res.status(404).json({ error: 'Mesa principal o mesa a unir no encontrada.' });
     }
 
+    if (numUnir === numPrincipal) {
+      return res.status(400).json({ error: 'No se puede unir una mesa consigo misma.' });
+    }
+
+    if (mesaPrincipal.estado.startsWith('Unida a ')) {
+      return res.status(400).json({ error: `La Mesa ${numPrincipal} ya está unida a otra (${mesaPrincipal.estado}). Usa la mesa principal del grupo.` });
+    }
+
     if (mesaAUnir.estado !== 'Libre') {
       return res.status(400).json({ error: `La mesa ${numUnir} no está libre (estado: ${mesaAUnir.estado}).` });
+    }
+
+    // Una mesa que ya encabeza su propio grupo no puede unirse a otro (evita cadenas de grupos)
+    const unidasASecundaria = await prisma.mesa.count({ where: { estado: `Unida a Mesa ${numUnir}` } });
+    if (unidasASecundaria > 0) {
+      return res.status(400).json({ error: `La Mesa ${numUnir} ya tiene mesas unidas. Sepáralas primero.` });
     }
 
     // Unir mesa (cambiar estado a "Unida a Mesa X")
@@ -1182,18 +1249,30 @@ app.post('/api/mesas/:num/unir', async (req, res) => {
   }
 });
 
-// POST /api/mesas/:num/separar → Separar todas las mesas unidas a esta
+// POST /api/mesas/:num/separar → Separar las mesas unidas a esta.
+// Con body { numeroMesa } separa solo esa mesa; sin body separa todas las de ESTE grupo.
 app.post('/api/mesas/:num/separar', async (req, res) => {
   try {
     const numPrincipal = parseInt(req.params.num);
+    const numeroMesa = req.body?.numeroMesa != null ? parseInt(req.body.numeroMesa) : null;
+    const estadoGrupo = `Unida a Mesa ${numPrincipal}`;
 
-    // Liberar todas las mesas unidas a esta mesa principal
+    if (numeroMesa != null) {
+      const mesa = await prisma.mesa.findUnique({ where: { numero: numeroMesa } });
+      if (!mesa || mesa.estado !== estadoGrupo) {
+        return res.status(400).json({ error: `La Mesa ${numeroMesa} no está unida a la Mesa ${numPrincipal}.` });
+      }
+      await prisma.mesa.update({ where: { id: mesa.id }, data: { estado: 'Libre' } });
+      return res.json({ ok: true, separadas: [numeroMesa], mensaje: `Mesa ${numeroMesa} separada de la Mesa ${numPrincipal}.` });
+    }
+
+    const unidas = await prisma.mesa.findMany({ where: { estado: estadoGrupo }, select: { numero: true } });
     await prisma.mesa.updateMany({
-      where: { estado: `Unida a Mesa ${numPrincipal}` },
+      where: { estado: estadoGrupo },
       data: { estado: 'Libre' },
     });
 
-    res.json({ ok: true, mensaje: `Mesas unidas a la Mesa ${numPrincipal} han sido separadas.` });
+    res.json({ ok: true, separadas: unidas.map(m => m.numero), mensaje: `Mesas unidas a la Mesa ${numPrincipal} han sido separadas.` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

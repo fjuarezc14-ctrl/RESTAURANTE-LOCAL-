@@ -72,7 +72,10 @@ export const api = {
   unirMesa: (num, numeroMesaAUnir) => apiRequest(`/api/mesas/${num}/unir`, {
     method: 'POST', body: JSON.stringify({ numeroMesaAUnir })
   }),
-  separarMesas: (num) => apiRequest(`/api/mesas/${num}/separar`, { method: 'POST' }),
+  // numeroMesa opcional: separa solo esa mesa del grupo
+  separarMesas: (num, numeroMesa = null) => apiRequest(`/api/mesas/${num}/separar`, {
+    method: 'POST', body: JSON.stringify(numeroMesa != null ? { numeroMesa } : {})
+  }),
   crearMesa: (body) => apiRequest('/api/mesas', {
     method: 'POST', body: JSON.stringify(body)
   }),
