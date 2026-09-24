@@ -877,7 +877,7 @@ export default function CartaPage({ currentUser }) {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Precio (S/)</label>
-                  <input type="number" value={editProd.precio} onChange={e => setEditProd({ ...editProd, precio: e.target.value })} placeholder="0.00" step="0.50" className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 font-mono" />
+                  <input type="number" value={editProd.precio} onChange={e => setEditProd({ ...editProd, precio: e.target.value })} placeholder="0.00" step="any" className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 font-mono" />
                 </div>
               </div>
 
@@ -1013,7 +1013,7 @@ export default function CartaPage({ currentUser }) {
                                   <span className="text-emerald-600 font-normal">+S/</span>
                                   <input
                                     type="number"
-                                    step="0.5"
+                                    step="any"
                                     min="0"
                                     value={v.precioExtra}
                                     onChange={e => cambiarExtraOpcion(idx, v.productoId, e.target.value)}
@@ -1033,7 +1033,7 @@ export default function CartaPage({ currentUser }) {
                             >
                               <option value="">+ Agregar producto de la carta como opción...</option>
                               {productosSeleccionables.map(p => (
-                                <option key={p.id} value={p.id}>{p.nombre} — S/ {p.precio.toFixed(2)} ({p.categoria})</option>
+                                <option key={p.id} value={p.id}>{p.nombre} — S/ {Number(p.precio || 0).toFixed(2)} ({p.categoria})</option>
                               ))}
                             </select>
                             <label className="block text-[11px] font-bold text-slate-500 mt-2 mb-0.5">
@@ -1094,7 +1094,7 @@ export default function CartaPage({ currentUser }) {
                             +S/
                             <input
                               type="number"
-                              step="0.5"
+                              step="any"
                               min="0"
                               value={c.precio}
                               onChange={e => actualizarComplemento(c.nombre, 'precio', parseFloat(e.target.value) || 0)}
@@ -1191,7 +1191,7 @@ export default function CartaPage({ currentUser }) {
                 >
                   <option value="">+ Agregar producto al combo...</option>
                   {productosSeleccionables.map(p => (
-                    <option key={p.id} value={p.id}>{p.nombre} — S/ {p.precio.toFixed(2)} ({p.categoria})</option>
+                    <option key={p.id} value={p.id}>{p.nombre} — S/ {Number(p.precio || 0).toFixed(2)} ({p.categoria})</option>
                   ))}
                 </select>
 
@@ -1270,7 +1270,7 @@ export default function CartaPage({ currentUser }) {
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
                     {editOferta.tipoDescuento === 'porcentaje' ? 'Porcentaje (%)' : 'Descuento (S/)'}
                   </label>
-                  <input type="number" min="0" step="0.5" value={editOferta.valorDescuento} onChange={e => setEditOferta({ ...editOferta, valorDescuento: e.target.value })} placeholder={editOferta.tipoDescuento === 'porcentaje' ? '20' : '5.00'} className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 font-mono" />
+                  <input type="number" min="0" step="any" value={editOferta.valorDescuento} onChange={e => setEditOferta({ ...editOferta, valorDescuento: e.target.value })} placeholder={editOferta.tipoDescuento === 'porcentaje' ? '20' : '5.00'} className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 font-mono" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

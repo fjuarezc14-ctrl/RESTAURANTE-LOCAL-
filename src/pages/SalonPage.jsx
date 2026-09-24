@@ -246,16 +246,9 @@ export default function SalonPage({ currentUser }) {
     const checkWifi = async () => {
       try {
         const start = Date.now();
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500);
-        const res = await fetch('/api/status', { signal: controller.signal });
-        clearTimeout(timeoutId);
+        await api.getStatus();
         const latency = Date.now() - start;
-        if (res.ok) {
-          setWifiStatus(latency > 800 ? 'warning' : 'online');
-        } else {
-          setWifiStatus('warning');
-        }
+        setWifiStatus(latency > 800 ? 'warning' : 'online');
       } catch (e) {
         setWifiStatus('offline');
       }

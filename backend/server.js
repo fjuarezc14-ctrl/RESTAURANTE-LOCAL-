@@ -668,8 +668,7 @@ app.get('/api/clientes', async (req, res) => {
 
     const formateados = clientes.map(c => {
       const totalAbonado = c.AbonosCredito.reduce((s, a) => s + a.monto, 0);
-      const totalConsumido = consumoPorCliente[c.id] || 0;
-      const saldo = Math.max(0, totalConsumido - totalAbonado);
+      const saldo = Math.round((totalConsumido - totalAbonado) * 100) / 100;
       return {
         id: c.id,
         nombre: c.nombre,
@@ -903,8 +902,7 @@ app.get('/api/clientes/:id', async (req, res) => {
     });
 
     const totalConsumido = ventasCredito.reduce((s, v) => s + v.montoCredito, 0);
-    const totalAbonado = cliente.AbonosCredito.reduce((s, a) => s + a.monto, 0);
-    const saldo = Math.max(0, totalConsumido - totalAbonado);
+    const saldo = Math.round((totalConsumido - totalAbonado) * 100) / 100;
 
     res.json({
       ...cliente,
@@ -1432,12 +1430,18 @@ app.post('/api/mesas/:num/pedido', async (req, res) => {
         },
       });
 
-      // Descontar stock de todo lo comandado, incluidos los componentes de un combo
+      // Descontar stock de todo lo comandado, incluidos los componentes de un combo con guardia atómica
       for (const item of expandedItems) {
-        await tx.producto.updateMany({
-          where: { id: item.productoId, tipoStock: 'limitado' },
+        const updateResult = await tx.producto.updateMany({
+          where: { id: item.productoId, tipoStock: 'limitado', stock: { gte: item.cantidad } },
           data: { stock: { decrement: item.cantidad } },
         });
+        if (updateResult.count === 0) {
+          const prodCheck = await tx.producto.findUnique({ where: { id: item.productoId } });
+          if (prodCheck && prodCheck.tipoStock === 'limitado' && prodCheck.stock < item.cantidad) {
+            throw new Error(`Stock insuficiente para "${prodCheck.nombre}". Stock disponible: ${prodCheck.stock}, solicitado: ${item.cantidad}`);
+          }
+        }
       }
 
       await tx.mesa.update({
@@ -2145,12 +2149,18 @@ app.post('/api/pedidos/llevar', async (req, res) => {
       },
     });
 
-    // Descontar stock limitado (incluye los componentes de un combo)
+    // Descontar stock limitado con guardia atómica (incluye los componentes de un combo)
     for (const item of expandedItems) {
-      await prisma.producto.updateMany({
-        where: { id: item.productoId, tipoStock: 'limitado' },
+      const updateResult = await prisma.producto.updateMany({
+        where: { id: item.productoId, tipoStock: 'limitado', stock: { gte: item.cantidad } },
         data: { stock: { decrement: item.cantidad } },
       });
+      if (updateResult.count === 0) {
+        const prodCheck = await prisma.producto.findUnique({ where: { id: item.productoId } });
+        if (prodCheck && prodCheck.tipoStock === 'limitado' && prodCheck.stock < item.cantidad) {
+          throw new Error(`Stock insuficiente para "${prodCheck.nombre}". Stock disponible: ${prodCheck.stock}, solicitado: ${item.cantidad}`);
+        }
+      }
     }
 
     // Registrar venta inmediatamente
@@ -3219,7 +3229,13 @@ app.patch('/api/ventas/:ventaId/anular', async (req, res) => {
 
     const venta = await prisma.venta.findUnique({
       where: { id: parseInt(ventaId) },
-      include: { pedido: true }
+      include: {
+        pedido: {
+          include: {
+            items: { include: { producto: true } }
+          }
+        }
+      }
     });
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada.' });
 
@@ -3260,6 +3276,18 @@ app.patch('/api/ventas/:ventaId/anular', async (req, res) => {
             canceladoEn: now
           }
         });
+
+        // Restaurar stock físico de los productos limitados devueltos
+        if (venta.pedido?.items && Array.isArray(venta.pedido.items)) {
+          for (const item of venta.pedido.items) {
+            if (item.producto?.tipoStock === 'limitado') {
+              await tx.producto.update({
+                where: { id: item.productoId },
+                data: { stock: { increment: item.cantidad } },
+              });
+            }
+          }
+        }
       }
 
       return vUpdated;

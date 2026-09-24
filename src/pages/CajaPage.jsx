@@ -685,7 +685,7 @@ export default function CajaPage({ currentUser }) {
     e?.preventDefault();
     setErrorApertura('');
     const cajero = cajeroNombre || currentUser?.nombre || 'Cajero';
-    const monto = parseFloat(montoInicialInput || 0);
+    const monto = parseMonto(montoInicialInput);
     if (isNaN(monto) || monto < 0) {
       setErrorApertura('El fondo inicial debe ser un número válido mayor o igual a 0.');
       return;
@@ -720,7 +720,7 @@ export default function CajaPage({ currentUser }) {
   const handleRegistrarSalidaCaja = async (e) => {
     e?.preventDefault();
     setErrorSalidaCaja('');
-    const monto = parseFloat(montoSalidaCaja || 0);
+    const monto = parseMonto(montoSalidaCaja);
     if (isNaN(monto) || monto <= 0) {
       setErrorSalidaCaja('Ingresa un monto válido mayor a S/ 0.00');
       return;
@@ -2125,14 +2125,15 @@ export default function CajaPage({ currentUser }) {
         return;
       }
 
-      if (tarjVal + yapeVal + credVal > grandTotal) {
+      if (tarjVal + yapeVal + credVal > (grandTotal + 0.01)) {
         alert('La suma de Tarjeta, Yape / Plin y Crédito no puede superar el total a pagar.');
         return;
       }
 
-      const restante = grandTotal - (tarjVal + yapeVal + credVal);
-      if (efecVal < restante) {
-        alert(`Monto insuficiente. Debes cubrir el total de S/ ${grandTotal.toFixed(2)}.\nFaltan S/ ${(restante - efecVal).toFixed(2)}`);
+      const restante = parseFloat(Math.max(0, grandTotal - (tarjVal + yapeVal + credVal)).toFixed(2));
+      if (efecVal < (restante - 0.01)) {
+        const faltante = parseFloat(Math.max(0, restante - efecVal).toFixed(2));
+        alert(`Monto insuficiente. Debes cubrir el total de S/ ${grandTotal.toFixed(2)}.\nFaltan S/ ${faltante.toFixed(2)}`);
         return;
       }
 
@@ -2442,11 +2443,11 @@ export default function CajaPage({ currentUser }) {
   });
   const activeIngresosCaja = activeEfectivo + activeTarjeta + activeYape;
   const activeIngresosPedidosYa = ventasTurno
-    .filter(v => v.metodoPago === 'PedidosYa')
-    .reduce((s, v) => s + v.total, 0);
+    .filter(v => v.metodoPago === 'PedidosYa' && !v.anulado && v.estadoPedido !== 'Cancelado')
+    .reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
   const activeCortesias = ventasTurno
-    .filter(v => v.metodoPago === 'Cortesía')
-    .reduce((sum, v) => sum + (v.items?.reduce((s, i) => s + (i.cant * i.precio), 0) || 0), 0);
+    .filter(v => v.metodoPago === 'Cortesía' && !v.anulado && v.estadoPedido !== 'Cancelado')
+    .reduce((sum, v) => sum + (parseFloat(v.descuentoAplicado || v.total) || (v.items?.reduce((s, i) => s + (i.cant * i.precio), 0) || 0)), 0);
 
   const clienteEsTrabajador = new Map(clientes.map(c => [c.id, c.esTrabajador]));
   let activeConsumoPlanilla = 0;
@@ -4826,8 +4827,8 @@ export default function CajaPage({ currentUser }) {
         });
 
         const totalPedidosYa = ventasFiltradas
-          .filter(v => v.metodoPago === 'PedidosYa')
-          .reduce((s, v) => s + (v.total || 0), 0);
+          .filter(v => v.metodoPago === 'PedidosYa' && !v.anulado && v.estadoPedido !== 'Cancelado')
+          .reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
 
         const clienteMap = new Map(clientes.map(c => [c.id, c.esTrabajador]));
         let totalConsumoPlanilla = 0;
@@ -4836,7 +4837,7 @@ export default function CajaPage({ currentUser }) {
         ventasFiltradas.forEach(v => {
           if (v.anulado || v.estadoPedido === 'Cancelado') return;
           if (v.metodoPago === 'Consumo') {
-            totalConsumoPlanilla += (v.descuentoAplicado || v.total || 0);
+            totalConsumoPlanilla += (parseFloat(v.descuentoAplicado || v.total) || 0);
           } else {
             const splits = v.creditoSplit || parsearCreditoSplit(v.ofertaDescripcion, v.clienteCreditoId, (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0)));
             if (splits.length > 0) {
@@ -4849,7 +4850,7 @@ export default function CajaPage({ currentUser }) {
                 }
               });
             } else if (v.metodoPago === 'Crédito') {
-              totalConsumoClientes += (v.total || 0);
+              totalConsumoClientes += (parseFloat(v.total) || 0);
             } else if (parseFloat(v.montoCredito || 0) > 0) {
               totalConsumoClientes += parseFloat(v.montoCredito);
             }
@@ -4864,7 +4865,7 @@ export default function CajaPage({ currentUser }) {
         const egresosEfectivo = retirosCaja;
 
         // Total Efectivo Esperado en Gaveta = Fondo Inicial + (Ventas Efec + Abonos Efec) - Salidas de Caja
-        const totalEfectivoEsperado = Math.max(0, fondoInicialTurno + totalEfectivo - egresosEfectivo);
+        const totalEfectivoEsperado = Math.round((fondoInicialTurno + totalEfectivo - egresosEfectivo) * 100) / 100;
 
         // Total Caja = ingresos reales cobrados en caja (efectivo neto + tarjeta + yape)
         const totalCalculado = totalEfectivoEsperado + totalTarjeta + totalYape;
@@ -5138,7 +5139,7 @@ export default function CajaPage({ currentUser }) {
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">S/</span>
                       <input
                         type="number"
-                        step="0.10"
+                        step="any"
                         min="0"
                         placeholder="0.00"
                         value={efectivoFisicoContado}
@@ -5328,7 +5329,7 @@ export default function CajaPage({ currentUser }) {
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-slate-400 text-base">S/</span>
                   <input
                     type="number"
-                    step="0.50"
+                    step="any"
                     min="0"
                     placeholder="0.00"
                     value={montoInicialInput}
@@ -5430,8 +5431,8 @@ export default function CajaPage({ currentUser }) {
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-slate-400 text-base">S/</span>
                   <input
                     type="number"
-                    step="0.50"
-                    min="0.50"
+                    step="any"
+                    min="0.01"
                     required
                     autoFocus
                     placeholder="0.00"
@@ -6031,7 +6032,7 @@ export default function CajaPage({ currentUser }) {
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Costo Delivery (S/)</label>
                       <input
                         type="number"
-                        step="0.1"
+                        step="any"
                         value={cambioMontoDelivery}
                         onChange={e => setCambioMontoDelivery(e.target.value)}
                         placeholder="Ej. 5.00"
@@ -6054,7 +6055,7 @@ export default function CajaPage({ currentUser }) {
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Paga Con (S/)</label>
                       <input
                         type="number"
-                        step="0.1"
+                        step="any"
                         value={cambioMontoConCuanto}
                         onChange={e => setCambioMontoConCuanto(e.target.value)}
                         placeholder="Ej. 100.00"

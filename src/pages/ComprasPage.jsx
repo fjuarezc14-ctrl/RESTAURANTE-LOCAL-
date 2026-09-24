@@ -243,7 +243,7 @@ export default function ComprasPage() {
       let igv = parseFloat(formCompra.igv) || 0;
       
       if (formCompra.tipoDocumento === 'Factura' && base === tot) {
-        base = parseFloat((tot / 1.105).toFixed(2));
+        base = parseFloat((tot / 1.18).toFixed(2));
         igv = parseFloat((tot - base).toFixed(2));
       }
 
@@ -326,7 +326,7 @@ export default function ComprasPage() {
       let igv = parseFloat(compraEditando.igv) || 0;
 
       if (compraEditando.tipoDocumento === 'Factura' && base === tot) {
-        base = parseFloat((tot / 1.105).toFixed(2));
+        base = parseFloat((tot / 1.18).toFixed(2));
         igv = parseFloat((tot - base).toFixed(2));
       }
 
@@ -370,7 +370,7 @@ export default function ComprasPage() {
   const calcularPorTotal = (valTotal, isEditing = false) => {
     const total = parseFloat(valTotal);
     if (isNaN(total)) return;
-    const base = parseFloat((total / 1.105).toFixed(2));
+    const base = parseFloat((total / 1.18).toFixed(2));
     const igv = parseFloat((total - base).toFixed(2));
     if (isEditing) {
       setCompraEditando(f => ({ ...f, total: String(total), baseImponible: String(base), igv: String(igv) }));
@@ -1571,7 +1571,7 @@ export default function ComprasPage() {
                       <span className="font-mono font-bold">S/</span>
                       <input
                         type="number"
-                        step="0.10"
+                        step="any"
                         value={cajaInicialEfec}
                         onChange={e => setCajaInicialEfec(e.target.value)}
                         placeholder="Efectivo"
@@ -1581,7 +1581,7 @@ export default function ComprasPage() {
                       <span className="text-slate-500 font-bold">+</span>
                       <input
                         type="number"
-                        step="0.10"
+                        step="any"
                         value={cajaInicialYape}
                         onChange={e => setCajaInicialYape(e.target.value)}
                         placeholder="Yape"
