@@ -1314,6 +1314,7 @@ app.get('/api/pedidos/cocina', async (req, res) => {
       hora: p.createdAt.toLocaleTimeString('es-PE', {
         hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima',
       }),
+      createdAt: p.createdAt.toISOString(),
       // Filtrar bebidas: cocina solo ve lo que prepara
       items: p.items
         .filter(i => !i.historial && !BARRA_CATEGORIAS.includes(i.producto?.categoria))
@@ -1370,6 +1371,7 @@ app.get('/api/pedidos/barra', async (req, res) => {
       hora: p.createdAt.toLocaleTimeString('es-PE', {
         hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima',
       }),
+      createdAt: p.createdAt.toISOString(),
       // Barra solo ve items de categorías de barra que no se han despachado (historial === false)
       items: p.items
         .filter(i => !i.historial && BARRA_CATEGORIAS.includes(i.producto?.categoria))
