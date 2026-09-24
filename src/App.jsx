@@ -330,7 +330,7 @@ const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
     { path: '/barra', icon: GlassWater, label: 'Barra / Bebidas', permission: 'Barra' },
     { path: '/caja', icon: Calculator, label: 'Caja / Cobros', permission: 'Caja' },
     { path: '/creditos', icon: Wallet, label: 'Créditos / Clientes', permission: 'Caja' },
-    { path: '/compras', icon: BookOpen, label: 'Compras / Gastos', permission: 'Caja' },
+    { path: '/compras', icon: BookOpen, label: 'Compras / Gastos', permission: 'Compras' },
     { path: '/reportes', icon: PieChart, label: 'Reportes (Contador)', permission: 'Reportes' },
     { path: '/carta', icon: BookOpen, label: 'Carta e Inventario', permission: 'Dashboard' },
   ];
@@ -579,7 +579,7 @@ function App() {
         <Route path="/barra" element={<Layout title="Monitor de Barra" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Barra" currentUser={currentUser}><BarraPage /></ProtectedRoute></Layout>} />
         <Route path="/caja" element={<Layout title="Punto de Cobro" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Caja" currentUser={currentUser}><CajaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
         <Route path="/creditos" element={<Layout title="Módulo de Créditos" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Caja" currentUser={currentUser}><CreditosPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-        <Route path="/compras" element={<Layout title="Registro de Compras" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Caja" currentUser={currentUser}><ComprasPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+        <Route path="/compras" element={<Layout title="Registro de Compras" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Compras" currentUser={currentUser}><ComprasPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
         <Route path="/reportes" element={<Layout title="Panel Contable" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Reportes" currentUser={currentUser}><ReportesPage /></ProtectedRoute></Layout>} />
         <Route path="/carta" element={<Layout title="Carta e Inventario" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><CartaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
         <Route path="/usuarios" element={<Layout title="Personal y Accesos" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Usuarios" currentUser={currentUser}><UsuariosPage /></ProtectedRoute></Layout>} />

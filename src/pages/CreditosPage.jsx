@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, Plus, X, Search, Wallet, Phone, MapPin, UserRound, Briefcase, ArrowDownCircle, Eye, Pencil, Trash2, CreditCard, Banknote, Smartphone, CheckCircle } from 'lucide-react';
+import { Users, Plus, X, Search, Wallet, Phone, MapPin, UserRound, Briefcase, ArrowDownCircle, Eye, Pencil, Trash2, CreditCard, Banknote, Smartphone, CheckCircle, ChevronLeft, ChevronRight, Contact, Clock, ShoppingBag } from 'lucide-react';
 import { api } from '../api';
 
 const METODOS_PAGO = ['Efectivo', 'Tarjeta', 'Yape', 'Mixto'];
@@ -23,6 +23,14 @@ export default function CreditosPage({ currentUser }) {
     monto: '', metodoPago: 'Efectivo', montoEfectivo: '', montoTarjeta: '', montoYape: '', nota: '',
   });
 
+  // Directorio General Paginado
+  const [directorio, setDirectorio] = useState([]);
+  const [totalDirectorio, setTotalDirectorio] = useState(0);
+  const [pageDirectorio, setPageDirectorio] = useState(1);
+  const [totalPagesDirectorio, setTotalPagesDirectorio] = useState(1);
+  const [searchDirectorio, setSearchDirectorio] = useState('');
+  const [loadingDirectorio, setLoadingDirectorio] = useState(false);
+
   const showToast = (msg, tipo = 'ok') => {
     setToast({ msg, tipo });
     setTimeout(() => setToast(null), 4000);
@@ -40,7 +48,31 @@ export default function CreditosPage({ currentUser }) {
     }
   }, []);
 
+  const fetchDirectorio = useCallback(async (page = 1, query = '') => {
+    setLoadingDirectorio(true);
+    try {
+      const res = await api.getDirectorioClientes(page, 15, query);
+      if (res && res.clientes) {
+        setDirectorio(res.clientes);
+        setTotalDirectorio(res.total || 0);
+        setPageDirectorio(res.page || 1);
+        setTotalPagesDirectorio(res.totalPages || 1);
+      }
+    } catch (e) {
+      console.error('Error cargando directorio de clientes:', e);
+    } finally {
+      setLoadingDirectorio(false);
+    }
+  }, []);
+
   useEffect(() => { fetchTodo(); }, [fetchTodo]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchDirectorio(pageDirectorio, searchDirectorio);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [fetchDirectorio, pageDirectorio, searchDirectorio]);
 
   const filtered = clientes.filter(c =>
     (c.nombre || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -78,7 +110,7 @@ export default function CreditosPage({ currentUser }) {
         showToast('✅ Cliente creado correctamente.');
       }
       setModalCliente(false);
-      await fetchTodo();
+      await Promise.all([fetchTodo(), fetchDirectorio(pageDirectorio, searchDirectorio)]);
     } catch (err) {
       showToast('❌ Error: ' + err.message, 'error');
     }
@@ -89,7 +121,7 @@ export default function CreditosPage({ currentUser }) {
     try {
       await api.eliminarCliente(id);
       showToast('✅ Cliente eliminado.');
-      await fetchTodo();
+      await Promise.all([fetchTodo(), fetchDirectorio(pageDirectorio, searchDirectorio)]);
     } catch (err) {
       showToast('❌ Error: ' + err.message, 'error');
     }
@@ -223,6 +255,174 @@ export default function CreditosPage({ currentUser }) {
           ))}
         </div>
       )}
+
+      {/* SECCIÓN INFERIOR: DIRECTORIO GENERAL DE CLIENTES (CONSUMO Y CRÉDITO) */}
+      <div className="mt-12 pt-8 border-t border-slate-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-lg sm:text-xl font-black text-slate-800 flex items-center gap-2">
+              <Contact className="w-5 h-5 text-indigo-600 shrink-0" /> Directorio General de Clientes
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Registro histórico y métricas de consumo de clientes (Salón, Delivery y Mostrador)
+            </p>
+          </div>
+          <div className="w-full sm:w-80 relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={searchDirectorio}
+              onChange={e => {
+                setSearchDirectorio(e.target.value);
+                setPageDirectorio(1);
+              }}
+              placeholder="Buscar por nombre, DNI/RUC o teléfono..."
+              className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-xs font-medium"
+            />
+          </div>
+        </div>
+
+        {/* TABLA PAGINADA */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-100 uppercase text-[10px] font-black text-slate-400 tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Cliente / Razón Social</th>
+                  <th className="py-3 px-4">Documento</th>
+                  <th className="py-3 px-4">Teléfono & Dirección</th>
+                  <th className="py-3 px-4 text-center">Frecuencia</th>
+                  <th className="py-3 px-4 text-right">Total Consumido</th>
+                  <th className="py-3 px-4 text-center">Última Visita</th>
+                  <th className="py-3 px-4 text-center">Tipo</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loadingDirectorio ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                      <div className="w-7 h-7 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                      <p className="font-bold text-xs">Cargando directorio de clientes...</p>
+                    </td>
+                  </tr>
+                ) : directorio.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                      <Contact className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                      <p className="font-bold text-sm text-slate-600">No se encontraron clientes</p>
+                      <p className="text-xs">No hay coincidencias con la búsqueda realizada</p>
+                    </td>
+                  </tr>
+                ) : (
+                  directorio.map(c => (
+                    <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-4 font-bold text-slate-800">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-white text-xs shrink-0 ${
+                            c.esTrabajador ? 'bg-violet-500' : (c.tieneCredito ? 'bg-amber-500' : 'bg-slate-600')
+                          }`}>
+                            {c.nombre?.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <span className="block leading-tight">{c.nombre}</span>
+                            {c.esTrabajador && (
+                              <span className="text-[9px] text-violet-600 font-bold">Personal interno</span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">
+                        {c.numDoc ? (
+                          <span className="inline-flex items-center gap-1 font-mono text-[11px] bg-slate-100 px-2 py-0.5 rounded text-slate-700">
+                            <span className="text-[9px] font-bold text-slate-400">{c.tipoDoc}:</span> {c.numDoc}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic">Sin doc.</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600">
+                        <div className="flex flex-col gap-0.5">
+                          {c.telefono ? (
+                            <span className="flex items-center gap-1 font-medium text-slate-700">
+                              <Phone className="w-3 h-3 text-slate-400" /> {c.telefono}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[10px]">Sin teléfono</span>
+                          )}
+                          {c.direccion && (
+                            <span className="flex items-center gap-1 text-[10px] text-slate-400 truncate max-w-[180px]">
+                              <MapPin className="w-2.5 h-2.5 shrink-0" /> {c.direccion}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 rounded-full font-bold text-[11px]">
+                          <ShoppingBag className="w-3 h-3 text-slate-400" /> {c.visitas || 0} {c.visitas === 1 ? 'pedido' : 'pedidos'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <span className="font-mono font-black text-slate-800 text-sm">
+                          S/ {(c.totalConsumido || 0).toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center text-slate-500 font-medium">
+                        {c.ultimaVisita ? (
+                          <span className="inline-flex items-center gap-1 text-[11px]">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            {new Date(c.ultimaVisita).toLocaleDateString('es-PE')}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[10px]">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {c.tieneCredito ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            <Wallet className="w-3 h-3" /> Con Crédito
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                            Consumo
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* BARRA DE PAGINACIÓN */}
+          <div className="bg-slate-50 border-t border-slate-100 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+            <div>
+              <span>Mostrando página </span>
+              <strong className="text-slate-800 font-black">{pageDirectorio}</strong>
+              <span> de </span>
+              <strong className="text-slate-800 font-black">{totalPagesDirectorio}</strong>
+              <span className="text-slate-400 ml-1">({totalDirectorio} clientes registrados en total)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPageDirectorio(p => Math.max(1, p - 1))}
+                disabled={pageDirectorio <= 1 || loadingDirectorio}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Anterior
+              </button>
+              <button
+                type="button"
+                onClick={() => setPageDirectorio(p => Math.min(totalPagesDirectorio, p + 1))}
+                disabled={pageDirectorio >= totalPagesDirectorio || loadingDirectorio}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Siguiente <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* MODAL CLIENTE */}
       {modalCliente && (

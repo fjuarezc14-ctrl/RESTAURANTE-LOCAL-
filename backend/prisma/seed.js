@@ -45,7 +45,7 @@ async function main() {
       nombre: 'María',
       rol: 'Cajero',
       pin: '2222',
-      permisos: ['Salon', 'Caja', 'Reportes'],
+      permisos: ['Salon', 'Caja'],
     },
   });
 

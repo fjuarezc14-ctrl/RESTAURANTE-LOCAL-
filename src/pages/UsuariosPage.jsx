@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, X, Trash2, Edit, Eye, EyeOff, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, UsersRound, Save, Salad } from 'lucide-react';
+import { UserPlus, X, Trash2, Edit, Eye, EyeOff, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, UsersRound, Save, Salad, BookOpen } from 'lucide-react';
 import { api } from '../api';
 
 export default function UsuariosPage() {
@@ -28,10 +28,10 @@ export default function UsuariosPage() {
 
   const handleRolChange = (rol) => {
     let permisos = [];
-    if (rol === 'Administrador') permisos = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Reportes', 'Usuarios'];
+    if (rol === 'Administrador') permisos = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Compras', 'Reportes', 'Usuarios'];
     else if (rol === 'Mozo') permisos = ['Salon', 'Barra'];
     else if (rol === 'Cocinero') permisos = ['Cocina'];
-    else if (rol === 'Cajero') permisos = ['Dashboard', 'Salon', 'Caja'];
+    else if (rol === 'Cajero') permisos = ['Salon', 'Caja'];
     else if (rol === 'Contador') permisos = ['Dashboard', 'Reportes'];
     setNewUser({ ...newUser, rol, permisos });
   };
@@ -105,6 +105,7 @@ export default function UsuariosPage() {
     { id: 'Cocina', icon: ChefHat, label: 'Cocina/Pedidos' },
     { id: 'Barra', icon: GlassWater, label: 'Barra/Bebidas' },
     { id: 'Caja', icon: Calculator, label: 'Caja/Cobros' },
+    { id: 'Compras', icon: BookOpen, label: 'Compras/Gastos' },
     { id: 'Reportes', icon: PieChart, label: 'Reportes' },
     { id: 'Usuarios', icon: UsersRound, label: 'Usuarios' },
   ];

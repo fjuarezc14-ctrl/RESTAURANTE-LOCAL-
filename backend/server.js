@@ -588,11 +588,11 @@ app.get('/api/red/direcciones', (req, res) => {
 // CLIENTES CON CRÉDITO (MÓDULO DE CRÉDITOS)
 // ============================================================
 
-// GET /api/clientes → Listar todos los clientes con crédito
+// GET /api/clientes → Listar clientes autorizados con crédito activo
 app.get('/api/clientes', async (req, res) => {
   try {
     const clientes = await prisma.cliente.findMany({
-      where: { activo: true },
+      where: { activo: true, tieneCredito: true },
       orderBy: { nombre: 'asc' },
       include: { AbonosCredito: { orderBy: { creadoEn: 'desc' } } },
     });
@@ -635,6 +635,7 @@ app.get('/api/clientes', async (req, res) => {
         telefono: c.telefono,
         direccion: c.direccion,
         esTrabajador: c.esTrabajador,
+        tieneCredito: c.tieneCredito,
         usuarioId: c.usuarioId,
         activo: c.activo,
         totalAbonado,
@@ -650,10 +651,113 @@ app.get('/api/clientes', async (req, res) => {
   }
 });
 
+// GET /api/clientes/directorio → Directorio general de clientes de consumo (paginado + buscador)
+app.get('/api/clientes/directorio', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 15));
+    const skip = (page - 1) * limit;
+    const search = String(req.query.search || '').trim();
+
+    const whereClause = {
+      activo: true,
+      ...(search ? {
+        OR: [
+          { nombre: { contains: search, mode: 'insensitive' } },
+          { numDoc: { contains: search, mode: 'insensitive' } },
+          { telefono: { contains: search, mode: 'insensitive' } },
+        ]
+      } : {})
+    };
+
+    const [total, clientes] = await Promise.all([
+      prisma.cliente.count({ where: whereClause }),
+      prisma.cliente.findMany({
+        where: whereClause,
+        orderBy: { creadoEn: 'desc' },
+        skip,
+        take: limit,
+      })
+    ]);
+
+    const docs = clientes.map(c => c.numDoc).filter(Boolean);
+    const ids = clientes.map(c => c.id);
+
+    // Calcular métricas históricas de consumo
+    const ventas = await prisma.venta.findMany({
+      where: {
+        OR: [
+          { clienteCreditoId: { in: ids } },
+          ...(docs.length > 0 ? [{ numDocumento: { in: docs } }] : []),
+        ],
+        anulado: false,
+      },
+      select: {
+        total: true,
+        clienteCreditoId: true,
+        numDocumento: true,
+        createdAt: true,
+      }
+    });
+
+    const metricas = {};
+    for (const v of ventas) {
+      if (v.clienteCreditoId) {
+        if (!metricas[v.clienteCreditoId]) metricas[v.clienteCreditoId] = { total: 0, visitas: 0, ultimaVisita: null };
+        metricas[v.clienteCreditoId].total += Number(v.total) || 0;
+        metricas[v.clienteCreditoId].visitas += 1;
+        if (!metricas[v.clienteCreditoId].ultimaVisita || new Date(v.createdAt) > new Date(metricas[v.clienteCreditoId].ultimaVisita)) {
+          metricas[v.clienteCreditoId].ultimaVisita = v.createdAt;
+        }
+      }
+      if (v.numDocumento) {
+        const cMatch = clientes.find(c => c.numDoc === v.numDocumento);
+        if (cMatch && cMatch.id !== v.clienteCreditoId) {
+          if (!metricas[cMatch.id]) metricas[cMatch.id] = { total: 0, visitas: 0, ultimaVisita: null };
+          metricas[cMatch.id].total += Number(v.total) || 0;
+          metricas[cMatch.id].visitas += 1;
+          if (!metricas[cMatch.id].ultimaVisita || new Date(v.createdAt) > new Date(metricas[cMatch.id].ultimaVisita)) {
+            metricas[cMatch.id].ultimaVisita = v.createdAt;
+          }
+        }
+      }
+    }
+
+    const items = clientes.map(c => {
+      const m = metricas[c.id] || { total: 0, visitas: 0, ultimaVisita: c.creadoEn };
+      return {
+        id: c.id,
+        nombre: c.nombre,
+        tipoDoc: c.tipoDoc,
+        numDoc: c.numDoc,
+        telefono: c.telefono,
+        direccion: c.direccion,
+        esTrabajador: c.esTrabajador,
+        tieneCredito: c.tieneCredito,
+        totalConsumido: m.total,
+        visitas: m.visitas,
+        ultimaVisita: m.ultimaVisita || c.creadoEn,
+        creadoEn: c.creadoEn,
+      };
+    });
+
+    res.json({
+      ok: true,
+      clientes: items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/clientes → Crear un nuevo cliente
 app.post('/api/clientes', async (req, res) => {
   try {
-    const { nombre, tipoDoc, numDoc, telefono, direccion, esTrabajador, usuarioId } = req.body;
+    const { nombre, tipoDoc, numDoc, telefono, direccion, esTrabajador, usuarioId, tieneCredito } = req.body;
     if (!nombre) {
       return res.status(400).json({ error: 'El nombre del cliente es obligatorio.' });
     }
@@ -665,6 +769,7 @@ app.post('/api/clientes', async (req, res) => {
         telefono: telefono ? String(telefono) : null,
         direccion: direccion ? String(direccion) : null,
         esTrabajador: Boolean(esTrabajador),
+        tieneCredito: tieneCredito !== undefined ? Boolean(tieneCredito) : true,
         usuarioId: usuarioId ? parseInt(usuarioId) : null,
       },
     });
@@ -3319,6 +3424,33 @@ app.post('/api/ventas', async (req, res) => {
         },
       });
 
+      // Auto-registro silencioso en Directorio de Clientes (Consumo, sin crédito)
+      if (numDocumento && String(numDocumento).trim().length >= 8 && !['S/D', '00000000', '0'].includes(String(numDocumento).trim())) {
+        const cleanDoc = String(numDocumento).trim();
+        const cleanNom = String(nombreCliente || '').trim();
+        if (cleanNom && !['PÚBLICO GENERAL', 'CONSUMIDOR FINAL', 'PEDIDOS YA', 'CONSUMO PERSONAL / CORTESÍA'].includes(cleanNom.toUpperCase())) {
+          const cExistente = await tx.cliente.findFirst({ where: { numDoc: cleanDoc } });
+          if (!cExistente) {
+            await tx.cliente.create({
+              data: {
+                nombre: cleanNom,
+                tipoDoc: cleanDoc.length === 11 ? 'RUC' : 'DNI',
+                numDoc: cleanDoc,
+                direccion: clienteDireccion ? String(clienteDireccion).trim() : null,
+                tieneCredito: false, // Cliente regular de consumo
+                esTrabajador: false,
+                activo: true,
+              }
+            }).catch(() => null);
+          } else if (!cExistente.direccion && clienteDireccion) {
+            await tx.cliente.update({
+              where: { id: cExistente.id },
+              data: { direccion: String(clienteDireccion).trim() }
+            }).catch(() => null);
+          }
+        }
+      }
+
       // Marcar TODOS los pedidos de la mesa como Cobrado
       await tx.pedido.updateMany({
         where: { id: { in: idsAPagar } },
@@ -3613,7 +3745,7 @@ app.get('/api/caja/estado', async (req, res) => {
 
     // Si hay un turno abierto, calcular métricas en vivo desde fechaApertura
     const desde = turnoAbierto.fechaApertura;
-    const [ventas, compras, abonos] = await Promise.all([
+    const [ventas, movimientos, abonos] = await Promise.all([
       prisma.venta.findMany({
         where: {
           createdAt: { gte: desde },
@@ -3628,12 +3760,14 @@ app.get('/api/caja/estado', async (req, res) => {
           metodoPago: true,
         },
       }),
-      prisma.compra.findMany({
+      prisma.movimientoCaja.findMany({
         where: {
-          creadoEn: { gte: desde },
-          metodoPago: 'Efectivo',
+          OR: [
+            { turnoId: turnoAbierto.id },
+            { creadoEn: { gte: desde } },
+          ],
         },
-        select: { total: true },
+        orderBy: { creadoEn: 'desc' },
       }),
       prisma.abonoCredito.findMany({
         where: {
@@ -3666,11 +3800,12 @@ app.get('/api/caja/estado', async (req, res) => {
       if (v.metodoPago === 'Consumo' || v.metodoPago === 'Cortesía') ventasConsumo += Number(v.total) || 0;
     }
 
-    const egresosEfectivo = compras.reduce((s, c) => s + (Number(c.total) || 0), 0);
+    const retirosCaja = movimientos.filter(m => m.tipo === 'RETIRO').reduce((s, m) => s + (Number(m.monto) || 0), 0);
+    const ingresosExtra = movimientos.filter(m => m.tipo === 'INGRESO').reduce((s, m) => s + (Number(m.monto) || 0), 0);
     const abonosEfectivo = abonos.reduce((s, a) => s + (Number(a.montoEfectivo) || (a.metodoPago === 'Efectivo' ? Number(a.monto) : 0)), 0);
 
     const fondoInicial = Number(turnoAbierto.montoInicial) || 0;
-    const efectivoEsperadoEnGaveta = fondoInicial + ventasEfectivo + abonosEfectivo - egresosEfectivo;
+    const efectivoEsperadoEnGaveta = fondoInicial + ventasEfectivo + abonosEfectivo + ingresosExtra - retirosCaja;
 
     res.json({
       ok: true,
@@ -3688,11 +3823,76 @@ app.get('/api/caja/estado', async (req, res) => {
         ventasConsumo,
         totalVentas,
         cantidadVentas: ventas.length,
-        egresosEfectivo,
+        egresosEfectivo: retirosCaja,
+        retirosCaja,
+        ingresosExtra,
+        movimientos,
         abonosEfectivo,
         efectivoEsperadoEnGaveta,
       },
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/caja/movimientos → Registrar salida (retiro de emergencia) o ingreso extra en la gaveta
+app.post('/api/caja/movimientos', async (req, res) => {
+  try {
+    const { monto, motivo, tipo = 'RETIRO', cajeroNombre } = req.body;
+    const parsedMonto = parseFloat(monto || 0);
+    if (isNaN(parsedMonto) || parsedMonto <= 0) {
+      return res.status(400).json({ error: 'El monto debe ser un número válido mayor a 0.' });
+    }
+    if (!motivo || !String(motivo).trim()) {
+      return res.status(400).json({ error: 'Debe especificar el motivo del retiro o salida de caja.' });
+    }
+
+    const turnoAbierto = await prisma.cierreCaja.findFirst({
+      where: { estado: 'ABIERTO' },
+      orderBy: { fechaApertura: 'desc' },
+    });
+    if (!turnoAbierto) {
+      return res.status(400).json({ error: 'No se pueden registrar salidas de dinero con la caja cerrada.' });
+    }
+
+    const mov = await prisma.movimientoCaja.create({
+      data: {
+        turnoId: turnoAbierto.id,
+        tipo: tipo === 'INGRESO' ? 'INGRESO' : 'RETIRO',
+        monto: parsedMonto,
+        motivo: String(motivo).trim(),
+        cajeroNombre: cajeroNombre ? String(cajeroNombre).trim() : turnoAbierto.cajeroNombre,
+      },
+    });
+
+    console.log(`💸 Movimiento de Caja registrado [${mov.tipo}]: S/ ${mov.monto.toFixed(2)} - "${mov.motivo}" por ${mov.cajeroNombre}`);
+    res.json({ ok: true, movimiento: mov });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/caja/movimientos → Listar salidas y movimientos del turno activo
+app.get('/api/caja/movimientos', async (req, res) => {
+  try {
+    const turnoAbierto = await prisma.cierreCaja.findFirst({
+      where: { estado: 'ABIERTO' },
+      orderBy: { fechaApertura: 'desc' },
+    });
+    if (!turnoAbierto) {
+      return res.json({ ok: true, movimientos: [] });
+    }
+    const movimientos = await prisma.movimientoCaja.findMany({
+      where: {
+        OR: [
+          { turnoId: turnoAbierto.id },
+          { creadoEn: { gte: turnoAbierto.fechaApertura } },
+        ],
+      },
+      orderBy: { creadoEn: 'desc' },
+    });
+    res.json({ ok: true, movimientos });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

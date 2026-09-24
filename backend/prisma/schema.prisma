@@ -34,6 +34,7 @@ model Cliente {
   telefono    String?
   direccion   String?
   esTrabajador Boolean @default(false) // true si es personal interno
+  tieneCredito Boolean @default(true)  // true: cuenta corriente de crédito/fiado, false: cliente de consumo general
   usuarioId   Int?     // Si esTrabajador, referencia al Usuario
   activo      Boolean  @default(true)
   creadoEn    DateTime @default(now())
@@ -271,3 +272,19 @@ model CierreCaja {
   @@index([fechaCierre])
   @@index([estado])
 }
+
+// ============================================================
+// MOVIMIENTOS Y SALIDAS DE CAJA (EMERGENCIAS / CAJA CHICA)
+// ============================================================
+model MovimientoCaja {
+  id           Int        @id @default(autoincrement())
+  turnoId      Int?       // Vinculado al turno de CierreCaja si aplica
+  tipo         String     @default("RETIRO") // "RETIRO" (salida de efectivo) | "INGRESO" (entrada de sencillo extra)
+  monto        Float
+  motivo       String     // Descripción / concepto del retiro o ingreso
+  cajeroNombre String     // Cajero que registró el movimiento
+  creadoEn     DateTime   @default(now())
+
+  @@index([turnoId])
+  @@index([creadoEn])
+}

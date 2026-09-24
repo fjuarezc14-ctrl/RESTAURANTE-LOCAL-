@@ -172,12 +172,18 @@ export const api = {
     method: 'POST', body: JSON.stringify(body)
   }),
   getHistorialCierres: (limit = 30) => apiRequest(`/api/caja/cierres?limit=${limit}`),
+  registrarMovimientoCaja: (body) => apiRequest('/api/caja/movimientos', {
+    method: 'POST', body: JSON.stringify(body)
+  }),
+  getMovimientosCaja: () => apiRequest('/api/caja/movimientos'),
   cambiarMetodoPago: (ventaId, metodoPago, pin, montos = {}) => apiRequest(`/api/ventas/${ventaId}/metodo-pago`, {
     method: 'PATCH', body: JSON.stringify({ metodoPago, pin, ...montos })
   }),
   cambiarTipoEntrega: (ventaId, body) => apiRequest(`/api/ventas/${ventaId}/tipo-entrega`, {
     method: 'PATCH', body: JSON.stringify(body)
   }),
+  getDirectorioClientes: (page = 1, limit = 15, search = '') => 
+    apiRequest(`/api/clientes/directorio?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`),
 
   // Compras
   getCompras: (desde, hasta, extraParams = {}) => {

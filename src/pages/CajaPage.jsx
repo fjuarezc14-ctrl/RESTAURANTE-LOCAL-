@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Receipt, X, Banknote, Search, CheckCircle, Clock, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, Flame, FileText, History, ExternalLink, ChevronDown, ChevronRight, Pencil, ShoppingBag, UtensilsCrossed, Phone, MapPin, Smartphone, Eye, EyeOff, Bike, Unlock } from 'lucide-react';
+import { Receipt, X, Banknote, Search, CheckCircle, Clock, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, Flame, FileText, History, ExternalLink, ChevronDown, ChevronRight, Pencil, ShoppingBag, UtensilsCrossed, Phone, MapPin, Smartphone, Eye, EyeOff, Bike, Unlock, ArrowUpRight } from 'lucide-react';
 
 import { api } from '../api';
 import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
@@ -416,6 +416,13 @@ export default function CajaPage({ currentUser }) {
   const [guardandoApertura, setGuardandoApertura] = useState(false);
   const [errorApertura, setErrorApertura] = useState('');
 
+  // Salidas / Retiros de Efectivo de Caja en Turno
+  const [modalSalidaCajaOpen, setModalSalidaCajaOpen] = useState(false);
+  const [montoSalidaCaja, setMontoSalidaCaja] = useState('');
+  const [motivoSalidaCaja, setMotivoSalidaCaja] = useState('');
+  const [guardandoSalidaCaja, setGuardandoSalidaCaja] = useState(false);
+  const [errorSalidaCaja, setErrorSalidaCaja] = useState('');
+
   const [ultimoCierre, setUltimoCierre] = useState(() => {
     const stored = localStorage.getItem('ultimoCierre');
     if (stored) {
@@ -691,6 +698,43 @@ export default function CajaPage({ currentUser }) {
       setErrorApertura('Error al abrir caja: ' + err.message);
     } finally {
       setGuardandoApertura(false);
+    }
+  };
+
+  const handleRegistrarSalidaCaja = async (e) => {
+    e?.preventDefault();
+    setErrorSalidaCaja('');
+    const monto = parseFloat(montoSalidaCaja || 0);
+    if (isNaN(monto) || monto <= 0) {
+      setErrorSalidaCaja('Ingresa un monto válido mayor a S/ 0.00');
+      return;
+    }
+    if (!motivoSalidaCaja.trim()) {
+      setErrorSalidaCaja('Ingresa el motivo del retiro o salida de dinero.');
+      return;
+    }
+
+    setGuardandoSalidaCaja(true);
+    try {
+      const res = await api.registrarMovimientoCaja({
+        monto,
+        motivo: motivoSalidaCaja.trim(),
+        tipo: 'RETIRO',
+        cajeroNombre: cajeroNombre || currentUser?.nombre || 'Cajero'
+      });
+      if (res.error) {
+        setErrorSalidaCaja(res.error);
+        return;
+      }
+      setModalSalidaCajaOpen(false);
+      setMontoSalidaCaja('');
+      setMotivoSalidaCaja('');
+      await fetchCajaData();
+      addToast(`💸 Salida de S/ ${monto.toFixed(2)} registrada correctamente de caja`, 'success');
+    } catch (err) {
+      setErrorSalidaCaja('Error al registrar salida: ' + err.message);
+    } finally {
+      setGuardandoSalidaCaja(false);
     }
   };
 
@@ -2462,6 +2506,22 @@ export default function CajaPage({ currentUser }) {
             >
               <History className="w-4 h-4" /> <span className="hidden sm:inline">Cierres</span>
             </button>
+            {cajaEstado.abierto && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMontoSalidaCaja('');
+                  setMotivoSalidaCaja('');
+                  setErrorSalidaCaja('');
+                  setModalSalidaCajaOpen(true);
+                }}
+                className="h-10 px-3.5 inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 text-sm font-bold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition-colors shadow-2xs active:scale-[0.98]"
+                title="Registrar salida o retiro de dinero de la gaveta física"
+              >
+                <ArrowUpRight className="w-4 h-4 text-rose-600" />
+                <span>Salida de Caja</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setCierreModalOpen(true)}
@@ -4751,15 +4811,11 @@ export default function CajaPage({ currentUser }) {
         // Fondo inicial registrado en la apertura del turno actual
         const fondoInicialTurno = Number(cajaEstado.turno?.montoInicial || 0);
 
-        // Egresos en efectivo durante el turno
-        const egresosEfectivo = (comprasTurno || [])
-          .filter(c => {
-            const fechaValida = !ultimoCierre || new Date(c.fecha || c.creadoEn) > new Date(ultimoCierre);
-            return fechaValida && c.metodoPago === 'Efectivo';
-          })
-          .reduce((s, c) => s + parseFloat(c.total || 0), 0);
+        // Salidas / retiros de efectivo de caja en turno (compras de almacén no restan de la gaveta diaria)
+        const retirosCaja = Number(cajaEstado.resumenEnVivo?.retirosCaja || 0);
+        const egresosEfectivo = retirosCaja;
 
-        // Total Efectivo Esperado en Gaveta = Fondo Inicial + (Ventas Efec + Abonos Efec) - Compras Efec
+        // Total Efectivo Esperado en Gaveta = Fondo Inicial + (Ventas Efec + Abonos Efec) - Salidas de Caja
         const totalEfectivoEsperado = Math.max(0, fondoInicialTurno + totalEfectivo - egresosEfectivo);
 
         // Total Caja = ingresos reales cobrados en caja (efectivo neto + tarjeta + yape)
@@ -4814,7 +4870,7 @@ export default function CajaPage({ currentUser }) {
                   </div>
                   {egresosEfectivo > 0 && (
                     <div className="flex justify-between font-bold text-rose-600">
-                      <span>📉 EGRESOS / COMPRAS:</span>
+                      <span>📉 SALIDAS DE CAJA (EMERGENCIAS):</span>
                       <span className="font-black text-rose-600">- S/ {egresosEfectivo.toFixed(2)}</span>
                     </div>
                   )}
@@ -5160,6 +5216,109 @@ export default function CajaPage({ currentUser }) {
                   className="w-2/3 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black rounded-xl text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50"
                 >
                   {guardandoApertura ? 'Abriendo...' : 'Confirmar Apertura'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE SALIDA / RETIRO DE EFECTIVO DE CAJA */}
+      {modalSalidaCajaOpen && (
+        <div className="fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col animate-slide-up border border-slate-100">
+            <div className="flex justify-between items-center mb-5 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center font-black shadow-sm">
+                  <ArrowUpRight className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight leading-none">Salida de Caja</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Retiro de efectivo para compras de emergencia</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalSalidaCajaOpen(false)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {errorSalidaCaja && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{errorSalidaCaja}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleRegistrarSalidaCaja} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5 flex justify-between">
+                  <span>Monto a Retirar de Gaveta:</span>
+                  <span className="text-rose-500 font-bold">Resta al arqueo</span>
+                </label>
+                <div className="relative mb-2">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-slate-400 text-base">S/</span>
+                  <input
+                    type="number"
+                    step="0.50"
+                    min="0.50"
+                    required
+                    autoFocus
+                    placeholder="0.00"
+                    value={montoSalidaCaja}
+                    onChange={(e) => setMontoSalidaCaja(e.target.value)}
+                    className="w-full bg-white border-2 border-slate-200 focus:border-rose-500 rounded-xl pl-9 pr-3.5 py-2.5 text-lg font-black text-slate-900 focus:outline-none shadow-inner"
+                  />
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[10, 20, 50, 100].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setMontoSalidaCaja(String(val))}
+                      className={`py-1.5 rounded-lg text-xs font-black transition-all border ${
+                        montoSalidaCaja === String(val)
+                          ? 'bg-rose-500 text-white border-rose-600 shadow-sm'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      S/ {val}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5">
+                  Motivo / Concepto del Retiro:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={motivoSalidaCaja}
+                  onChange={(e) => setMotivoSalidaCaja(e.target.value)}
+                  placeholder="Ej. Compra de hielo, pasaje delivery, gas urgente..."
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setModalSalidaCajaOpen(false)}
+                  className="w-1/3 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-widest transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardandoSalidaCaja}
+                  className="w-2/3 py-3 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-black rounded-xl text-xs uppercase tracking-widest shadow-lg shadow-rose-500/20 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {guardandoSalidaCaja ? 'Registrando...' : 'Confirmar Salida'}
                 </button>
               </div>
             </form>
