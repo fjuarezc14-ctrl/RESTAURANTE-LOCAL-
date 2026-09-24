@@ -3518,29 +3518,40 @@ app.post('/api/ventas', async (req, res) => {
       });
 
       // Auto-registro silencioso en Directorio de Clientes (Consumo, sin crédito)
-      if (numDocumento && String(numDocumento).trim().length >= 8 && !['S/D', '00000000', '0'].includes(String(numDocumento).trim())) {
-        const cleanDoc = String(numDocumento).trim();
-        const cleanNom = String(nombreCliente || '').trim();
-        if (cleanNom && !['PÚBLICO GENERAL', 'CONSUMIDOR FINAL', 'PEDIDOS YA', 'CONSUMO PERSONAL / CORTESÍA'].includes(cleanNom.toUpperCase())) {
-          const cExistente = await tx.cliente.findFirst({ where: { numDoc: cleanDoc } });
-          if (!cExistente) {
-            await tx.cliente.create({
-              data: {
-                nombre: cleanNom,
-                tipoDoc: cleanDoc.length === 11 ? 'RUC' : 'DNI',
-                numDoc: cleanDoc,
-                direccion: clienteDireccion ? String(clienteDireccion).trim() : null,
-                tieneCredito: false, // Cliente regular de consumo
-                esTrabajador: false,
-                activo: true,
-              }
-            }).catch(() => null);
-          } else if (!cExistente.direccion && clienteDireccion) {
-            await tx.cliente.update({
-              where: { id: cExistente.id },
-              data: { direccion: String(clienteDireccion).trim() }
-            }).catch(() => null);
-          }
+      const cleanNom = String(nombreCliente || '').trim();
+      const esNombreGenerico = !cleanNom || ['PÚBLICO GENERAL', 'CONSUMIDOR FINAL', 'PEDIDOS YA', 'CONSUMO PERSONAL / CORTESÍA'].includes(cleanNom.toUpperCase());
+      const cleanDoc = numDocumento && String(numDocumento).trim().length >= 8 && !['S/D', '00000000', '0'].includes(String(numDocumento).trim())
+        ? String(numDocumento).trim()
+        : null;
+
+      if (!esNombreGenerico) {
+        let cExistente = null;
+        if (cleanDoc) {
+          cExistente = await tx.cliente.findFirst({ where: { numDoc: cleanDoc } });
+        }
+        if (!cExistente) {
+          cExistente = await tx.cliente.findFirst({
+            where: { nombre: { equals: cleanNom, mode: 'insensitive' } }
+          });
+        }
+
+        if (!cExistente) {
+          await tx.cliente.create({
+            data: {
+              nombre: cleanNom,
+              tipoDoc: cleanDoc ? (cleanDoc.length === 11 ? 'RUC' : 'DNI') : 'DNI',
+              numDoc: cleanDoc || null,
+              direccion: clienteDireccion ? String(clienteDireccion).trim() : null,
+              tieneCredito: false, // Cliente regular de consumo
+              esTrabajador: false,
+              activo: true,
+            }
+          }).catch(() => null);
+        } else if (!cExistente.direccion && clienteDireccion) {
+          await tx.cliente.update({
+            where: { id: cExistente.id },
+            data: { direccion: String(clienteDireccion).trim() }
+          }).catch(() => null);
         }
       }
 
@@ -3850,7 +3861,10 @@ app.get('/api/caja/estado', async (req, res) => {
           montoEfectivo: true,
           montoTarjeta: true,
           montoYape: true,
+          montoCredito: true,
           metodoPago: true,
+          anulado: true,
+          pedido: { select: { estado: true } }
         },
       }),
       prisma.movimientoCaja.findMany({
@@ -3866,7 +3880,7 @@ app.get('/api/caja/estado', async (req, res) => {
         where: {
           creadoEn: { gte: desde },
         },
-        select: { montoEfectivo: true, monto: true, metodoPago: true },
+        select: { montoEfectivo: true, montoTarjeta: true, montoYape: true, monto: true, metodoPago: true },
       }),
     ]);
 
@@ -3879,13 +3893,7 @@ app.get('/api/caja/estado', async (req, res) => {
 
     for (const v of ventas) {
       totalVentas += Number(v.total) || 0;
-      let efec = Number(v.montoEfectivo) || (v.metodoPago === 'Efectivo' ? v.total : 0);
-      let tarj = Number(v.montoTarjeta) || (v.metodoPago === 'Tarjeta' ? v.total : 0);
-      let yape = Number(v.montoYape) || (v.metodoPago === 'Yape' ? v.total : 0);
-      if (v.metodoPago === 'Mixto' && (efec + tarj + yape) < v.total) {
-        efec += (v.total - (efec + tarj + yape));
-      }
-
+      const { efec, tarj, yape } = obtenerMontosVenta(v);
       ventasEfectivo += efec;
       ventasTarjeta += tarj;
       ventasYape += yape;
@@ -3895,10 +3903,17 @@ app.get('/api/caja/estado', async (req, res) => {
 
     const retirosCaja = movimientos.filter(m => m.tipo === 'RETIRO').reduce((s, m) => s + (Number(m.monto) || 0), 0);
     const ingresosExtra = movimientos.filter(m => m.tipo === 'INGRESO').reduce((s, m) => s + (Number(m.monto) || 0), 0);
+
+    // Sumar abonos a todos los métodos para coincidencia exacta con el arqueo
     const abonosEfectivo = abonos.reduce((s, a) => s + (Number(a.montoEfectivo) || (a.metodoPago === 'Efectivo' ? Number(a.monto) : 0)), 0);
+    const abonosTarjeta = abonos.reduce((s, a) => s + (Number(a.montoTarjeta) || (a.metodoPago === 'Tarjeta' ? Number(a.monto) : 0)), 0);
+    const abonosYape = abonos.reduce((s, a) => s + (Number(a.montoYape) || (a.metodoPago === 'Yape' ? Number(a.monto) : 0)), 0);
+
+    ventasTarjeta += abonosTarjeta;
+    ventasYape += abonosYape;
 
     const fondoInicial = Number(turnoAbierto.montoInicial) || 0;
-    const efectivoEsperadoEnGaveta = fondoInicial + ventasEfectivo + abonosEfectivo + ingresosExtra - retirosCaja;
+    const efectivoEsperadoEnGaveta = Math.max(0, fondoInicial + ventasEfectivo + abonosEfectivo + ingresosExtra - retirosCaja);
 
     res.json({
       ok: true,
@@ -3921,6 +3936,8 @@ app.get('/api/caja/estado', async (req, res) => {
         ingresosExtra,
         movimientos,
         abonosEfectivo,
+        abonosTarjeta,
+        abonosYape,
         efectivoEsperadoEnGaveta,
       },
     });
@@ -3966,23 +3983,32 @@ app.post('/api/caja/movimientos', async (req, res) => {
   }
 });
 
-// GET /api/caja/movimientos → Listar salidas y movimientos del turno activo
+// GET /api/caja/movimientos → Listar salidas y movimientos del turno activo o histórico
 app.get('/api/caja/movimientos', async (req, res) => {
   try {
-    const turnoAbierto = await prisma.cierreCaja.findFirst({
-      where: { estado: 'ABIERTO' },
-      orderBy: { fechaApertura: 'desc' },
-    });
-    if (!turnoAbierto) {
-      return res.json({ ok: true, movimientos: [] });
-    }
-    const movimientos = await prisma.movimientoCaja.findMany({
-      where: {
+    const { turnoId } = req.query;
+    let whereClause = {};
+
+    if (turnoId) {
+      whereClause.turnoId = parseInt(turnoId);
+    } else {
+      const turnoAbierto = await prisma.cierreCaja.findFirst({
+        where: { estado: 'ABIERTO' },
+        orderBy: { fechaApertura: 'desc' },
+      });
+      if (!turnoAbierto) {
+        return res.json({ ok: true, movimientos: [] });
+      }
+      whereClause = {
         OR: [
           { turnoId: turnoAbierto.id },
           { creadoEn: { gte: turnoAbierto.fechaApertura } },
         ],
-      },
+      };
+    }
+
+    const movimientos = await prisma.movimientoCaja.findMany({
+      where: whereClause,
       orderBy: { creadoEn: 'desc' },
     });
     res.json({ ok: true, movimientos });
@@ -4739,6 +4765,7 @@ app.get('/api/reportes/contable', async (req, res) => {
       prisma.venta.findMany({
         where: {
           createdAt: filtroFecha,
+          anulado: false,
           pedido: { estado: { not: 'Cancelado' } }
         }
       }),

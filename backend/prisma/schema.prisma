@@ -40,6 +40,12 @@ model Cliente {
   creadoEn    DateTime @default(now())
 
   AbonosCredito AbonoCredito[]
+
+  @@index([numDoc])
+  @@index([tieneCredito])
+  @@index([telefono])
+  @@index([activo])
+  @@index([creadoEn])
 }
 
 // ============================================================
@@ -180,6 +186,8 @@ model Venta {
   @@index([createdAt])
   @@index([estadoSunat])
   @@index([metodoPago])
+  @@index([anulado])
+  @@index([clienteCreditoId])
 }
 
 // ============================================================

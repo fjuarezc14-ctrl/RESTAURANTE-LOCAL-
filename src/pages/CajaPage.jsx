@@ -4876,7 +4876,7 @@ export default function CajaPage({ currentUser }) {
 
         const montoFisicoNum = parseFloat(efectivoFisicoContado || 0);
         const tieneConteoFisico = efectivoFisicoContado.trim() !== '';
-        const diferenciaEfectivo = tieneConteoFisico ? (montoFisicoNum - totalEfectivoEsperado) : 0;
+        const diferenciaEfectivo = tieneConteoFisico ? Math.round((montoFisicoNum - totalEfectivoEsperado) * 100) / 100 : 0;
 
         // Conteo por denominación (billetes y monedas del Perú)
         const totalConteo = DENOMINACIONES_PEN.reduce((s, d) => s + d.valor * (Number(conteoBilletes[d.valor]) || 0), 0);
