@@ -1897,6 +1897,7 @@ app.post('/api/pedidos/llevar', async (req, res) => {
     montoCredito,
     clienteCreditoId,
     descuentoPorcentaje,
+    descuentoMonto: descuentoMontoFijo,
     descuentoDescripcion,
     motivoCortesia
   } = req.body;
@@ -1916,7 +1917,11 @@ app.post('/api/pedidos/llevar', async (req, res) => {
     // Calcular monto bruto de items y aplicar descuento porcentual una sola vez
     const itemsBruto = (items || []).reduce((acc, item) => acc + (parseFloat(item.precio || 0) * parseInt(item.cant || item.cantidad || 1)), 0);
     const descPct = parseFloat(descuentoPorcentaje || 0);
-    const descuentoMonto = (descPct > 0 && itemsBruto > 0) ? parseFloat((itemsBruto * (descPct / 100)).toFixed(2)) : 0;
+    // Descuento en soles (monto fijo) tiene prioridad sobre el porcentual
+    const descFijo = parseFloat(descuentoMontoFijo || 0);
+    const descuentoMonto = (descFijo > 0 && itemsBruto > 0)
+      ? parseFloat(Math.min(descFijo, itemsBruto).toFixed(2))
+      : (descPct > 0 && itemsBruto > 0) ? parseFloat((itemsBruto * (descPct / 100)).toFixed(2)) : 0;
     const totalConDescuento = Math.max(0, itemsBruto - descuentoMonto);
     let grandTotal = finalMetodoPago === 'Cortesía' ? 0.00 : (totalConDescuento + shippingFee);
     const descuentoFinal = finalMetodoPago === 'Cortesía' ? itemsBruto : descuentoMonto;
@@ -2121,6 +2126,7 @@ app.put('/api/pedidos/llevar/:id', async (req, res) => {
     montoCredito,
     clienteCreditoId,
     descuentoPorcentaje,
+    descuentoMonto: descuentoMontoFijo,
     descuentoDescripcion
   } = req.body;
 
@@ -2134,7 +2140,11 @@ app.put('/api/pedidos/llevar/:id', async (req, res) => {
     // Calcular monto bruto de items y aplicar descuento porcentual una sola vez
     const itemsBruto = (items || []).reduce((acc, item) => acc + (parseFloat(item.precio || 0) * parseInt(item.cant || item.cantidad || 1)), 0);
     const descPct = parseFloat(descuentoPorcentaje || 0);
-    const descuentoMonto = (descPct > 0 && itemsBruto > 0) ? parseFloat((itemsBruto * (descPct / 100)).toFixed(2)) : 0;
+    // Descuento en soles (monto fijo) tiene prioridad sobre el porcentual
+    const descFijo = parseFloat(descuentoMontoFijo || 0);
+    const descuentoMonto = (descFijo > 0 && itemsBruto > 0)
+      ? parseFloat(Math.min(descFijo, itemsBruto).toFixed(2))
+      : (descPct > 0 && itemsBruto > 0) ? parseFloat((itemsBruto * (descPct / 100)).toFixed(2)) : 0;
     const totalConDescuento = Math.max(0, itemsBruto - descuentoMonto);
     let grandTotal = finalMetodoPago === 'Cortesía' ? 0.00 : (totalConDescuento + shippingFee);
     const descuentoFinal = finalMetodoPago === 'Cortesía' ? itemsBruto : descuentoMonto;
