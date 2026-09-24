@@ -309,13 +309,21 @@ export default function SalonPage({ currentUser }) {
     }
   };
 
-  const handleSepararMesas = async () => {
-    if (confirm(`⚠️ ¿Estás seguro de separar todas las mesas unidas a la Mesa ${mesaActual.num}?`)) {
+  // Mesas unidas a una principal (solo las de ese grupo)
+  const mesasUnidasA = (num) => mesas.filter(m => m.estado === `Unida a Mesa ${num}`);
+
+  // numeroMesa opcional: separa solo esa mesa; sin él, todas las del grupo de la mesa actual
+  const handleSepararMesas = async (numeroMesa = null, numPrincipal = mesaActual?.num) => {
+    const grupo = mesasUnidasA(numPrincipal).map(m => m.num);
+    const texto = numeroMesa != null
+      ? `¿Separar la Mesa ${numeroMesa} de la Mesa ${numPrincipal}?`
+      : `¿Separar ${grupo.length > 1 ? 'las mesas' : 'la mesa'} ${grupo.join(', ')} de la Mesa ${numPrincipal}?`;
+    if (confirm(`⚠️ ${texto}`)) {
       try {
-        const res = await api.separarMesas(mesaActual.num);
+        const res = await api.separarMesas(numPrincipal, numeroMesa);
         if (res.ok) {
-          alert(`✅ Mesas separadas con éxito.`);
-          setUnionDropdownOpen(false);
+          alert(`✅ ${res.mensaje || 'Mesas separadas con éxito.'}`);
+          if (numeroMesa == null || grupo.length <= 1) setUnionDropdownOpen(false);
           fetchMesas();
         } else {
           alert(`❌ Error: ${res.error}`);
@@ -329,8 +337,16 @@ export default function SalonPage({ currentUser }) {
   const abrirModal = (m) => {
     // Si la mesa está unida a otra, informar al usuario y bloquear ingreso
     if (m.estado && m.estado.startsWith("Unida a ")) {
-      const mesaPrincipalNum = m.estado.replace("Unida a Mesa ", "");
-      alert(`⚠️ Esta mesa está UNIDA a la Mesa ${mesaPrincipalNum}. Todo el consumo y pedidos se registran directamente en la Mesa ${mesaPrincipalNum}.`);
+      const mesaPrincipalNum = parseInt(m.estado.replace("Unida a Mesa ", ""));
+      // El consumo se registra en la principal; aquí solo se ofrece separar ESTA mesa del grupo
+      if (confirm(`🔗 La Mesa ${m.num} está unida a la Mesa ${mesaPrincipalNum}. Todo el consumo se registra en la Mesa ${mesaPrincipalNum}.\n\n¿Deseas separar la Mesa ${m.num}?`)) {
+        api.separarMesas(mesaPrincipalNum, m.num)
+          .then(res => {
+            if (res.ok) fetchMesas();
+            else alert(`❌ Error: ${res.error}`);
+          })
+          .catch(err => alert(`❌ Error: ${err.message}`));
+      }
       return;
     }
 
@@ -1104,7 +1120,13 @@ export default function SalonPage({ currentUser }) {
                 <span className="text-[8px] md:text-[9px] font-black uppercase text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full mt-1.5">
                   🔗 {m.estado}
                 </span>
-              ) : m.pedidoData ? (
+              ) : null}
+              {!(m.estado && m.estado.startsWith("Unida a ")) && mesasUnidasA(m.num).length > 0 && (
+                <span className="absolute top-2 left-2 text-[9px] md:text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full" title="Mesas unidas a esta">
+                  🔗 +{mesasUnidasA(m.num).map(u => u.num).join(', ')}
+                </span>
+              )}
+              {m.estado && m.estado.startsWith("Unida a ") ? null : m.pedidoData ? (
                 <div className="flex flex-col items-center">
                   <p className="font-mono font-black text-sm md:text-lg mt-1 text-slate-800">S/ {m.pedidoData.total.toFixed(2)}</p>
                   <span className="text-[8px] md:text-[9px] font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full mt-1.5 uppercase truncate max-w-[110px] text-center">
@@ -2193,30 +2215,46 @@ export default function SalonPage({ currentUser }) {
             <h3 className="font-black uppercase text-sm border-b border-slate-100 pb-2 mb-3 flex items-center gap-2 text-slate-800"><Link2 className="w-5 h-5 text-amber-500" /> Unir Mesas con Mesa {mesaActual.num}</h3>
             
             {/* List of mesas unidas currently */}
-            {mesas.filter(m => m.estado === `Unida a Mesa ${mesaActual.num}`).length > 0 && (
+            {mesasUnidasA(mesaActual.num).length > 0 && (
               <div className="mb-4 bg-amber-50 border border-amber-200/50 p-3 rounded-xl">
-                <p className="text-[10px] font-black text-amber-700 uppercase tracking-wider mb-1">Mesas Unidas Actualmente:</p>
+                <p className="text-[10px] font-black text-amber-700 uppercase tracking-wider mb-1">Unidas a la Mesa {mesaActual.num}:</p>
                 <div className="flex flex-wrap gap-1.5 mb-2">
-                  {mesas.filter(m => m.estado === `Unida a Mesa ${mesaActual.num}`).map(m => (
-                    <span key={m.num} className="bg-amber-100 text-amber-800 text-xs font-black px-2.5 py-1 rounded-lg">Mesa {m.num}</span>
+                  {mesasUnidasA(mesaActual.num).map(m => (
+                    <span key={m.num} className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 text-xs font-black pl-2.5 pr-1 py-1 rounded-lg">
+                      Mesa {m.num}
+                      <button
+                        type="button"
+                        onClick={() => handleSepararMesas(m.num)}
+                        className="w-5 h-5 grid place-items-center rounded-md text-amber-700 hover:bg-red-500 hover:text-white transition-colors"
+                        title={`Separar solo la Mesa ${m.num}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
                   ))}
                 </div>
-                <button 
-                  onClick={handleSepararMesas}
-                  className="w-full py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg text-xs uppercase transition-colors"
-                >
-                  🔓 Separar Todas las Mesas
-                </button>
+                {mesasUnidasA(mesaActual.num).length > 1 && (
+                  <button
+                    onClick={() => handleSepararMesas()}
+                    className="w-full py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg text-xs uppercase transition-colors"
+                  >
+                    🔓 Separar las {mesasUnidasA(mesaActual.num).length} mesas de este grupo
+                  </button>
+                )}
               </div>
             )}
-            
+
+            {(() => {
+              // Libres que no encabezan otro grupo (unirlas crearía cadenas de grupos)
+              const disponibles = mesas.filter(m => m.estado === 'Libre' && m.num !== mesaActual.num && mesasUnidasA(m.num).length === 0);
+              return (
+            <>
             <p className="text-xs text-slate-500 font-bold mb-2">Selecciona una mesa libre para unirla:</p>
             <div className="grid grid-cols-4 gap-2 max-h-[160px] overflow-y-auto custom-scrollbar p-1 mb-4">
-              {mesas.filter(m => m.estado === 'Libre' && m.num !== mesaActual.num).length === 0 ? (
+              {disponibles.length === 0 ? (
                 <p className="col-span-4 text-center text-xs text-slate-400 py-3">No hay mesas libres disponibles.</p>
               ) : (
-                mesas
-                  .filter(m => m.estado === 'Libre' && m.num !== mesaActual.num)
+                disponibles
                   .map(m => (
                     <button 
                       key={m.num}
@@ -2228,6 +2266,9 @@ export default function SalonPage({ currentUser }) {
                   ))
               )}
             </div>
+            </>
+              );
+            })()}
             
             <button 
               onClick={() => setUnionDropdownOpen(false)}

@@ -258,7 +258,17 @@ const ModalCompartirDireccion = ({ onClose }) => {
     setTimeout(() => setCopiado(''), 2000);
   };
 
-  const principal = datos?.urls?.[0];
+  // Si la app ya se abrió con una IP/host de la red, esa dirección es la correcta.
+  // El puerto es el de la app abierta (en desarrollo difiere del backend).
+  const hostActual = window.location.hostname;
+  const esLocal = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostActual);
+  const puerto = window.location.port || datos?.puerto;
+  const aUrl = (host) => `${window.location.protocol}//${host}${puerto ? `:${puerto}` : ''}`;
+  const ipsDetectadas = datos?.ips || (datos?.urls || []).map(u => ({ ip: new URL(u).hostname, virtual: false }));
+  const principal = datos ? (!esLocal ? aUrl(hostActual) : (ipsDetectadas[0] ? aUrl(ipsDetectadas[0].ip) : null)) : null;
+  const otras = ipsDetectadas
+    .map(i => ({ ...i, url: aUrl(i.ip) }))
+    .filter(i => i.url !== principal);
 
   return (
     <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={onClose}>
@@ -288,19 +298,42 @@ const ModalCompartirDireccion = ({ onClose }) => {
               )}
 
               <div className="space-y-2">
-                {datos.urls.map(url => (
-                  <div key={url} className="flex items-center gap-2 bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-2">
-                    <span className="flex-1 text-xs font-mono text-cyan-300 truncate">{url}</span>
+                {principal && (
+                  <div className="flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/40 rounded-xl px-3 py-2.5">
+                    <span className="flex-1 text-sm font-mono font-bold text-cyan-300 truncate">{principal}</span>
                     <button
-                      onClick={() => copiar(url)}
-                      className="shrink-0 px-2.5 py-1.5 bg-slate-700 hover:bg-cyan-500 hover:text-slate-950 text-slate-200 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5"
+                      onClick={() => copiar(principal)}
+                      className="shrink-0 px-2.5 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5"
                     >
-                      {copiado === url ? <><CheckIcon className="w-3.5 h-3.5" /> Copiado</> : <><Copy className="w-3.5 h-3.5" /> Copiar</>}
+                      {copiado === principal ? <><CheckIcon className="w-3.5 h-3.5" /> Copiado</> : <><Copy className="w-3.5 h-3.5" /> Copiar</>}
                     </button>
                   </div>
-                ))}
-                {datos.urls.length === 0 && (
+                )}
+                {!principal && (
                   <p className="text-xs text-amber-400 font-bold">Esta PC no está conectada a ninguna red WiFi o cable.</p>
+                )}
+                {otras.length > 0 && (
+                  <details className="group">
+                    <summary className="cursor-pointer list-none text-[11px] text-slate-400 hover:text-slate-200 select-none">
+                      ▸ Otras direcciones de esta PC ({otras.length}) · úsalas solo si la principal no abre
+                    </summary>
+                    <div className="mt-2 space-y-1.5">
+                      {otras.map(o => (
+                        <div key={o.url} className="flex items-center gap-2 bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-1.5">
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-xs font-mono text-slate-300 truncate">{o.url}</span>
+                            {o.interfaz && <span className="block text-[10px] text-slate-500 truncate">{o.interfaz}{o.virtual ? ' · adaptador virtual' : ''}</span>}
+                          </span>
+                          <button
+                            onClick={() => copiar(o.url)}
+                            className="shrink-0 px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-[10px] font-black uppercase transition-colors flex items-center gap-1"
+                          >
+                            {copiado === o.url ? <CheckIcon className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 )}
               </div>
 
