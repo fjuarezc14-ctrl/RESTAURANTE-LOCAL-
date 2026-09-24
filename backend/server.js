@@ -3321,6 +3321,20 @@ app.post('/api/ventas', async (req, res) => {
       });
     }
 
+    // 1.0 Una mesa de salón no se cobra mientras tenga platos en preparación:
+    // al pasar a "Cobrado" desaparecerían de los monitores de cocina y barra sin prepararse.
+    const enPreparacion = await prisma.pedido.findMany({
+      where: { id: { in: idsAPagar }, estado: 'Cocina', tipoEntrega: 'salon' },
+      select: { id: true, items: { where: { historial: false }, select: { cantidad: true } } },
+    });
+    if (enPreparacion.length > 0) {
+      const pendientes = enPreparacion.reduce((s, p) => s + p.items.reduce((a, i) => a + i.cantidad, 0), 0);
+      return res.status(409).json({
+        error: `La mesa todavía tiene ${pendientes > 0 ? `${pendientes} plato(s)` : 'pedidos'} en preparación. Cóbrala cuando cocina y barra marquen todo como listo.`,
+        enPreparacion: true,
+      });
+    }
+
     const venta = await prisma.$transaction(async (tx) => {
       // 1.1 Doble chequeo atómico dentro de la transacción (Race Condition Guard)
       const ventaExistenteTx = await tx.venta.findFirst({

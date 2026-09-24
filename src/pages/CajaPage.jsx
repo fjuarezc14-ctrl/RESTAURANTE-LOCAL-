@@ -2252,9 +2252,19 @@ export default function CajaPage({ currentUser }) {
   const grandTotalDelivery = deliveryMetodoPago === 'Cortesía' ? 0 : (deliveryTotalConDescuento + deliveryShippingFee);
 
   // ── Vista principal de caja: helpers de presentación ──
+  // Platos aún sin servir de una mesa (cocina y barra los muestran mientras no estén en historial)
+  const platosPorServir = (m) => (m.pedidoData?.items || []).filter(i => i && !i.historial).reduce((s, i) => s + (i.cant || 0), 0);
+  const mesaEnPreparacion = (m) => m.estado === 'Cocina';
+
   const abrirCobroMesa = (m) => {
     if (!cajaEstado.abierto) {
       setModalAperturaOpen(true);
+      return;
+    }
+    // No se cobra una mesa con platos en preparación: se perderían de cocina y barra
+    if (mesaEnPreparacion(m)) {
+      const n = platosPorServir(m);
+      addToast(`⏳ La Mesa ${m.num} aún tiene ${n > 0 ? `${n} plato(s)` : 'pedidos'} en preparación. Podrás cobrarla cuando cocina y barra los marquen como listos.`, 'warning');
       return;
     }
     setMesaSeleccionada(m);
@@ -2653,13 +2663,22 @@ export default function CajaPage({ currentUser }) {
                             {m.pedidoData?.estadoEnsalada === 'Pendiente' && <span className="text-[11px] text-emerald-700 bg-emerald-50 rounded-md px-1.5 py-0.5">🥗 Pendiente</span>}
                             {m.pedidoData?.estadoEnsalada === 'Listo' && <span className="text-[11px] text-blue-700 bg-blue-50 rounded-md px-1.5 py-0.5">🥗 Lista</span>}
                           </div>
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); abrirCobroMesa(m); }}
-                            className="h-8 px-3.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 shadow-sm shadow-emerald-600/25 transition-colors active:scale-95 shrink-0"
-                          >
-                            Cobrar
-                          </button>
+                          {listo ? (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); abrirCobroMesa(m); }}
+                              className="h-8 px-3.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 shadow-sm shadow-emerald-600/25 transition-colors active:scale-95 shrink-0"
+                            >
+                              Cobrar
+                            </button>
+                          ) : (
+                            <span
+                              className="h-8 px-3 rounded-lg bg-slate-100 text-slate-400 text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-not-allowed"
+                              title="Se podrá cobrar cuando todos los platos estén servidos"
+                            >
+                              <Clock className="w-3.5 h-3.5" /> {platosPorServir(m) > 0 ? `${platosPorServir(m)} por servir` : 'En cocina'}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -2886,13 +2905,26 @@ export default function CajaPage({ currentUser }) {
               <p className="text-xs text-slate-500">Total</p>
               <p className="text-xl font-semibold font-mono tabular-nums text-slate-900">{soles(m.pedidoData?.total)}</p>
             </div>
-            <button
-              type="button"
-              onClick={() => { setMesaDetalleNum(null); abrirCobroMesa(m); }}
-              className="h-11 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors active:scale-[0.98]"
-            >
-              Cobrar mesa
-            </button>
+            {mesaEnPreparacion(m) ? (
+              <div className="text-right">
+                <button
+                  type="button"
+                  disabled
+                  className="h-11 px-6 rounded-xl bg-slate-100 text-slate-400 text-sm font-semibold cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  <Clock className="w-4 h-4" /> En preparación
+                </button>
+                <p className="mt-1 text-[11px] text-slate-400">{platosPorServir(m) > 0 ? `${platosPorServir(m)} plato(s) por servir` : 'Esperando a cocina y barra'}</p>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setMesaDetalleNum(null); abrirCobroMesa(m); }}
+                className="h-11 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors active:scale-[0.98]"
+              >
+                Cobrar mesa
+              </button>
+            )}
           </div>
         );
       })()}
