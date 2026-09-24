@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Receipt, X, Banknote, Search, CheckCircle, Clock, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, Flame, FileText, History, ExternalLink, ChevronDown, ChevronRight, Pencil, ShoppingBag, UtensilsCrossed, Phone, MapPin, Smartphone, Eye, EyeOff, Bike, Unlock, ArrowUpRight } from 'lucide-react';
+import { Receipt, X, Banknote, Search, CheckCircle, Clock, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, Flame, FileText, History, ExternalLink, ChevronDown, ChevronRight, ShoppingCart, Coins, RotateCcw, Pencil, ShoppingBag, UtensilsCrossed, Phone, MapPin, Smartphone, Eye, EyeOff, Bike, Unlock, ArrowUpRight } from 'lucide-react';
 
 import { api } from '../api';
 import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
@@ -39,6 +39,21 @@ const parsearCreditoSplit = (ofertaDescripcion, defaultClienteId, defaultMonto) 
 };
 
 // Helper seguro para parsear montos ingresados por el usuario
+// Billetes y monedas en circulación en Perú (los de 1 y 5 céntimos ya no circulan)
+const DENOMINACIONES_PEN = [
+  { valor: 200, etiqueta: 'S/ 200', tipo: 'billete', color: 'bg-purple-100 text-purple-800' },
+  { valor: 100, etiqueta: 'S/ 100', tipo: 'billete', color: 'bg-sky-100 text-sky-800' },
+  { valor: 50, etiqueta: 'S/ 50', tipo: 'billete', color: 'bg-orange-100 text-orange-800' },
+  { valor: 20, etiqueta: 'S/ 20', tipo: 'billete', color: 'bg-amber-100 text-amber-800' },
+  { valor: 10, etiqueta: 'S/ 10', tipo: 'billete', color: 'bg-emerald-100 text-emerald-800' },
+  { valor: 5, etiqueta: 'S/ 5', tipo: 'moneda', color: 'bg-yellow-100 text-yellow-800 rounded-full' },
+  { valor: 2, etiqueta: 'S/ 2', tipo: 'moneda', color: 'bg-yellow-100 text-yellow-800 rounded-full' },
+  { valor: 1, etiqueta: 'S/ 1', tipo: 'moneda', color: 'bg-slate-200 text-slate-700 rounded-full' },
+  { valor: 0.5, etiqueta: '50 cént.', tipo: 'moneda', color: 'bg-amber-50 text-amber-700 rounded-full' },
+  { valor: 0.2, etiqueta: '20 cént.', tipo: 'moneda', color: 'bg-amber-50 text-amber-700 rounded-full' },
+  { valor: 0.1, etiqueta: '10 cént.', tipo: 'moneda', color: 'bg-amber-50 text-amber-700 rounded-full' },
+];
+
 const parseMonto = (val) => {
   if (val === null || val === undefined || val === '') return 0;
   const s = String(val).trim().replace(',', '.');
@@ -441,6 +456,7 @@ export default function CajaPage({ currentUser }) {
   const [consumoPinError, setConsumoPinError] = useState('');
   const [comprasTurno, setComprasTurno] = useState([]);
   const [efectivoFisicoContado, setEfectivoFisicoContado] = useState('');
+  const [conteoBilletes, setConteoBilletes] = useState({}); // { valorDenominacion: cantidad }
   const [historialCierresModalOpen, setHistorialCierresModalOpen] = useState(false);
   const [historialCierres, setHistorialCierres] = useState([]);
   const [cargandoHistorialCierres, setCargandoHistorialCierres] = useState(false);
@@ -2544,7 +2560,7 @@ export default function CajaPage({ currentUser }) {
               onClick={abrirDeliveryModal}
               className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-sky-600 text-sm font-semibold text-white hover:bg-sky-700 shadow-sm shadow-sky-600/25 transition-colors active:scale-[0.98] ml-auto md:ml-0"
             >
-              <Plus className="w-4 h-4" /> Nuevo pedido
+              <ShoppingCart className="w-4 h-4" /> Nuevo pedido
             </button>
           </div>
         </header>
@@ -4862,19 +4878,80 @@ export default function CajaPage({ currentUser }) {
         const tieneConteoFisico = efectivoFisicoContado.trim() !== '';
         const diferenciaEfectivo = tieneConteoFisico ? (montoFisicoNum - totalEfectivoEsperado) : 0;
 
-        return (
-          <div id="modal-cierre" className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar animate-slide-up relative">
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-2 text-indigo-700">
-                  <Calculator className="w-6 h-6 shrink-0" />
-                  <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight leading-none">Arqueo y Cierre</h3>
-                </div>
-                <button onClick={() => { setCierreModalOpen(false); setEfectivoFisicoContado(''); }} className="text-slate-400 hover:text-slate-900 p-1 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"><X className="w-5 h-5" /></button>
+        // Conteo por denominación (billetes y monedas del Perú)
+        const totalConteo = DENOMINACIONES_PEN.reduce((s, d) => s + d.valor * (Number(conteoBilletes[d.valor]) || 0), 0);
+        const hayConteoDenominaciones = DENOMINACIONES_PEN.some(d => Number(conteoBilletes[d.valor]) > 0);
+        const detalleConteo = DENOMINACIONES_PEN
+          .filter(d => Number(conteoBilletes[d.valor]) > 0)
+          .map(d => ({ ...d, cantidad: Number(conteoBilletes[d.valor]), subtotal: d.valor * Number(conteoBilletes[d.valor]) }));
+
+        const cambiarCantidad = (valor, cantidad) => {
+          const n = Math.max(0, Math.floor(Number(cantidad) || 0));
+          const siguiente = { ...conteoBilletes, [valor]: n };
+          setConteoBilletes(siguiente);
+          const total = DENOMINACIONES_PEN.reduce((s, d) => s + d.valor * (Number(siguiente[d.valor]) || 0), 0);
+          setEfectivoFisicoContado(DENOMINACIONES_PEN.some(d => Number(siguiente[d.valor]) > 0) ? total.toFixed(2) : '');
+        };
+
+        const cerrarModalCierre = () => {
+          setCierreModalOpen(false);
+          setEfectivoFisicoContado('');
+          setConteoBilletes({});
+        };
+
+        const cuadra = Math.abs(diferenciaEfectivo) < 0.05;
+
+        const filaDenominacion = (d) => {
+          const cant = Number(conteoBilletes[d.valor]) || 0;
+          return (
+            <div key={d.valor} className={`flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors ${cant > 0 ? 'bg-emerald-50/70' : ''}`}>
+              <span className={`w-[4.25rem] h-8 rounded-lg grid place-items-center text-xs font-bold font-mono shrink-0 ${d.color}`}>{d.etiqueta}</span>
+              <div className="flex items-center rounded-lg border border-slate-200 bg-white shrink-0">
+                <button type="button" onClick={() => cambiarCantidad(d.valor, cant - 1)} disabled={cant === 0} className="w-8 h-8 grid place-items-center text-slate-500 hover:text-slate-900 disabled:opacity-30 text-lg leading-none" aria-label={`Quitar ${d.etiqueta}`}>−</button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  value={cant || ''}
+                  placeholder="0"
+                  onChange={(e) => cambiarCantidad(d.valor, e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  className="w-11 h-8 text-center text-sm font-semibold font-mono text-slate-900 bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  aria-label={`Cantidad de ${d.etiqueta}`}
+                />
+                <button type="button" onClick={() => cambiarCantidad(d.valor, cant + 1)} className="w-8 h-8 grid place-items-center text-slate-500 hover:text-slate-900 text-lg leading-none" aria-label={`Agregar ${d.etiqueta}`}>+</button>
               </div>
- 
+              <span className={`flex-1 text-right font-mono text-sm tabular-nums ${cant > 0 ? 'text-slate-900 font-semibold' : 'text-slate-300'}`}>
+                S/ {(d.valor * cant).toFixed(2)}
+              </span>
+            </div>
+          );
+        };
+
+        return (
+          <div id="modal-cierre" className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[200] flex items-end md:items-center justify-center md:p-6 animate-fade-in">
+            <div className="bg-white w-full max-w-5xl h-[96dvh] md:h-auto md:max-h-[92dvh] rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
+              {/* Header */}
+              <div className="cierre-no-print flex items-center justify-between gap-3 px-5 md:px-6 py-4 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 grid place-items-center shrink-0"><Calculator className="w-5 h-5" /></span>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-semibold text-slate-900 leading-tight">Arqueo y cierre de turno</h3>
+                    <p className="text-sm text-slate-500 truncate">{cajaEstado.turno?.cajeroNombre || cajeroNombre} · cuenta el efectivo y cierra la caja</p>
+                  </div>
+                </div>
+                <button type="button" onClick={cerrarModalCierre} className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body: ticket + calculadora */}
+              <div className="cierre-grid flex-1 min-h-0 overflow-y-auto md:overflow-hidden flex flex-col md:grid md:grid-cols-2">
+                <div className="order-2 md:overflow-y-auto custom-scrollbar p-4 md:p-6 bg-slate-50/70 md:border-l border-slate-100">
+                  <p className="cierre-no-print text-xs font-medium text-slate-500 mb-2">Vista previa del ticket</p>
+
               {/* Vista del ticket térmico */}
-              <div id="cierre-imprimible" className="bg-amber-50/70 border-2 border-dashed border-amber-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm mb-6 flex flex-col">
+              <div id="cierre-imprimible" className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm flex flex-col">
                 <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4 flex flex-col items-center">
                   <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain mb-1 filter grayscale" />
                   <h4 className="font-black text-sm text-slate-900 uppercase tracking-wide">{COMPANY_CONFIG.legalName}</h4>
@@ -4973,21 +5050,30 @@ export default function CajaPage({ currentUser }) {
 
                 {tieneConteoFisico && (
                   <div className="mt-3 pt-3 border-t border-dashed border-slate-300 text-xs">
+                    {detalleConteo.length > 0 && (
+                      <div className="mb-2 text-[10px] font-bold text-slate-600">
+                        <span className="text-[9px] text-slate-400">DETALLE DEL CONTEO:</span>
+                        {detalleConteo.map(d => (
+                          <div key={d.valor} className="flex justify-between pl-2">
+                            <span>{d.cantidad} x {d.etiqueta}</span>
+                            <span>S/ {d.subtotal.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex justify-between font-bold text-slate-800">
                       <span>EFECTIVO CONTADO:</span>
                       <span className="font-black">S/ {montoFisicoNum.toFixed(2)}</span>
                     </div>
                     <div className={`flex justify-between font-black mt-1 text-xs ${
-                      Math.abs(diferenciaEfectivo) < 0.05 
-                        ? 'text-emerald-700' 
-                        : (diferenciaEfectivo > 0 ? 'text-blue-700' : 'text-rose-600')
+                      cuadra ? 'text-emerald-700' : (diferenciaEfectivo > 0 ? 'text-blue-700' : 'text-rose-600')
                     }`}>
                       <span>DIFERENCIA (CUADRE):</span>
                       <span>
-                        {Math.abs(diferenciaEfectivo) < 0.05 
-                          ? '✓ CUADRE EXACTO' 
-                          : (diferenciaEfectivo > 0 
-                              ? `+ S/ ${diferenciaEfectivo.toFixed(2)} (SOBRANTE)` 
+                        {cuadra
+                          ? '✓ CUADRE EXACTO'
+                          : (diferenciaEfectivo > 0
+                              ? `+ S/ ${diferenciaEfectivo.toFixed(2)} (SOBRANTE)`
                               : `- S/ ${Math.abs(diferenciaEfectivo).toFixed(2)} (FALTANTE)`)}
                       </span>
                     </div>
@@ -4998,37 +5084,83 @@ export default function CajaPage({ currentUser }) {
                   *** Fin del Reporte de Turno ***
                 </div>
               </div>
+                </div>
 
-              {/* Input de Conteo Físico para Arqueo */}
-              <div className="mb-4 bg-slate-50 border border-slate-200 p-3.5 rounded-2xl">
-                <label className="block text-slate-700 font-black text-[11px] uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                  <span>Efectivo Físico en Gaveta:</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Conteo de billetes y monedas</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">S/</span>
-                  <input
-                    type="number"
-                    step="0.10"
-                    placeholder="0.00"
-                    value={efectivoFisicoContado}
-                    onChange={(e) => setEfectivoFisicoContado(e.target.value)}
-                    className="w-full bg-white border-2 border-slate-200 focus:border-emerald-500 rounded-xl pl-8 pr-3 py-2.5 text-base font-black text-slate-900 focus:outline-none transition-all shadow-inner"
-                  />
+                {/* Calculadora de billetes y monedas */}
+                <div className="cierre-no-print order-1 md:overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-800 flex items-center gap-2"><Coins className="w-4 h-4 text-amber-500" /> Conteo de efectivo</p>
+                    {hayConteoDenominaciones && (
+                      <button type="button" onClick={() => { setConteoBilletes({}); setEfectivoFisicoContado(''); }} className="text-xs font-medium text-slate-400 hover:text-rose-600 inline-flex items-center gap-1">
+                        <RotateCcw className="w-3.5 h-3.5" /> Limpiar
+                      </button>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Billetes</p>
+                    <div className="space-y-0.5">{DENOMINACIONES_PEN.filter(d => d.tipo === 'billete').map(filaDenominacion)}</div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Monedas</p>
+                    <div className="space-y-0.5">{DENOMINACIONES_PEN.filter(d => d.tipo === 'moneda').map(filaDenominacion)}</div>
+                  </div>
+
+                  {/* Resultado del cuadre */}
+                  <div className="rounded-2xl border border-slate-200 overflow-hidden">
+                    <div className="grid grid-cols-2 divide-x divide-slate-200 text-center">
+                      <div className="p-3">
+                        <p className="text-[11px] text-slate-500">Esperado en caja</p>
+                        <p className="font-mono font-semibold tabular-nums text-slate-900">S/ {totalEfectivoEsperado.toFixed(2)}</p>
+                      </div>
+                      <div className="p-3">
+                        <p className="text-[11px] text-slate-500">Contado</p>
+                        <p className="font-mono font-semibold tabular-nums text-slate-900">S/ {(hayConteoDenominaciones ? totalConteo : montoFisicoNum).toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <div className={`px-3 py-2.5 text-center text-sm font-semibold ${
+                      !tieneConteoFisico ? 'bg-slate-50 text-slate-400' : cuadra ? 'bg-emerald-50 text-emerald-700' : diferenciaEfectivo > 0 ? 'bg-blue-50 text-blue-700' : 'bg-rose-50 text-rose-700'
+                    }`}>
+                      {!tieneConteoFisico
+                        ? 'Marca los billetes y monedas que hay en caja'
+                        : cuadra
+                          ? '✓ Cuadre exacto'
+                          : diferenciaEfectivo > 0
+                            ? `Sobran S/ ${diferenciaEfectivo.toFixed(2)}`
+                            : `Faltan S/ ${Math.abs(diferenciaEfectivo).toFixed(2)}`}
+                    </div>
+                  </div>
+
+                  {/* Monto directo (opcional) */}
+                  <details className="group" open={!hayConteoDenominaciones && tieneConteoFisico ? true : undefined}>
+                    <summary className="cursor-pointer list-none text-xs text-slate-400 hover:text-slate-700 select-none">▸ Prefiero escribir el monto total</summary>
+                    <div className="relative mt-2">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">S/</span>
+                      <input
+                        type="number"
+                        step="0.10"
+                        min="0"
+                        placeholder="0.00"
+                        value={efectivoFisicoContado}
+                        onChange={(e) => { setConteoBilletes({}); setEfectivoFisicoContado(e.target.value); }}
+                        className="w-full h-11 bg-white border border-slate-200 rounded-xl pl-9 pr-3 font-mono text-base font-semibold text-slate-900 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5"
+                      />
+                    </div>
+                  </details>
                 </div>
               </div>
 
               {/* Acciones */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="cierre-no-print px-5 md:px-6 py-4 border-t border-slate-100 bg-white shrink-0 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
                 <button
-                  onClick={() => {
-                    window.print();
-                  }}
-                  className="py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-widest transition-colors flex justify-center items-center gap-1.5"
+                  type="button"
+                  onClick={() => window.print()}
+                  className="h-12 px-5 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-2 transition-colors"
                 >
-                  Imprimir Ticket
+                  <Printer className="w-4 h-4" /> Imprimir ticket
                 </button>
                 <button
+                  type="button"
                   disabled={guardandoCierre}
                   onClick={async () => {
                     const pendientes = mesas.filter(m => m.estado !== 'Libre' && m.pedidoData);
@@ -5042,6 +5174,10 @@ export default function CajaPage({ currentUser }) {
                       ? Math.max(...ventasFiltradas.map(v => new Date(v.createdAt).getTime()))
                       : new Date().getTime();
                     const newCierreISO = new Date(maxSaleTime + 1000).toISOString();
+
+                    const textoConteo = detalleConteo.length > 0
+                      ? ` Conteo: ${detalleConteo.map(d => `${d.cantidad}x${d.etiqueta}`).join(', ')}.`
+                      : '';
 
                     setGuardandoCierre(true);
                     try {
@@ -5061,7 +5197,7 @@ export default function CajaPage({ currentUser }) {
                         totalPedidosYa: totalPedidosYa,
                         egresosEfectivo: egresosEfectivo,
                         abonosEfectivo: abonosEfectivoTotal,
-                        nota: tieneConteoFisico ? `Conteo físico: S/ ${montoFisicoNum.toFixed(2)}. Diferencia: S/ ${diferenciaEfectivo.toFixed(2)}` : null,
+                        nota: tieneConteoFisico ? `Conteo físico: S/ ${montoFisicoNum.toFixed(2)}. Diferencia: S/ ${diferenciaEfectivo.toFixed(2)}.${textoConteo}` : null,
                       });
 
                       localStorage.setItem('ultimoCierre', newCierreISO);
@@ -5070,12 +5206,11 @@ export default function CajaPage({ currentUser }) {
                       setCajaEstado({ abierto: false, turno: null, cargando: false });
                       await fetchCajaData();
 
-                      const diffMsg = tieneConteoFisico 
+                      const diffMsg = tieneConteoFisico
                         ? `\nEfectivo Contado: S/ ${montoFisicoNum.toFixed(2)}\nDiferencia: S/ ${diferenciaEfectivo.toFixed(2)}`
                         : '';
                       alert(`✅ ¡Cierre de Turno registrado con éxito en la Base de Datos!\n\nTotal en Gaveta (esperado): S/ ${totalEfectivoEsperado.toFixed(2)}${diffMsg}\n${totalPedidosYa > 0 ? `PedidosYa (cobro semanal): S/ ${totalPedidosYa.toFixed(2)}\n` : ''}El turno ha sido cerrado.`);
-                      setEfectivoFisicoContado('');
-                      setCierreModalOpen(false);
+                      cerrarModalCierre();
                     } catch (err) {
                       console.error('Error al registrar cierre de caja en el servidor:', err);
                       // Fallback local por seguridad ante micro-desconexiones
@@ -5084,15 +5219,15 @@ export default function CajaPage({ currentUser }) {
                       setMostrarTodoElDia(false);
                       setCajaEstado({ abierto: false, turno: null, cargando: false });
                       alert(`⚠️ El turno se cerró localmente (aviso: sincronización con base de datos falló: ${err.message || 'error de conexión'}).`);
-                      setEfectivoFisicoContado('');
-                      setCierreModalOpen(false);
+                      cerrarModalCierre();
                     } finally {
                       setGuardandoCierre(false);
                     }
                   }}
-                  className="py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-900 font-black rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                  className="h-12 px-6 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 shadow-sm shadow-red-600/25 transition-colors active:scale-[0.98] disabled:opacity-50"
                 >
-                  {guardandoCierre ? 'Guardando...' : 'Cerrar Turno'}
+                  <Lock className="w-4 h-4" />
+                  {guardandoCierre ? 'Cerrando…' : 'Cerrar turno'}
                 </button>
               </div>
             </div>
@@ -6541,6 +6676,21 @@ export default function CajaPage({ currentUser }) {
           #cierre-imprimible-reimpresion div {
             page-break-inside: avoid !important;
           }
+          #modal-cierre .cierre-no-print {
+            display: none !important;
+          }
+          #modal-cierre > div {
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          #modal-cierre .cierre-grid,
+          #modal-cierre .cierre-grid > div {
+            display: block !important;
+            overflow: visible !important;
+            padding: 0 !important;
+            border: 0 !important;
+            background: white !important;
+          }
         }
       `}</style>
 
@@ -6550,12 +6700,13 @@ export default function CajaPage({ currentUser }) {
         {toasts.map(t => {
           const isError = t.tipo === 'error';
           const isSuccess = t.tipo === 'success';
-          const borderClass = isError ? 'border-red-500/20' : (isSuccess ? 'border-emerald-500/20' : 'border-blue-500/20');
-          const gradientClass = isError ? 'from-red-500/10' : (isSuccess ? 'from-emerald-500/10' : 'from-blue-500/10');
-          const bgClass = isError ? 'bg-red-500 shadow-red-500/20' : (isSuccess ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-blue-500 shadow-blue-500/20');
-          const icon = isError ? '🗑️' : (isSuccess ? '✅' : '🛎️');
-          const textTitle = isError ? 'Pedido Cancelado' : (isSuccess ? 'Operación Exitosa' : '¡Pedido Listo!');
-          const titleColor = isError ? 'text-red-400' : (isSuccess ? 'text-emerald-400' : 'text-blue-400');
+          const isWarning = t.tipo === 'warning';
+          const borderClass = isError ? 'border-red-500/20' : isSuccess ? 'border-emerald-500/20' : isWarning ? 'border-amber-500/30' : 'border-blue-500/20';
+          const gradientClass = isError ? 'from-red-500/10' : isSuccess ? 'from-emerald-500/10' : isWarning ? 'from-amber-500/10' : 'from-blue-500/10';
+          const bgClass = isError ? 'bg-red-500 shadow-red-500/20' : isSuccess ? 'bg-emerald-500 shadow-emerald-500/20' : isWarning ? 'bg-amber-500 shadow-amber-500/20' : 'bg-blue-500 shadow-blue-500/20';
+          const icon = isError ? '🗑️' : isSuccess ? '✅' : isWarning ? '⏳' : '🛎️';
+          const textTitle = isError ? 'Pedido Cancelado' : isSuccess ? 'Operación Exitosa' : isWarning ? 'Atención' : '¡Pedido Listo!';
+          const titleColor = isError ? 'text-red-400' : isSuccess ? 'text-emerald-400' : isWarning ? 'text-amber-400' : 'text-blue-400';
           return (
             <div key={t.id} className={`pointer-events-auto bg-slate-900 border ${borderClass} text-white rounded-2xl shadow-2xl p-4 flex items-center gap-3 animate-slide-up relative overflow-hidden`}>
               <div className={`absolute inset-0 bg-gradient-to-r ${gradientClass} to-transparent`}></div>
