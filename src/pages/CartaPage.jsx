@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PlusCircle, Utensils, CupSoda, Wine, AlertCircle, Trash2, BookOpen, Save, X, Tag, ToggleLeft, ToggleRight, Edit2, ChevronDown, ChevronUp, Percent, DollarSign, Search, Sliders, Sparkles, FolderPlus } from 'lucide-react';
 import { api } from '../api';
+import { safeJsonParse } from '../utils/safeJson';
 import { parseComponentes, calcularPrecioComponentes, normalizarOpcion, parseComplementos, COMPLEMENTOS_SUGERIDOS } from '../utils/combos';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, TODAS_CATEGORIAS as MASTER_TODAS_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 
@@ -99,11 +100,7 @@ export default function CartaPage({ currentUser }) {
   const [nuevoComplemento, setNuevoComplemento] = useState('');
   const [nuevaCatNombre, setNuevaCatNombre] = useState('');
   const [categoriasExtra, setCategoriasExtra] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('restaurant_custom_categories') || '[]');
-    } catch {
-      return [];
-    }
+    return safeJsonParse(localStorage.getItem('restaurant_custom_categories'), []);
   });
 
   // Ofertas

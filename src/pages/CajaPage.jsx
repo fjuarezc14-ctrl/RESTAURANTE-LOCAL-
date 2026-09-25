@@ -4,9 +4,6 @@ import { Receipt, X, Banknote, Search, CheckCircle, Clock, CreditCard, Wallet, T
 import { api } from '../api';
 import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
 
-// El sistema solo emite TICKETS DE VENTA. La boleta o factura la emite la empresa
-// directamente en el portal de SUNAT, así que aquí no se envía nada.
-const FACTURACION_ELECTRONICA = false;
 import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
@@ -1058,28 +1055,12 @@ export default function CajaPage({ currentUser }) {
     
     let serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : (v.tipoComprobante === 'Ticket' ? 'T001' : 'B001'));
     let correlativoStr = String(v.numero || (v.id % 10000)).padStart(4, '0');
-    let qrData = `${rucEmpresa}|${v.tipoComprobante === 'Factura' ? '01' : '03'}|${serie}|${correlativoStr}|${v.igv.toFixed(2)}|${v.total.toFixed(2)}|${v.fecha || new Date(v.createdAt).toLocaleDateString('es-PE')}|${v.tipoComprobante === 'Factura'?'6':(v.numDocumento?.length === 8 ? '1' : '0')}|${v.numDocumento || '00000000'}`;
+    const igvSafe = Number(v.igv || 0).toFixed(2);
+    const totalSafe = Number(v.total || 0).toFixed(2);
+    let qrData = `${rucEmpresa}|${v.tipoComprobante === 'Factura' ? '01' : '03'}|${serie}|${correlativoStr}|${igvSafe}|${totalSafe}|${v.fecha || new Date(v.createdAt).toLocaleDateString('es-PE')}|${v.tipoComprobante === 'Factura'?'6':(v.numDocumento?.length === 8 ? '1' : '0')}|${v.numDocumento || '00000000'}`;
     let hashResumen = "gSbTDa" + Math.random().toString(36).substring(2, 8).toUpperCase() + "iIZDyirfA6TBPKJnEI=";
     let enlacePdf = null;
-    let contingencia = v.estadoNubefact === 'PENDIENTE_REINTENTO';
-
-
-    if (v.estadoNubefact && v.estadoNubefact.startsWith('ACEPTADO:')) {
-      try {
-        const responseData = JSON.parse(v.estadoNubefact.substring(9));
-        serie = responseData.serie || serie;
-        correlativoStr = String(responseData.numero || correlativoStr).padStart(4, '0');
-        if (responseData.cadena_para_codigo_qr) {
-          qrData = responseData.cadena_para_codigo_qr;
-        }
-        if (responseData.key) {
-          hashResumen = responseData.key;
-        }
-        enlacePdf = responseData.enlace_del_pdf || null;
-      } catch (err) {
-        console.error("Error parsing Nubefact response:", err);
-      }
-    }
+    let contingencia = false;
 
     const qrImageUrl = generateOfflineQrUrl(qrData);
     const totalLetras = numeroALetras(v.total);
@@ -1167,21 +1148,10 @@ export default function CajaPage({ currentUser }) {
     
     let serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
     let correlativoStr = String(v.id % 10000).padStart(4, '0');
-    let enlace = 'https://www.sunat.gob.pe';
-
-    if (v.estadoNubefact && v.estadoNubefact.startsWith('ACEPTADO:')) {
-      try {
-        const responseData = JSON.parse(v.estadoNubefact.substring(9));
-        serie = responseData.serie || serie;
-        correlativoStr = String(responseData.numero || correlativoStr).padStart(4, '0');
-        enlace = responseData.enlace_del_pdf || responseData.enlace || enlace;
-      } catch (err) {
-        console.error("Error parsing Nubefact response for WhatsApp:", err);
-      }
-    }
     
     const detalle = (v.itemsResumen || '').trim();
-    const mensaje = `Hola *${v.nombreCliente || 'Estimado cliente'}*, le enviamos el detalle de su consumo en *${COMPANY_CONFIG.name}*:\n\n${detalle ? detalle + '\n\n' : ''}Total: *S/ ${v.total.toFixed(2)}*\nTicket de venta N° ${v.id}\n\n¡Gracias por su preferencia!`;
+    const totalSafe = Number(v.total || 0).toFixed(2);
+    const mensaje = `Hola *${v.nombreCliente || 'Estimado cliente'}*, le enviamos el detalle de su consumo en *${COMPANY_CONFIG.name}*:\n\n${detalle ? detalle + '\n\n' : ''}Total: *S/ ${totalSafe}*\nTicket de venta N° ${v.id}\n\n¡Gracias por su preferencia!`;
     
     const waURL = `https://api.whatsapp.com/send?phone=51${cleanedPhone}&text=${encodeURIComponent(mensaje)}`;
     window.open(waURL, '_blank');
@@ -1616,21 +1586,6 @@ export default function CajaPage({ currentUser }) {
       setCambioTipoError('Error de conexión: ' + err.message);
     } finally {
       setCambioTipoCambiando(false);
-    }
-  };
-
-
-  const reintentarVentaIndividual = async (ventaId) => {
-    try {
-      const res = await api.reintentarNubefact(ventaId);
-      if (res.error) {
-        alert(`❌ Error al enviar a SUNAT: ${res.error}`);
-        return;
-      }
-      await fetchCajaData();
-      alert(`✅ Comprobante enviado y aceptado por SUNAT.`);
-    } catch (err) {
-      alert(`❌ Error al conectar con el servidor: ${err.message}`);
     }
   };
 
@@ -2090,28 +2045,11 @@ export default function CajaPage({ currentUser }) {
     let totalLetras = numeroALetras(total);
     let hashResumen = "gSbTDa" + Math.random().toString(36).substring(2, 8).toUpperCase() + "iIZDyirfA6TBPKJnEI=";
     const rucEmpresa = `R.U.C. N° ${COMPANY_CONFIG.ruc}`;
-    let qrData = `${rucEmpresa}|${tipoComprobante === 'Factura' ? '01' : '03'}|${serie}|${correlativoStr}|${igv.toFixed(2)}|${total.toFixed(2)}|${fecha}|${tipoComprobante === 'Factura' ? '6' : (numDocumento?.length === 8 ? '1' : '0')}|${numDocumento || '00000000'}`;
+    const igvSafe = Number(igv || 0).toFixed(2);
+    const totalSafe = Number(total || 0).toFixed(2);
+    let qrData = `${rucEmpresa}|${tipoComprobante === 'Factura' ? '01' : '03'}|${serie}|${correlativoStr}|${igvSafe}|${totalSafe}|${fecha}|${tipoComprobante === 'Factura' ? '6' : (numDocumento?.length === 8 ? '1' : '0')}|${numDocumento || '00000000'}`;
     let enlacePdf = null;
-
-    let contingencia = response.contingencia || false;
-
-    // Extraer datos oficiales devueltos por la API de Nubefact
-    if (response.estadoNubefact && response.estadoNubefact.startsWith('ACEPTADO:')) {
-      try {
-        const responseData = JSON.parse(response.estadoNubefact.substring(9));
-        serie = responseData.serie || serie;
-        correlativoStr = String(responseData.numero || correlativoStr).padStart(4, '0');
-        if (responseData.cadena_para_codigo_qr) {
-          qrData = responseData.cadena_para_codigo_qr;
-        }
-        if (responseData.key) {
-          hashResumen = responseData.key;
-        }
-        enlacePdf = responseData.enlace_del_pdf || null;
-      } catch (err) {
-        console.error("Error parsing Nubefact response:", err);
-      }
-    }
+    let contingencia = false;
 
     const qrImageUrl = generateOfflineQrUrl(qrData);
 
@@ -3198,8 +3136,6 @@ export default function CajaPage({ currentUser }) {
               )}
               {!v.anulado && v.metodoPago === 'Cortesía' && <span className="text-xs font-medium text-orange-700 bg-orange-50 rounded-md px-2 py-0.5">Cortesía total</span>}
               {!v.anulado && v.metodoPago !== 'Cortesía' && v.itemsResumen?.includes('CORTESÍA') && <span className="text-xs font-medium text-orange-700 bg-orange-50 rounded-md px-2 py-0.5">Con cortesía</span>}
-              {FACTURACION_ELECTRONICA && v.estadoNubefact === 'PENDIENTE_REINTENTO' && <span className="text-xs font-medium text-amber-700 bg-amber-50 rounded-md px-2 py-0.5">Contingencia</span>}
-              {FACTURACION_ELECTRONICA && v.estadoNubefact?.startsWith('ACEPTADO:') && <span className="text-xs font-medium text-emerald-700 bg-emerald-50 rounded-md px-2 py-0.5">Enviado a SUNAT</span>}
             </div>
           </>,
           <>
@@ -3300,25 +3236,20 @@ export default function CajaPage({ currentUser }) {
               </div>
             </div>
 
-            {!v.anulado && v.tipoComprobante === 'Ticket' && (
+            {!v.anulado && (
               <a
                 href="https://ww1.sunat.gob.pe/ol-ti-itfesimpopciones/FESimpSunat.htm"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                className="flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50/60 hover:bg-blue-100/60 px-3.5 py-2.5 text-sm font-medium text-blue-900 transition-colors shadow-sm"
+                title="Abrir portal oficial de SUNAT para emitir comprobante electrónico"
               >
-                <span>Emitir boleta / factura en SUNAT</span>
-                <ExternalLink className="w-4 h-4 text-slate-400" />
+                <span className="flex items-center gap-2">
+                  <ExternalLink className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>Emitir boleta / factura en SUNAT (Portal SOL)</span>
+                </span>
+                <span className="text-xs font-semibold text-blue-600 bg-white px-2 py-0.5 rounded border border-blue-200 shrink-0">sunat.gob.pe ↗</span>
               </a>
-            )}
-            {!v.anulado && FACTURACION_ELECTRONICA && (v.estadoNubefact === 'PENDIENTE_REINTENTO' || ((v.tipoComprobante === 'Boleta' || v.tipoComprobante === 'Factura') && !v.estadoNubefact?.startsWith('ACEPTADO:'))) && (
-              <button
-                type="button"
-                onClick={() => reintentarVentaIndividual(v.id)}
-                className="w-full h-10 rounded-xl border border-amber-200 bg-amber-50 text-sm font-medium text-amber-800 hover:bg-amber-100 transition-colors"
-              >
-                {v.estadoNubefact === 'PENDIENTE_REINTENTO' ? 'Reintentar envío a SUNAT' : 'Enviar a SUNAT'}
-              </button>
             )}
           </>,
           !v.anulado && (

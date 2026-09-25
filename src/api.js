@@ -257,11 +257,6 @@ export const api = {
   // Consulta DNI/RUC segura
   consultarCliente: (doc) => apiRequest(`/api/clientes/consulta/${encodeURIComponent(doc)}`),
 
-  // SUNAT / apisunat.pe — Diagnóstico y reintentos manuales
-  getNubefactPendientes: () => apiRequest('/api/sunat/pendientes'),
-  reintentarNubefact: (id) => apiRequest(`/api/sunat/reintentar/${id}`, { method: 'POST' }),
-  reintentarTodosNubefact: () => apiRequest('/api/sunat/reintentar-todos', { method: 'POST' }),
-
   // Ofertas por Temporada
   getOfertas: () => apiRequest('/api/ofertas'),
   crearOferta: (body) => apiRequest('/api/ofertas', {

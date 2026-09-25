@@ -1463,7 +1463,15 @@ app.post('/api/mesas/:num/pedido', async (req, res) => {
       }
     }
 
-    const itemsNuevos = items.filter(i => !i.historial);
+    const safeItems = Array.isArray(items) ? items : [];
+    const itemsNuevos = safeItems.filter(i => i && !i.historial);
+    if (itemsNuevos.length === 0) {
+      return res.status(400).json({ error: 'No hay nuevos ítems pendientes para enviar a cocina.' });
+    }
+
+    const safeMesero = mesero ? String(mesero).trim() : 'Mozo';
+    const safeTotal = isNaN(parseFloat(total)) ? 0 : parseFloat(total);
+
     const expandedItems = await expandPedidoItemsForDb(itemsNuevos);
     const finalEstadoEnsalada = await evaluarEstadoEnsalada(itemsNuevos);
 
@@ -1471,8 +1479,8 @@ app.post('/api/mesas/:num/pedido', async (req, res) => {
       const p = await tx.pedido.create({
         data: {
           mesaId: parseInt(mesa.id),
-          mesero: String(mesero),
-          total: parseFloat(total),
+          mesero: safeMesero,
+          total: safeTotal,
           adicional: adicional || false,
           estado: 'Cocina',
           estadoEnsalada: finalEstadoEnsalada,
@@ -1692,7 +1700,7 @@ app.patch('/api/pedidos/:id/preparar', async (req, res) => {
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
 
     // Filtrar los items que corresponden a la sección despachada
-    const itemsAActualizar = pedido.items.filter(i => {
+    const itemsAActualizar = (pedido.items || []).filter(i => {
       // Cada estación despacha lo suyo, también en los pedidos para llevar:
       // antes la cocina marcaba las bebidas y la barra las perdía de vista.
       const esItemBarra = BARRA_CATEGORIAS.includes(i.producto?.categoria);
@@ -1802,7 +1810,7 @@ app.patch('/api/pedidos/:id/entregar-todo', async (req, res) => {
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
 
     // Todo lo que ya está listo y aún no se llevó a la mesa (cocina y barra)
-    const itemsAActualizar = pedido.items.filter(i => i.historial && !i.entregado);
+    const itemsAActualizar = (pedido.items || []).filter(i => i.historial && !i.entregado);
 
     if (itemsAActualizar.length > 0) {
       await prisma.itemPedido.updateMany({
@@ -1934,7 +1942,7 @@ app.patch('/api/pedidos/:id/cancelar', async (req, res) => {
     }
 
     // 🔔 Registrar alerta de cancelación para cocina (store en memoria)
-    const itemsParaCocina = pedido.items.filter(i =>
+    const itemsParaCocina = (pedido.items || []).filter(i =>
       !BARRA_CATEGORIAS.includes(i.producto?.categoria || '')
     );
     if (itemsParaCocina.length > 0) {
@@ -1955,7 +1963,7 @@ app.patch('/api/pedidos/:id/cancelar', async (req, res) => {
     }
 
     // 🔔 Registrar alerta de cancelación para barra (store en memoria)
-    const itemsParaBarra = pedido.items.filter(i =>
+    const itemsParaBarra = (pedido.items || []).filter(i =>
       BARRA_CATEGORIAS.includes(i.producto?.categoria || '')
     );
     if (itemsParaBarra.length > 0) {
@@ -2051,7 +2059,7 @@ app.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
     }
 
     // Si el item cancelado es un combo o plato con componentes vinculados, limpiar componentes huérfanos
-    const componentesVinculados = pedido.items.filter(i => i.esComponente && i.productoId === item.productoId);
+    const componentesVinculados = (pedido.items || []).filter(i => i.esComponente && i.productoId === item.productoId);
     for (const comp of componentesVinculados) {
       if (nuevaCantidad === 0) {
         await prisma.itemPedido.delete({ where: { id: comp.id } }).catch(() => null);
@@ -2419,7 +2427,7 @@ app.get('/api/pedidos/llevar', async (req, res) => {
         hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima',
       }),
       // Excluir items expandidos con precio 0 para evitar duplicidad al modificar en el frontend
-      items: p.items.filter(i => !i.esComponente).map(i => ({
+      items: (p.items || []).filter(i => !i.esComponente).map(i => ({
         id: String(i.productoId),
         nombre: i.nombre,
         cant: i.cantidad,
@@ -4360,10 +4368,14 @@ app.post('/api/caja/cierre-forzado', async (req, res) => {
   try {
     const { adminNombre, adminPin, motivo } = req.body;
 
+    if (!adminPin || typeof adminPin !== 'string' || !adminPin.trim()) {
+      return res.status(400).json({ error: 'El PIN de Administrador es obligatorio.' });
+    }
+
     // Validar PIN de administrador
     const admin = await prisma.usuario.findFirst({
       where: {
-        pin: String(adminPin).trim(),
+        pin: adminPin.trim(),
         rol: 'Administrador',
         activo: true,
       },
@@ -4835,7 +4847,7 @@ app.get('/api/reportes/cancelaciones', async (req, res) => {
         motivoCancela: (p.Venta?.motivoAnulacion || (p.motivoCancela || '').replace('[DEVOLUCIÓN CAJA]: ', '') || 'Sin motivo especificado').trim(),
         total: Number(p.Venta?.montoOriginal || p.total || 0),
         metodoPagoOriginal: p.Venta?.metodoPago || 'No cobrado',
-        resumenItems: p.items.map(i => `${i.cantidad}x ${i.nombre}`).join(', '),
+        resumenItems: (p.items || []).map(i => `${i.cantidad}x ${i.nombre}`).join(', '),
       };
     });
 
@@ -5198,7 +5210,7 @@ app.get('/api/reportes/pollos', async (req, res) => {
       totalMedios,
       totalEnteros,
       totalVentasConPollo: ventasConPollo,
-      totalUnidadesEquivalentes: parseFloat(totalFormula.toFixed(2)),
+      totalUnidadesEquivalentes: parseFloat((Number(totalFormula) || 0).toFixed(2)),
       stockInicial,
       porcentajeRotacion,
       detalles: Object.values(productos).sort((a, b) => b.unidadesEquivalentes - a.unidadesEquivalentes),
@@ -5335,324 +5347,6 @@ async function obtenerSiguienteSerieYNumero(tipoComprobante, txPrisma = prisma) 
     numero: siguienteNumero
   };
 }
-
-async function enviarAApisunat(venta, itemsRaw) {
-  // Filtrar los items para excluir componentes de combos de precio 0 que no son barra
-  const items = itemsRaw.filter(i => !i.esComponente);
-
-  // Simular caída de red si está activa la variable de entorno
-  if (process.env.APISUNAT_SIMULATE_OUTAGE === 'true') {
-    throw new Error('Outage Simulator Active: apisunat.pe server is simulated down.');
-  }
-
-  const token = process.env.APISUNAT_TOKEN;
-  const url = process.env.APISUNAT_API_URL || 'https://sandbox.apisunat.pe/api/v3/documents';
-  const MODO_DEMO = !token || token.includes('tu_token') || token === '';
-
-  const serie = venta.serie || (venta.tipoComprobante === 'Factura' ? (process.env.SERIE_FACTURA || 'F001') : (process.env.SERIE_BOLETA || 'B001'));
-
-  // Identificación del cliente (1 = DNI, 6 = RUC, 0 = Sin Documento)
-  let clienteTipoDoc = "1";
-  let clienteNumDoc = venta.numDocumento || "00000000";
-  let clienteDenominacion = venta.nombreCliente || "PÚBLICO GENERAL";
-
-  if (venta.numDocumento && venta.numDocumento.length === 11) {
-    clienteTipoDoc = "6";
-  } else if (!venta.numDocumento || venta.numDocumento === '00000000' || venta.numDocumento === '0') {
-    clienteTipoDoc = "0";
-    clienteNumDoc = "00000000";
-    clienteDenominacion = "PÚBLICO GENERAL";
-  }
-
-  // En MODO DEMO simulamos una respuesta exitosa localmente
-  if (MODO_DEMO) {
-    const empConfig = await getEmpresaConfig();
-    const rucEmpresa = empConfig.ruc;
-    const numeroStr = String(venta.numero || 1);
-    const tipoCompNum = venta.tipoComprobante === 'Factura' ? '01' : '03';
-    return {
-      success: true,
-      message: "El comprobante fue enviado y aceptado por SUNAT (DEMO).",
-      payload: {
-        estado: "ACEPTADO",
-        hash: "demo_hash_" + Math.random().toString(36).substring(2, 10).toUpperCase(),
-        xml: `https://apisunat.pe/${rucEmpresa}-${tipoCompNum}-${serie}-${numeroStr}.xml`,
-        cdr: `https://apisunat.pe/R-${rucEmpresa}-${tipoCompNum}-${serie}-${numeroStr}.xml`,
-        pdf: {
-          ticket: `https://apisunat.pe/pdf/ticket/${rucEmpresa}-${tipoCompNum}-${serie}-${numeroStr}`,
-          a4: `https://apisunat.pe/pdf/a4/${rucEmpresa}-${tipoCompNum}-${serie}-${numeroStr}`
-        }
-      }
-    };
-  }
-
-  // Formatear items para apisunat.pe
-  const igvDiv = getIgvDivisor();
-  const tasaPorcentajeStr = ((igvDiv - 1) * 100).toFixed(1);
-  const formattedItems = items.map((item) => {
-    const totalItem = item.precio * item.cantidad;
-    const subtotalItem = totalItem / igvDiv;
-
-    return {
-      unidad_de_medida: "NIU",
-      descripcion: item.nombre,
-      cantidad: String(item.cantidad),
-      valor_unitario: (subtotalItem / item.cantidad).toFixed(6), // Recomienda 6 decimales
-      porcentaje_igv: tasaPorcentajeStr,
-      codigo_tipo_afectacion_igv: "10", // Gravado - Operación Onerosa
-      nombre_tributo: "IGV"
-    };
-  });
-
-  const payload = {
-    documento: venta.tipoComprobante === 'Factura' ? 'factura' : 'boleta',
-    serie: serie,
-    numero: venta.numero, // Debe ser entero
-    fecha_de_emision: (() => {
-      const dateLima = new Intl.DateTimeFormat('es-PE', {
-        timeZone: 'America/Lima',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(new Date());
-      const [day, month, year] = dateLima.split('/');
-      return `${year}-${month}-${day}`;
-    })(),
-    moneda: "PEN",
-    tipo_operacion: "0101",
-    cliente_tipo_de_documento: clienteTipoDoc,
-    cliente_numero_de_documento: clienteNumDoc,
-    cliente_denominacion: clienteDenominacion,
-    cliente_direccion: (venta.clienteDireccion && venta.clienteDireccion.trim()) || "-",
-    items: formattedItems,
-    total: venta.total.toFixed(2)
-  };
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': token.startsWith('Bearer ') ? token : `Bearer ${token}`
-    },
-    body: JSON.stringify(payload),
-    signal: controller.signal
-  });
-
-  clearTimeout(timeoutId);
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    let parsedError;
-    try {
-      parsedError = JSON.parse(errorText);
-    } catch (e) { }
-    const errMsg = parsedError?.message || errorText;
-    throw new Error(`apisunat.pe Error (${response.status}): ${errMsg}`);
-  }
-
-  const resData = await response.json();
-  if (resData.success && resData.payload?.estado === 'RECHAZADO') {
-    throw new Error(`SUNAT rechazó el comprobante: ${resData.message || 'Datos incorrectos'}`);
-  }
-  return resData;
-}
-
-
-// ============================================================
-// APISUNAT — ENDPOINTS DE DIAGNÓSTICO Y REINTENTO MANUAL
-// ============================================================
-
-// GET /api/sunat/pendientes → Ver todas las ventas con problemas
-app.get('/api/sunat/pendientes', async (req, res) => {
-  try {
-    const pendientes = await prisma.venta.findMany({
-      where: {
-        OR: [
-          { estadoSunat: { startsWith: 'PENDIENTE' } },
-          { estadoSunat: { startsWith: 'ERROR' } },
-        ],
-        tipoComprobante: { in: ['Boleta', 'Factura'] }
-      },
-      select: {
-        id: true,
-        createdAt: true,
-        tipoComprobante: true,
-        total: true,
-        nombreCliente: true,
-        numDocumento: true,
-        estadoSunat: true,
-        pedidoId: true,
-        serie: true,
-        numero: true
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-    // Mapeamos temporalmente estadoSunat como estadoNubefact para compatibilidad con el front
-    const mapped = pendientes.map(p => ({
-      ...p,
-      estadoNubefact: p.estadoSunat
-    }));
-    res.json(mapped);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/sunat/reintentar/:id → Forzar reintento manual de una venta específica
-app.post('/api/sunat/reintentar/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
-  try {
-    const venta = await prisma.venta.findUnique({
-      where: { id },
-      include: { pedido: { include: { items: true } } }
-    });
-    if (!venta) return res.status(404).json({ error: 'Venta no encontrada.' });
-
-    console.log(`[SUNAT Manual] 🔄 Reintento manual forzado para Venta #${id}...`);
-
-    // Asignar o curar serie y correlativo si no coincide con la configurada y no está aceptada por SUNAT
-    const isFactura = venta.tipoComprobante === 'Factura';
-    const serieDefault = isFactura ? (process.env.SERIE_FACTURA || 'F001') : (process.env.SERIE_BOLETA || 'B001');
-    const noAceptado = !venta.estadoSunat || !venta.estadoSunat.startsWith('ACEPTADO:');
-
-    if (!venta.serie || !venta.numero || (noAceptado && venta.serie !== serieDefault)) {
-      const datosSerie = await obtenerSiguienteSerieYNumero(venta.tipoComprobante);
-      venta.serie = datosSerie.serie;
-      venta.numero = datosSerie.numero;
-
-      await prisma.venta.update({
-        where: { id: venta.id },
-        data: { serie: venta.serie, numero: venta.numero }
-      });
-    }
-
-    const response = await enviarAApisunat(venta, venta.pedido.items);
-
-    const mappedData = {
-      serie: venta.serie,
-      numero: venta.numero,
-      key: response.payload?.hash || '',
-      enlace_del_pdf: response.payload?.pdf?.ticket || response.payload?.pdf?.a4 || '',
-      cadena_para_codigo_qr: `${(await getEmpresaConfig()).ruc}|${venta.tipoComprobante === 'Factura' ? '01' : '03'}|${venta.serie}|${String(venta.numero).padStart(4, '0')}|${venta.igv.toFixed(2)}|${venta.total.toFixed(2)}|${new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(venta.createdAt))}|${venta.tipoComprobante === 'Factura' ? '6' : (venta.numDocumento?.length === 8 ? '1' : '0')}|${venta.numDocumento || '00000000'}|${response.payload?.hash || ''}`
-    };
-
-    const updated = await prisma.venta.update({
-      where: { id },
-      data: {
-        estadoSunat: `ACEPTADO:${JSON.stringify(mappedData)}`,
-        urlPdf: mappedData.enlace_del_pdf,
-        urlXml: response.payload?.xml || null
-      }
-    });
-
-    console.log(`[SUNAT Manual] ✅ Venta #${id} ACEPTADA por apisunat.pe.`);
-    res.json({ ok: true, estadoNubefact: updated.estadoSunat }); // Retornamos mapeado como estadoNubefact para el front
-  } catch (err) {
-    const errorMsg = err.message.substring(0, 500);
-    await prisma.venta.update({
-      where: { id },
-      data: { estadoSunat: `ERROR:${errorMsg}` }
-    }).catch(() => { });
-
-    console.error(`[SUNAT Manual] ❌ Fallo reintento manual Venta #${id}:`, err.message);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// POST /api/sunat/reintentar-todos → Forzar reintento de TODAS las ventas pendientes
-app.post('/api/sunat/reintentar-todos', async (req, res) => {
-  try {
-    await procesarVentasPendientes();
-    res.json({ ok: true, mensaje: 'Reintento masivo ejecutado. Revisa los logs de SUNAT.' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-// ============================================================
-// WORKER DE REINTENTO AUTOMÁTICO (OFFLINE CONTINGENCY)
-// ============================================================
-
-async function procesarVentasPendientes() {
-  try {
-    const pendientes = await prisma.venta.findMany({
-      where: {
-        estadoSunat: 'PENDIENTE_REINTENTO',
-        tipoComprobante: { in: ['Boleta', 'Factura'] }
-      },
-      include: {
-        pedido: {
-          include: { items: true }
-        }
-      }
-    });
-
-    if (pendientes.length === 0) return;
-
-    console.log(`[Worker SUNAT] 🔍 Se encontraron ${pendientes.length} ventas en contingencia por reintentar.`);
-
-    for (const venta of pendientes) {
-      try {
-        console.log(`[Worker SUNAT] 🔄 Reintentando envío de Venta #${venta.id}...`);
-
-        // Asignar o curar serie y correlativo si no coincide con la configurada y no está aceptada por SUNAT
-        const isFactura = venta.tipoComprobante === 'Factura';
-        const serieDefault = isFactura ? (process.env.SERIE_FACTURA || 'F001') : (process.env.SERIE_BOLETA || 'B001');
-        const noAceptado = !venta.estadoSunat || !venta.estadoSunat.startsWith('ACEPTADO:');
-
-        if (!venta.serie || !venta.numero || (noAceptado && venta.serie !== serieDefault)) {
-          const datosSerie = await obtenerSiguienteSerieYNumero(venta.tipoComprobante);
-          venta.serie = datosSerie.serie;
-          venta.numero = datosSerie.numero;
-
-          await prisma.venta.update({
-            where: { id: venta.id },
-            data: { serie: venta.serie, numero: venta.numero }
-          });
-        }
-
-        const response = await enviarAApisunat(venta, venta.pedido.items);
-
-        const mappedData = {
-          serie: venta.serie,
-          numero: venta.numero,
-          key: response.payload?.hash || '',
-          enlace_del_pdf: response.payload?.pdf?.ticket || response.payload?.pdf?.a4 || '',
-          cadena_para_codigo_qr: `${(await getEmpresaConfig()).ruc}|${venta.tipoComprobante === 'Factura' ? '01' : '03'}|${venta.serie}|${String(venta.numero).padStart(4, '0')}|${venta.igv.toFixed(2)}|${venta.total.toFixed(2)}|${new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(venta.createdAt))}|${venta.tipoComprobante === 'Factura' ? '6' : (venta.numDocumento?.length === 8 ? '1' : '0')}|${venta.numDocumento || '00000000'}|${response.payload?.hash || ''}`
-        };
-
-        await prisma.venta.update({
-          where: { id: venta.id },
-          data: {
-            estadoSunat: `ACEPTADO:${JSON.stringify(mappedData)}`,
-            urlPdf: mappedData.enlace_del_pdf,
-            urlXml: response.payload?.xml || null
-          }
-        });
-
-        console.log(`[Worker SUNAT] ✅ Venta #${venta.id} enviada y ACEPTADA por apisunat.pe.`);
-      } catch (err) {
-        const errorMsg = err.message.substring(0, 500);
-        await prisma.venta.update({
-          where: { id: venta.id },
-          data: { estadoSunat: `ERROR:${errorMsg}` }
-        }).catch(() => { });
-
-        console.error(`[Worker SUNAT] ❌ Intento fallido para Venta #${venta.id}:`, err.message);
-      }
-    }
-  } catch (err) {
-    console.error("[Worker SUNAT] ❌ Error crítico en el worker:", err.message);
-  }
-}
-
-// El worker de reintentos queda desactivado: el sistema solo emite tickets de venta.
-// Se conserva procesarVentasPendientes por si en el futuro se reactiva la facturación electrónica.
-void procesarVentasPendientes;
 
 // ============================================================
 // FRONTEND COMPILADO (INSTALADOR WINDOWS)

@@ -601,7 +601,7 @@ export default function CreditosPage({ currentUser }) {
                       <tr key={v.id} className="border-b border-slate-50">
                         <td className="py-2">{new Date(v.fecha).toLocaleDateString('es-PE')}</td>
                         <td className="py-2">{v.tipoComprobante}</td>
-                        <td className="py-2 text-right font-bold">{v.montoCredito > 0 ? `S/ ${v.montoCredito.toFixed(2)}` : `S/ ${v.total.toFixed(2)}`}</td>
+                        <td className="py-2 text-right font-bold">{Number(v.montoCredito || 0) > 0 ? `S/ ${Number(v.montoCredito).toFixed(2)}` : `S/ ${Number(v.total || 0).toFixed(2)}`}</td>
                       </tr>
                     ))}
                   </tbody>

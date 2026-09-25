@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserPlus, X, Trash2, Edit, Eye, EyeOff, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, UsersRound, Save, Salad, BookOpen } from 'lucide-react';
 import { api } from '../api';
+import { safeJsonParse } from '../utils/safeJson';
 
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState([]);
@@ -11,7 +12,7 @@ export default function UsuariosPage() {
   const [editingUser, setEditingUser] = useState(null); // null si es nuevo
   const [visiblePins, setVisiblePins] = useState({}); // id -> boolean
 
-  const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const currentUser = safeJsonParse(localStorage.getItem('currentUser'), {});
 
   const fetchUsuarios = async () => {
     try {

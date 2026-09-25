@@ -1,4 +1,4 @@
-﻿// Mini generador offline de Código QR (Algoritmo estándar QR ISO/IEC 18004 en puro JS sin dependencias externas)
+// Mini generador offline de Código QR (Algoritmo estándar QR ISO/IEC 18004 en puro JS sin dependencias externas)
 // Produce un SVG en formato Data URI totalmente escaneable y 100% offline.
 
 class QRBitBuffer {
@@ -334,7 +334,8 @@ export function generateOfflineQrUrl(text, size = 130) {
     qr.make();
 
     const count = qr.getModuleCount();
-    const cellSize = (size / count).toFixed(2);
+    const safeCount = count > 0 ? count : 1;
+    const cellSize = (size / safeCount).toFixed(2);
     let rects = '';
 
     for (let r = 0; r < count; r++) {

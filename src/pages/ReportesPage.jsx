@@ -179,10 +179,9 @@ export default function ReportesPage() {
     if (!v) return;
     const serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
     const correlativoStr = String(v.id % 10000).padStart(4, '0');
-    const totalLetras = numeroALetras(v.total);
-    const hashResumen = "gSbTDa" + Math.random().toString(36).substring(2, 8).toUpperCase() + "iIZDyirfA6TBPKJnEI=";
-    const rucEmpresa = `R.U.C. N° ${COMPANY_CONFIG.ruc}`;
-    const qrData = `${rucEmpresa}|03|${serie}|${correlativoStr}|${v.igv.toFixed(2)}|${v.total.toFixed(2)}|${v.fecha || new Date(v.createdAt).toLocaleDateString('es-PE')}|${v.tipoComprobante === 'Factura'?'6':'1'}|${v.numDocumento || '00000000'}`;
+    const igvSafe = Number(v.igv || 0).toFixed(2);
+    const totalSafe = Number(v.total || 0).toFixed(2);
+    const qrData = `${rucEmpresa}|03|${serie}|${correlativoStr}|${igvSafe}|${totalSafe}|${v.fecha || new Date(v.createdAt).toLocaleDateString('es-PE')}|${v.tipoComprobante === 'Factura'?'6':'1'}|${v.numDocumento || '00000000'}`;
     const qrImageUrl = generateOfflineQrUrl(qrData);
 
     // Reconstruir items si vienen del backend o parsear de itemsResumen
@@ -259,9 +258,8 @@ export default function ReportesPage() {
     }
     
     const serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
-    const correlativoStr = String(v.id % 10000).padStart(4, '0');
-    
-    const mensaje = `Hola *${v.nombreCliente || 'Estimado cliente'}*, el total de su consumo en *${COMPANY_CONFIG.name}* fue de *S/ ${v.total.toFixed(2)}* (ticket de venta N° ${v.id}).\n\n¡Gracias por su preferencia!`;
+    const totalSafe = Number(v.total || 0).toFixed(2);
+    const mensaje = `Hola *${v.nombreCliente || 'Estimado cliente'}*, el total de su consumo en *${COMPANY_CONFIG.name}* fue de *S/ ${totalSafe}* (ticket de venta N° ${v.id}).\n\n¡Gracias por su preferencia!`;
     
     const waURL = `https://api.whatsapp.com/send?phone=51${cleanedPhone}&text=${encodeURIComponent(mensaje)}`;
     window.open(waURL, '_blank');
