@@ -667,6 +667,7 @@ app.get('/api/clientes', async (req, res) => {
     });
 
     const formateados = clientes.map(c => {
+      const totalConsumido = Math.round((consumoPorCliente[c.id] || 0) * 100) / 100;
       const totalAbonado = c.AbonosCredito.reduce((s, a) => s + a.monto, 0);
       const saldo = Math.round((totalConsumido - totalAbonado) * 100) / 100;
       return {
@@ -901,7 +902,8 @@ app.get('/api/clientes/:id', async (req, res) => {
       }
     });
 
-    const totalConsumido = ventasCredito.reduce((s, v) => s + v.montoCredito, 0);
+    const totalConsumido = Math.round(ventasCredito.reduce((s, v) => s + v.montoCredito, 0) * 100) / 100;
+    const totalAbonado = Math.round((cliente.AbonosCredito || []).reduce((s, a) => s + a.monto, 0) * 100) / 100;
     const saldo = Math.round((totalConsumido - totalAbonado) * 100) / 100;
 
     res.json({
@@ -926,17 +928,76 @@ app.post('/api/clientes/:id/abonar', async (req, res) => {
       return res.status(400).json({ error: 'El monto del abono debe ser mayor a 0.' });
     }
 
+    // 1. Validar que la caja esté abierta
+    const turnoActivo = await prisma.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
+    if (!turnoActivo) {
+      return res.status(400).json({
+        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de registrar abonos.'
+      });
+    }
+
     const cliente = await prisma.cliente.findUnique({ where: { id } });
     if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado.' });
 
+    const montoNum = Math.round(parseFloat(monto) * 100) / 100;
+
+    // 2. Calcular saldo adeudado del cliente para evitar saldos negativos huérfanos
+    const [ventasCliente, abonosCliente] = await Promise.all([
+      prisma.venta.findMany({
+        where: {
+          OR: [
+            { clienteCreditoId: id },
+            { ofertaDescripcion: { contains: '[CREDITO_SPLIT:' } }
+          ],
+          anulado: false
+        },
+        select: { clienteCreditoId: true, montoCredito: true, total: true, ofertaDescripcion: true, metodoPago: true }
+      }),
+      prisma.abonoCredito.findMany({
+        where: { clienteId: id },
+        select: { monto: true }
+      })
+    ]);
+
+    let totalConsumido = 0;
+    ventasCliente.forEach(v => {
+      const splits = parsearCreditoSplit(v.ofertaDescripcion, v.clienteCreditoId, (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0)));
+      const miSplit = splits.find(s => s.clienteId === id);
+      if (miSplit) {
+        totalConsumido += miSplit.monto;
+      } else if (v.clienteCreditoId === id && splits.length === 0) {
+        totalConsumido += (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0));
+      }
+    });
+
+    const totalAbonado = abonosCliente.reduce((s, a) => s + a.monto, 0);
+    const saldoPendiente = Math.round((totalConsumido - totalAbonado) * 100) / 100;
+
+    if (saldoPendiente <= 0) {
+      return res.status(400).json({
+        error: `El cliente "${cliente.nombre}" no tiene saldo pendiente por pagar (Saldo: S/ 0.00).`
+      });
+    }
+
+    if (montoNum > (saldoPendiente + 0.05)) {
+      return res.status(400).json({
+        error: `El monto del abono (S/ ${montoNum.toFixed(2)}) supera la deuda pendiente del cliente (S/ ${saldoPendiente.toFixed(2)}).`
+      });
+    }
+
     const finalMetodo = metodoPago || 'Efectivo';
     let finalEfectivo = 0, finalTarjeta = 0, finalYape = 0;
-    const montoNum = parseFloat(monto);
 
     if (finalMetodo === 'Mixto') {
       finalEfectivo = parseFloat(montoEfectivo || 0);
       finalTarjeta = parseFloat(montoTarjeta || 0);
       finalYape = parseFloat(montoYape || 0);
+      const sumaPartes = Math.round((finalEfectivo + finalTarjeta + finalYape) * 100) / 100;
+      if (Math.abs(sumaPartes - montoNum) > 0.05) {
+        return res.status(400).json({
+          error: `En pago mixto, la suma de Efectivo (S/ ${finalEfectivo.toFixed(2)}), Tarjeta (S/ ${finalTarjeta.toFixed(2)}) y Yape (S/ ${finalYape.toFixed(2)}) es S/ ${sumaPartes.toFixed(2)}, pero el total a abonar es S/ ${montoNum.toFixed(2)}. Deben coincidir exactamente.`
+        });
+      }
     } else if (finalMetodo === 'Efectivo') {
       finalEfectivo = montoNum;
     } else if (finalMetodo === 'Tarjeta') {
@@ -1810,6 +1871,24 @@ app.patch('/api/pedidos/:id/cancelar', async (req, res) => {
       },
     });
 
+    // Anular la venta asociada si existía (pedidos delivery o para llevar cobrados)
+    await prisma.venta.updateMany({
+      where: { pedidoId: id, anulado: false },
+      data: {
+        anulado: true,
+        motivoAnulacion: `[CANCELACIÓN DE PEDIDO #${id}]: ${motivo || 'Cancelado por usuario'}`,
+        anuladoPor: canceladoPor || 'Sistema',
+        anuladoEn: new Date(),
+        total: 0.00,
+        subtotal: 0.00,
+        igv: 0.00,
+        montoEfectivo: 0.00,
+        montoTarjeta: 0.00,
+        montoYape: 0.00,
+        montoCredito: 0.00,
+      },
+    });
+
     // Restaurar stock de productos limitados
     for (const item of pedido.items) {
       if (item.producto?.tipoStock === 'limitado') {
@@ -1971,6 +2050,63 @@ app.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
       });
     }
 
+    // Si el item cancelado es un combo o plato con componentes vinculados, limpiar componentes huérfanos
+    const componentesVinculados = pedido.items.filter(i => i.esComponente && i.productoId === item.productoId);
+    for (const comp of componentesVinculados) {
+      if (nuevaCantidad === 0) {
+        await prisma.itemPedido.delete({ where: { id: comp.id } }).catch(() => null);
+      } else {
+        const nuevaCantComp = Math.max(0, comp.cantidad - cantidadACancelar);
+        if (nuevaCantComp === 0) {
+          await prisma.itemPedido.delete({ where: { id: comp.id } }).catch(() => null);
+        } else {
+          await prisma.itemPedido.update({ where: { id: comp.id }, data: { cantidad: nuevaCantComp } }).catch(() => null);
+        }
+      }
+      if (comp.producto?.tipoStock === 'limitado') {
+        await prisma.producto.update({
+          where: { id: comp.productoId },
+          data: { stock: { increment: cantidadACancelar } },
+        }).catch(() => null);
+      }
+    }
+
+    // 🔔 Registrar alerta de cancelación para KDS (Cocina y Barra)
+    const categoriaProd = item.producto?.categoria || '';
+    const esBarra = BARRA_CATEGORIAS.includes(categoriaProd);
+    const mesaInfo = pedido.mesaId 
+      ? `Mesa ${pedido.mesa?.numero || pedido.mesaId}` 
+      : (pedido.codigoPedidosYa ? `🛵 ${pedido.codigoPedidosYa}` : 'Para Llevar/Delivery');
+
+    const itemAlerta = {
+      nombre: item.nombre,
+      cantidad: cantidadACancelar,
+      precio: item.precio,
+      notas: motivo ? `CANCELADO: ${motivo}` : 'Cancelado por mozo',
+    };
+
+    if (esBarra) {
+      cancelacionesBarra.push({
+        id: `cancel-item-${Date.now()}-${item.id}`,
+        pedidoId: pedido.id,
+        items: [itemAlerta],
+        mesaInfo,
+        codigoPedidosYa: pedido.codigoPedidosYa || null,
+        canceladoPor: canceladoPor || 'Mozo',
+        canceladoEn: new Date().toISOString(),
+      });
+    } else {
+      cancelacionesCocina.push({
+        id: `cancel-item-${Date.now()}-${item.id}`,
+        pedidoId: pedido.id,
+        items: [itemAlerta],
+        mesaInfo,
+        codigoPedidosYa: pedido.codigoPedidosYa || null,
+        canceladoPor: canceladoPor || 'Mozo',
+        canceladoEn: new Date().toISOString(),
+      });
+    }
+
     const esUltimoItem = pedido.items.length === 1 && cantidadACancelar === item.cantidad;
 
     // Declarar en el scope externo para que esté disponible en el res.json final
@@ -2093,6 +2229,14 @@ app.post('/api/pedidos/llevar', async (req, res) => {
   } = req.body;
 
   try {
+    // 0. Validar si la caja se encuentra abierta
+    const turnoActivo = await prisma.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
+    if (!turnoActivo) {
+      return res.status(400).json({
+        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de registrar pedidos para llevar o delivery.'
+      });
+    }
+
     const isTakeout = tipoDelivery === 'ParaLlevar';
     const isOwnDelivery = tipoDelivery === 'DeliveryPropio';
 
@@ -2125,45 +2269,6 @@ app.post('/api/pedidos/llevar', async (req, res) => {
     const expandedItems = await expandPedidoItemsForDb(items);
     const finalEstadoEnsalada = await evaluarEstadoEnsalada(items);
 
-    const pedido = await prisma.pedido.create({
-      data: {
-        mesaId: null,
-        mesero: String(cajero),
-        total: grandTotal,
-        estado: 'Cocina', // Todos van a Cocina primero para que la cocina/barra los prepare
-        estadoEnsalada: finalEstadoEnsalada,
-        tipoEntrega: isOwnDelivery ? 'delivery' : 'llevar',
-        codigoPedidosYa: codigoPedidosYa ? String(codigoPedidosYa) : null,
-        items: {
-          create: expandedItems.map(i => ({
-            productoId: i.productoId,
-            nombre: i.nombre,
-            precio: i.precio,
-            cantidad: i.cantidad,
-            historial: i.historial,
-            entregado: i.entregado || false,
-            notas: i.notas,
-            esComponente: i.esComponente || false,
-          })),
-        },
-      },
-    });
-
-    // Descontar stock limitado con guardia atómica (incluye los componentes de un combo)
-    for (const item of expandedItems) {
-      const updateResult = await prisma.producto.updateMany({
-        where: { id: item.productoId, tipoStock: 'limitado', stock: { gte: item.cantidad } },
-        data: { stock: { decrement: item.cantidad } },
-      });
-      if (updateResult.count === 0) {
-        const prodCheck = await prisma.producto.findUnique({ where: { id: item.productoId } });
-        if (prodCheck && prodCheck.tipoStock === 'limitado' && prodCheck.stock < item.cantidad) {
-          throw new Error(`Stock insuficiente para "${prodCheck.nombre}". Stock disponible: ${prodCheck.stock}, solicitado: ${item.cantidad}`);
-        }
-      }
-    }
-
-    // Registrar venta inmediatamente
     const { subtotal, igv } = calcularSubtotalEIgv(grandTotal);
 
     let finalMontoEfectivo = 0;
@@ -2190,64 +2295,102 @@ app.post('/api/pedidos/llevar', async (req, res) => {
       return res.status(400).json({ error: 'Debe seleccionar un cliente para registrar la venta a crédito.' });
     }
 
-    // Asignar nombres por defecto segun tipo
     let finalNombreCliente = nombreCliente;
     if (!finalNombreCliente) {
       if (tipoDelivery === 'PedidosYa') finalNombreCliente = 'PEDIDOS YA';
       else finalNombreCliente = 'CONSUMIDOR FINAL';
     }
 
-    const finalTipoComprobante = 'Ticket'; // solo tickets de venta
+    const finalTipoComprobante = 'Ticket';
     const initEstadoSunat = 'NO_APLICA';
 
-    let venta = await prisma.$transaction(async (tx) => {
-      const serie = null;
-      const numero = null;
-      return tx.venta.create({
-      data: {
-        pedidoId: pedido.id,
-        tipoComprobante: finalTipoComprobante,
-        nombreCliente: finalNombreCliente,
-        numDocumento: numDocumento || codigoPedidosYa || 'S/D',
-        clienteDireccion: clienteDireccion || '',
-        total: grandTotal,
-        igv,
-        subtotal,
-        metodoPago: finalMetodoPago,
-        montoEfectivo: finalMontoEfectivo,
-        montoTarjeta: finalMontoTarjeta,
-        montoYape: finalMontoYape,
-        montoCredito: finalMontoCredito,
-        clienteCreditoId: clienteCreditoId ? parseInt(clienteCreditoId) : null,
-        estadoNubefact: initEstadoSunat,
-        estadoSunat: initEstadoSunat,
-        serie,
-        numero,
-        cajeroNombre: cajero ? String(cajero).trim() : null,
-        descuentoAplicado: descuentoFinal,
-        ofertaDescripcion: (() => {
-          const motivoStr = motivoCortesia && String(motivoCortesia).trim() ? ` (${String(motivoCortesia).trim()})` : '';
-          if (finalMetodoPago === 'Cortesía') {
-            return `Cortesía total${motivoStr}`;
-          }
-          const hasCortesiaItems = Array.isArray(items) && items.some(i => i.notas && String(i.notas).includes('[CORTESÍA]'));
-          if (hasCortesiaItems) {
-            return `Cortesía de ítems${motivoStr}`;
-          }
-          return descuentoFinal > 0 ? (descuentoDescripcion || `Descuento manual ${descPct}%`) : null;
-        })(),
-      },
+    // Transacción atómica completa: Pedido + Stock Decrement + Venta
+    const resultado = await prisma.$transaction(async (tx) => {
+      const pedidoCreado = await tx.pedido.create({
+        data: {
+          mesaId: null,
+          mesero: String(cajero),
+          total: grandTotal,
+          estado: 'Cocina',
+          estadoEnsalada: finalEstadoEnsalada,
+          tipoEntrega: isOwnDelivery ? 'delivery' : 'llevar',
+          codigoPedidosYa: codigoPedidosYa ? String(codigoPedidosYa) : null,
+          items: {
+            create: expandedItems.map(i => ({
+              productoId: i.productoId,
+              nombre: i.nombre,
+              precio: i.precio,
+              cantidad: i.cantidad,
+              historial: i.historial,
+              entregado: i.entregado || false,
+              notas: i.notas,
+              esComponente: i.esComponente || false,
+            })),
+          },
+        },
       });
+
+      // Descontar stock limitado con guardia atómica dentro de la transacción
+      for (const item of expandedItems) {
+        const updateResult = await tx.producto.updateMany({
+          where: { id: item.productoId, tipoStock: 'limitado', stock: { gte: item.cantidad } },
+          data: { stock: { decrement: item.cantidad } },
+        });
+        if (updateResult.count === 0) {
+          const prodCheck = await tx.producto.findUnique({ where: { id: item.productoId } });
+          if (prodCheck && prodCheck.tipoStock === 'limitado' && prodCheck.stock < item.cantidad) {
+            throw new Error(`Stock insuficiente para "${prodCheck.nombre}". Stock disponible: ${prodCheck.stock}, solicitado: ${item.cantidad}`);
+          }
+        }
+      }
+
+      const ventaCreada = await tx.venta.create({
+        data: {
+          pedidoId: pedidoCreado.id,
+          tipoComprobante: finalTipoComprobante,
+          nombreCliente: finalNombreCliente,
+          numDocumento: numDocumento || codigoPedidosYa || 'S/D',
+          clienteDireccion: clienteDireccion || '',
+          total: grandTotal,
+          igv,
+          subtotal,
+          metodoPago: finalMetodoPago,
+          montoEfectivo: finalMontoEfectivo,
+          montoTarjeta: finalMontoTarjeta,
+          montoYape: finalMontoYape,
+          montoCredito: finalMontoCredito,
+          clienteCreditoId: clienteCreditoId ? parseInt(clienteCreditoId) : null,
+          estadoNubefact: initEstadoSunat,
+          estadoSunat: initEstadoSunat,
+          serie: null,
+          numero: null,
+          cajeroNombre: cajero ? String(cajero).trim() : null,
+          descuentoAplicado: descuentoFinal,
+          ofertaDescripcion: (() => {
+            const motivoStr = motivoCortesia && String(motivoCortesia).trim() ? ` (${String(motivoCortesia).trim()})` : '';
+            if (finalMetodoPago === 'Cortesía') {
+              return `Cortesía total${motivoStr}`;
+            }
+            const hasCortesiaItems = Array.isArray(items) && items.some(i => i.notas && String(i.notas).includes('[CORTESÍA]'));
+            if (hasCortesiaItems) {
+              return `Cortesía de ítems${motivoStr}`;
+            }
+            return descuentoFinal > 0 ? (descuentoDescripcion || `Descuento manual ${descPct}%`) : null;
+          })(),
+        },
+      });
+
+      return { pedido: pedidoCreado, venta: ventaCreada };
     });
 
     res.json({
       ok: true,
-      pedidoId: pedido.id,
-      serie: venta.serie,
-      numero: venta.numero,
+      pedidoId: resultado.pedido.id,
+      serie: resultado.venta.serie,
+      numero: resultado.venta.numero,
       contingencia: false,
-      estadoNubefact: venta.estadoNubefact,
-      venta
+      estadoNubefact: resultado.venta.estadoNubefact,
+      venta: resultado.venta
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3290,6 +3433,21 @@ app.patch('/api/ventas/:ventaId/anular', async (req, res) => {
         }
       }
 
+      // Si la venta pertenece a un turno anterior y se pagó en efectivo, registrar la salida de la gaveta de hoy
+      const turnoAbierto = await tx.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
+      const ventaEfectivoPrevio = Number(venta.montoEfectivo) || (venta.metodoPago === 'Efectivo' ? Number(venta.total) : 0);
+      if (turnoAbierto && ventaEfectivoPrevio > 0 && new Date(venta.createdAt) < new Date(turnoAbierto.fechaApertura)) {
+        await tx.movimientoCaja.create({
+          data: {
+            tipo: 'RETIRO',
+            monto: ventaEfectivoPrevio,
+            motivo: `[DEVOLUCIÓN TICKET #${venta.id} DE TURNO PREVIO]: ${motivoFinal}`,
+            cajeroNombre: admin.nombre,
+            turnoId: turnoAbierto.id,
+          }
+        });
+      }
+
       return vUpdated;
     });
 
@@ -3334,6 +3492,14 @@ app.post('/api/ventas', async (req, res) => {
   const idPrincipal = idsAPagar[idsAPagar.length - 1]; // El más reciente como venta principal
 
   try {
+    // 0. Validar si la caja se encuentra abierta para procesar cobros
+    const turnoActivo = await prisma.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
+    if (!turnoActivo) {
+      return res.status(400).json({
+        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de realizar cobros.'
+      });
+    }
+
     // 1. Validar si ya existe una venta asociada a estos pedidos (evita error de doble cobro por concurrencia)
     const ventaExistente = await prisma.venta.findFirst({
       where: { pedidoId: { in: idsAPagar } },
@@ -3417,7 +3583,10 @@ app.post('/api/ventas', async (req, res) => {
         data: { total: nuevoTotalPedido }
       });
 
-      const finalTotal = metodoPago === 'Cortesía' ? 0.00 : nuevoTotalPedido;
+      const descVal = Math.max(0, parseFloat(descuentoAplicado || 0) || 0);
+      const finalTotal = (metodoPago === 'Cortesía' || metodoPago === 'Consumo') 
+        ? 0.00 
+        : Math.max(0, Math.round((nuevoTotalPedido - descVal) * 100) / 100);
       const { subtotal, igv } = calcularSubtotalEIgv(finalTotal);
 
       let finalMontoEfectivo = 0;
@@ -4252,46 +4421,59 @@ app.get('/api/caja/cierres', async (req, res) => {
 app.get('/api/compras', async (req, res) => {
   const { desde, hasta, categoria, metodoPago, busqueda } = req.query;
   try {
-    let whereClause = {};
+    const conditions = [];
 
+    // Filtro por fecha contable legal (fechaEmision preferente, fallback a fecha de compra)
+    let dateFilter = null;
     if (desde && hasta) {
       const nextDay = new Date(hasta + 'T00:00:00.000-05:00');
       nextDay.setDate(nextDay.getDate() + 1);
       const nextDayStr = nextDay.toISOString().split('T')[0];
-      whereClause.creadoEn = {
+      dateFilter = {
         gte: new Date(desde + 'T00:00:00.000-05:00'),
         lte: new Date(nextDayStr + 'T02:59:59.999-05:00')
       };
     } else if (desde) {
-      whereClause.creadoEn = {
+      dateFilter = {
         gte: new Date(desde + 'T00:00:00.000-05:00')
       };
     } else {
       const ahora = new Date();
       const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
-      whereClause.creadoEn = { gte: inicioMes };
+      dateFilter = { gte: inicioMes };
     }
 
+    conditions.push({
+      OR: [
+        { fechaEmision: dateFilter },
+        { fechaEmision: null, fecha: dateFilter },
+      ]
+    });
+
     if (categoria && categoria !== 'Todas') {
-      whereClause.categoria = categoria;
+      conditions.push({ categoria });
     }
 
     if (metodoPago && metodoPago !== 'Todos') {
-      whereClause.metodoPago = metodoPago;
+      conditions.push({ metodoPago });
     }
 
     if (busqueda && busqueda.trim()) {
       const q = busqueda.trim();
-      whereClause.OR = [
-        { proveedor: { contains: q, mode: 'insensitive' } },
-        { ruc: { contains: q, mode: 'insensitive' } },
-        { serieNumero: { contains: q, mode: 'insensitive' } },
-      ];
+      conditions.push({
+        OR: [
+          { proveedor: { contains: q, mode: 'insensitive' } },
+          { ruc: { contains: q, mode: 'insensitive' } },
+          { serieNumero: { contains: q, mode: 'insensitive' } },
+        ]
+      });
     }
+
+    const whereClause = conditions.length > 0 ? { AND: conditions } : {};
 
     const compras = await prisma.compra.findMany({
       where: whereClause,
-      orderBy: { creadoEn: 'desc' },
+      orderBy: [{ fechaEmision: 'desc' }, { fecha: 'desc' }, { creadoEn: 'desc' }],
     });
     res.json(compras);
   } catch (err) {
@@ -4305,7 +4487,12 @@ app.get('/api/compras/stats', async (req, res) => {
     const ahora = new Date();
     const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
     const compras = await prisma.compra.findMany({
-      where: { creadoEn: { gte: inicioMes } },
+      where: {
+        OR: [
+          { fechaEmision: { gte: inicioMes } },
+          { fechaEmision: null, fecha: { gte: inicioMes } },
+        ]
+      },
     });
 
     const totalGastado = compras.reduce((s, c) => s + c.total, 0);
@@ -4501,6 +4688,7 @@ app.post('/api/compras', async (req, res) => {
         xmlData: xmlData ? String(xmlData) : null,
         origenCarga: origenCarga ? String(origenCarga) : 'manual',
         categoria: categoria ? String(categoria) : null,
+        fecha: fechaEmision ? new Date(fechaEmision) : new Date(),
         fechaEmision: fechaEmision ? new Date(fechaEmision) : null,
         metodoPago: metodoPago ? String(metodoPago) : 'Efectivo',
       }
@@ -4540,7 +4728,10 @@ app.put('/api/compras/:id', async (req, res) => {
     if (igv !== undefined) data.igv = parseFloat(igv) || 0;
     if (total !== undefined) data.total = parseFloat(total) || 0;
     if (categoria !== undefined) data.categoria = categoria ? String(categoria) : null;
-    if (fechaEmision !== undefined) data.fechaEmision = fechaEmision ? new Date(fechaEmision) : null;
+    if (fechaEmision !== undefined) {
+      data.fechaEmision = fechaEmision ? new Date(fechaEmision) : null;
+      if (fechaEmision) data.fecha = new Date(fechaEmision);
+    }
     if (metodoPago !== undefined) data.metodoPago = String(metodoPago);
 
     const compra = await prisma.compra.update({
@@ -4922,10 +5113,16 @@ app.get('/api/reportes/pollos', async (req, res) => {
     const obtenerFraccion = (nombre, categoria) => {
       const n = (nombre || '').toLowerCase();
       const cat = (categoria || '').toLowerCase();
-      // Solo cuenta lo que sale del horno: antes sumaba un pollo entero por cada plato
-      // con la palabra "pollo" (Chaufa de Pollo, Pollo Saltado...) e inflaba el reporte.
-      const esPollo = cat.includes('pollo') || cat.includes('brasa') || cat.includes('mostrito');
+      // Solo cuenta lo que sale del horno
+      const esPollo = cat.includes('pollo') || cat.includes('brasa') || cat.includes('mostrito') || n.includes('mostrito');
       if (!esPollo) return 0;
+
+      // Los platos tipo "Mostrito" en gastronomía peruana corresponden por estándar a 1/4 de pollo
+      if (n.includes('mostrito') || cat.includes('mostrito')) {
+        if (n.includes('1/8') || n.includes('octavo')) return FRACCIONES['1/8'];
+        if (n.includes('1/2') || n.includes('medio')) return FRACCIONES['1/2'];
+        return FRACCIONES['1/4'];
+      }
 
       // Detectar fracción en el nombre
       if (n.includes('1/8') || n.includes('octavo')) return FRACCIONES['1/8'];

@@ -1177,8 +1177,17 @@ export default function CajaPage({ currentUser }) {
       finalMontoCredito = total;
     }
 
-    const pagaConNum = parseMonto(pagaConEfectivoMesa) || total;
-    const vueltoNum = metodoPago === 'Efectivo' && pagaConNum > total ? (pagaConNum - total) : 0;
+    let pagaConNum = total;
+    let vueltoNum = 0;
+
+    if (metodoPago === 'Efectivo') {
+      pagaConNum = parseMonto(pagaConEfectivoMesa) || total;
+      vueltoNum = pagaConNum > total ? Math.round((pagaConNum - total) * 100) / 100 : 0;
+    } else if (metodoPago === 'Mixto') {
+      const efecIngresado = parseMonto(mixtoEfectivo);
+      pagaConNum = efecIngresado > 0 ? efecIngresado : finalMontoEfectivo;
+      vueltoNum = efecIngresado > finalMontoEfectivo ? Math.round((efecIngresado - finalMontoEfectivo) * 100) / 100 : 0;
+    }
 
     // Guardar los datos preparados para la confirmación
     setDatosConfirmacionCobro({
