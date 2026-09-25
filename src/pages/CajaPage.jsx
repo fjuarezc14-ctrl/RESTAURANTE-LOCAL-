@@ -520,8 +520,8 @@ export default function CajaPage({ currentUser }) {
   const [cambioTipoError, setCambioTipoError] = useState('');
   const [cambioTipoCambiando, setCambioTipoCambiando] = useState(false);
 
-  // Mostrar todas las ventas del día ignorando el Cierre de Turno por defecto
-  const [mostrarTodoElDia, setMostrarTodoElDia] = useState(true);
+  // Mostrar solo las ventas del turno activo por defecto (false = Turno, true = Día)
+  const [mostrarTodoElDia, setMostrarTodoElDia] = useState(false);
   const [historialColapsado, setHistorialColapsado] = useState(false);
 
   // Detalle en modal (se guarda el id para leer siempre los datos más recientes del polling)
