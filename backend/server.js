@@ -4284,56 +4284,69 @@ app.post('/api/caja/cierre', async (req, res) => {
       return res.status(400).json({ error: 'El nombre del cajero es obligatorio.' });
     }
 
-    // Buscar si hay un turno ABIERTO para actualizarlo o crear uno nuevo
+    // Buscar si hay un turno ABIERTO para cerrarlo
     const turnoAbierto = await prisma.cierreCaja.findFirst({
       where: { estado: 'ABIERTO' },
       orderBy: { fechaApertura: 'desc' },
     });
 
-    let cierre;
-    if (turnoAbierto) {
-      cierre = await prisma.cierreCaja.update({
-        where: { id: turnoAbierto.id },
-        data: {
-          estado: 'CERRADO',
-          fechaCierre: fechaCierre ? new Date(fechaCierre) : new Date(),
-          cajeroNombre: String(cajeroNombre).trim(),
-          montoInicial: parseFloat(montoInicial || turnoAbierto.montoInicial || 0),
-          efectivoVentas: parseFloat(efectivoVentas || 0),
-          efectivoEsperado: parseFloat(efectivoEsperado || 0),
-          efectivoContado: parseFloat(efectivoContado || 0),
-          diferencia: parseFloat(diferencia || 0),
-          totalTarjeta: parseFloat(totalTarjeta || 0),
-          totalYape: parseFloat(totalYape || 0),
-          totalConsumo: parseFloat(totalConsumo || 0),
-          totalPedidosYa: parseFloat(totalPedidosYa || 0),
-          egresosEfectivo: parseFloat(egresosEfectivo || 0),
-          abonosEfectivo: parseFloat(abonosEfectivo || 0),
-          nota: nota ? String(nota).trim() : null,
-        },
-      });
-    } else {
-      cierre = await prisma.cierreCaja.create({
-        data: {
-          estado: 'CERRADO',
-          fechaApertura: fechaApertura ? new Date(fechaApertura) : new Date(),
-          fechaCierre: fechaCierre ? new Date(fechaCierre) : new Date(),
-          cajeroNombre: String(cajeroNombre).trim(),
-          montoInicial: parseFloat(montoInicial || 0),
-          efectivoVentas: parseFloat(efectivoVentas || 0),
-          efectivoEsperado: parseFloat(efectivoEsperado || 0),
-          efectivoContado: parseFloat(efectivoContado || 0),
-          diferencia: parseFloat(diferencia || 0),
-          totalTarjeta: parseFloat(totalTarjeta || 0),
-          totalYape: parseFloat(totalYape || 0),
-          totalConsumo: parseFloat(totalConsumo || 0),
-          totalPedidosYa: parseFloat(totalPedidosYa || 0),
-          egresosEfectivo: parseFloat(egresosEfectivo || 0),
-          abonosEfectivo: parseFloat(abonosEfectivo || 0),
-          nota: nota ? String(nota).trim() : null,
-        },
+    if (!turnoAbierto) {
+      return res.status(400).json({ error: 'No hay un turno de caja abierto para cerrar. Debe abrir la caja primero.' });
+    }
+
+    // Validación de que ningún valor monetario sea negativo
+    const camposMonetarios = [
+      { nombre: 'Monto inicial', val: montoInicial },
+      { nombre: 'Efectivo ventas', val: efectivoVentas },
+      { nombre: 'Efectivo esperado', val: efectivoEsperado },
+      { nombre: 'Efectivo contado', val: efectivoContado },
+      { nombre: 'Total tarjeta', val: totalTarjeta },
+      { nombre: 'Total yape', val: totalYape },
+      { nombre: 'Total consumo', val: totalConsumo },
+      { nombre: 'Total PedidosYa', val: totalPedidosYa },
+      { nombre: 'Egresos de efectivo', val: egresosEfectivo },
+      { nombre: 'Abonos de efectivo', val: abonosEfectivo },
+    ];
+
+    const campoInvalido = camposMonetarios.find(c => c.val !== undefined && c.val !== null && parseFloat(c.val) < 0);
+    if (campoInvalido) {
+      return res.status(400).json({ 
+        error: `El valor de "${campoInvalido.nombre}" no puede ser negativo. Debe ser 0 o mayor a cero.` 
       });
     }
+
+    const mInicial = Math.max(0, parseFloat(montoInicial !== undefined && montoInicial !== null ? montoInicial : turnoAbierto.montoInicial || 0));
+    const efecVentas = Math.max(0, parseFloat(efectivoVentas || 0));
+    const efecEsperado = Math.max(0, parseFloat(efectivoEsperado || 0));
+    const efecContado = Math.max(0, parseFloat(efectivoContado || 0));
+    const totTarjeta = Math.max(0, parseFloat(totalTarjeta || 0));
+    const totYape = Math.max(0, parseFloat(totalYape || 0));
+    const totConsumo = Math.max(0, parseFloat(totalConsumo || 0));
+    const totPedidosYa = Math.max(0, parseFloat(totalPedidosYa || 0));
+    const egresosEfec = Math.max(0, parseFloat(egresosEfectivo || 0));
+    const abonosEfec = Math.max(0, parseFloat(abonosEfectivo || 0));
+    const difCalculada = Math.round((efecContado - efecEsperado) * 100) / 100;
+
+    const cierre = await prisma.cierreCaja.update({
+      where: { id: turnoAbierto.id },
+      data: {
+        estado: 'CERRADO',
+        fechaCierre: fechaCierre ? new Date(fechaCierre) : new Date(),
+        cajeroNombre: String(cajeroNombre).trim(),
+        montoInicial: mInicial,
+        efectivoVentas: efecVentas,
+        efectivoEsperado: efecEsperado,
+        efectivoContado: efecContado,
+        diferencia: difCalculada,
+        totalTarjeta: totTarjeta,
+        totalYape: totYape,
+        totalConsumo: totConsumo,
+        totalPedidosYa: totPedidosYa,
+        egresosEfectivo: egresosEfec,
+        abonosEfectivo: abonosEfec,
+        nota: nota ? String(nota).trim() : null,
+      },
+    });
 
     console.log(`🔒 Cierre de Caja registrado exitosamente por ${cajeroNombre}: Esperado S/ ${cierre.efectivoEsperado.toFixed(2)}, Contado S/ ${cierre.efectivoContado.toFixed(2)}, Dif: S/ ${cierre.diferencia.toFixed(2)}`);
     res.json({ ok: true, cierre });

@@ -61,6 +61,130 @@ const parseMonto = (val) => {
   return isNaN(n) ? 0 : Math.max(0, n);
 };
 
+// Componente de Calculadora de Billetes y Monedas en 2 Columnas
+function CalculadoraEfectivoPEN({
+  conteo = {},
+  onChangeCantidad,
+  onLimpiar,
+  mostrarTitulo = true,
+  titulo = "Conteo de efectivo",
+}) {
+  const billetes = DENOMINACIONES_PEN.filter(d => d.tipo === 'billete');
+  const monedas = DENOMINACIONES_PEN.filter(d => d.tipo === 'moneda');
+
+  const subtotalBilletes = billetes.reduce((s, d) => s + d.valor * (Number(conteo[d.valor]) || 0), 0);
+  const subtotalMonedas = monedas.reduce((s, d) => s + d.valor * (Number(conteo[d.valor]) || 0), 0);
+  const hayConteo = DENOMINACIONES_PEN.some(d => Number(conteo[d.valor]) > 0);
+
+  const renderFila = (d) => {
+    const cant = Number(conteo[d.valor]) || 0;
+    const subtotal = d.valor * cant;
+    return (
+      <div
+        key={d.valor}
+        className={`flex items-center gap-1.5 rounded-xl px-2 py-1 transition-all ${
+          cant > 0 ? 'bg-emerald-50/90 border border-emerald-200/80 shadow-2xs' : 'hover:bg-slate-50/80 border border-transparent'
+        }`}
+      >
+        <span className={`w-14 h-7.5 rounded-lg grid place-items-center text-xs font-bold font-mono shrink-0 shadow-2xs ${d.color}`}>
+          {d.etiqueta}
+        </span>
+        <div className="flex items-center rounded-lg border border-slate-200 bg-white shrink-0 shadow-2xs overflow-hidden">
+          <button
+            type="button"
+            onClick={() => onChangeCantidad(d.valor, cant - 1)}
+            disabled={cant === 0}
+            className="w-7 h-7.5 grid place-items-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-25 text-base font-bold leading-none cursor-pointer transition-colors"
+            aria-label={`Quitar ${d.etiqueta}`}
+          >
+            −
+          </button>
+          <input
+            type="number"
+            inputMode="numeric"
+            min="0"
+            value={cant || ''}
+            placeholder="0"
+            onChange={(e) => onChangeCantidad(d.valor, e.target.value)}
+            onFocus={(e) => e.target.select()}
+            className="w-10 h-7.5 text-center text-xs font-bold font-mono text-slate-900 bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            aria-label={`Cantidad de ${d.etiqueta}`}
+          />
+          <button
+            type="button"
+            onClick={() => onChangeCantidad(d.valor, cant + 1)}
+            className="w-7 h-7.5 grid place-items-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 text-base font-bold leading-none cursor-pointer transition-colors"
+            aria-label={`Agregar ${d.etiqueta}`}
+          >
+            +
+          </button>
+        </div>
+        <span className={`flex-1 text-right font-mono text-xs tabular-nums truncate ${cant > 0 ? 'text-slate-900 font-bold' : 'text-slate-300'}`}>
+          S/ {subtotal.toFixed(2)}
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-2">
+      {mostrarTitulo && (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
+            <Coins className="w-4 h-4 text-amber-500" /> {titulo}
+          </p>
+          {hayConteo && onLimpiar && (
+            <button
+              type="button"
+              onClick={onLimpiar}
+              className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 inline-flex items-center gap-1 transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Limpiar
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Grid de 2 Columnas: Billetes a la izquierda, Monedas a la derecha */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Columna Billetes */}
+        <div className="bg-slate-50/70 p-2.5 rounded-2xl border border-slate-200/70 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1.5 px-1 pb-1 border-b border-slate-200/60">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                <Banknote className="w-3.5 h-3.5 text-emerald-600" /> Billetes
+              </span>
+              <span className="text-[10px] font-bold font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                S/ {subtotalBilletes.toFixed(2)}
+              </span>
+            </div>
+            <div className="space-y-0.5">
+              {billetes.map(renderFila)}
+            </div>
+          </div>
+        </div>
+
+        {/* Columna Monedas */}
+        <div className="bg-slate-50/70 p-2.5 rounded-2xl border border-slate-200/70 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1.5 px-1 pb-1 border-b border-slate-200/60">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                <Coins className="w-3.5 h-3.5 text-amber-500" /> Monedas
+              </span>
+              <span className="text-[10px] font-bold font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
+                S/ {subtotalMonedas.toFixed(2)}
+              </span>
+            </div>
+            <div className="space-y-0.5">
+              {monedas.map(renderFila)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Componente Selector de Cliente con Buscador Integrado y Card de Saldo
 function SelectorClienteCreditoCombobox({
   clientes = [],
@@ -427,6 +551,7 @@ export default function CajaPage({ currentUser }) {
   const [cajaEstado, setCajaEstado] = useState({ abierto: false, turno: null, cargando: true });
   const [modalAperturaOpen, setModalAperturaOpen] = useState(false);
   const [montoInicialInput, setMontoInicialInput] = useState('');
+  const [conteoApertura, setConteoApertura] = useState({}); // { valorDenominacion: cantidad } para fondo inicial
   const [notaAperturaInput, setNotaAperturaInput] = useState('');
   const [guardandoApertura, setGuardandoApertura] = useState(false);
   const [errorApertura, setErrorApertura] = useState('');
@@ -681,6 +806,14 @@ export default function CajaPage({ currentUser }) {
     }
   }, []);
 
+  const cambiarCantidadApertura = (valor, cantidad) => {
+    const n = Math.max(0, Math.floor(Number(cantidad) || 0));
+    const siguiente = { ...conteoApertura, [valor]: n };
+    setConteoApertura(siguiente);
+    const total = DENOMINACIONES_PEN.reduce((s, d) => s + d.valor * (Number(siguiente[d.valor]) || 0), 0);
+    setMontoInicialInput(DENOMINACIONES_PEN.some(d => Number(siguiente[d.valor]) > 0) ? total.toFixed(2) : '');
+  };
+
   const handleAbrirCaja = async (e) => {
     e?.preventDefault();
     setErrorApertura('');
@@ -695,7 +828,7 @@ export default function CajaPage({ currentUser }) {
     try {
       const res = await api.abrirCaja({
         cajeroNombre: cajero,
-        montoInicial: monto,
+        montoInicial: Math.max(0, monto),
         notaApertura: notaAperturaInput.trim() || null,
       });
 
@@ -706,6 +839,7 @@ export default function CajaPage({ currentUser }) {
 
       setModalAperturaOpen(false);
       setModoOtroCajero(false);
+      setConteoApertura({});
       setMontoInicialInput('');
       setNotaAperturaInput('');
       await fetchCajaData();
@@ -2515,7 +2649,7 @@ export default function CajaPage({ currentUser }) {
       <div className="max-w-[1600px] mx-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-7 space-y-5">
 
         {/* ENCABEZADO + ESTADO DEL TURNO */}
-        <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Caja</h1>
             {!cajaEstado.cargando && cajaEstado.abierto && (
@@ -2529,15 +2663,18 @@ export default function CajaPage({ currentUser }) {
                 <span>desde {cajaEstado.turno?.fechaApertura ? new Date(cajaEstado.turno.fechaApertura).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '--'}</span>
                 <span className="text-slate-300">·</span>
                 <span>Fondo <span className="font-mono text-slate-700">{soles(cajaEstado.turno?.montoInicial)}</span></span>
-                {cajaEstado.turno?.notaApertura && <span className="italic text-slate-400 truncate">“{cajaEstado.turno.notaApertura}”</span>}
+                {(() => {
+                  const notaLimpia = (cajaEstado.turno?.notaApertura || '').replace(/\[Conteo inicial:.*?\]/g, '').trim();
+                  return notaLimpia ? <span className="italic text-slate-400 truncate">“{notaLimpia}”</span> : null;
+                })()}
               </p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 flex-nowrap shrink-0 overflow-x-auto custom-scrollbar pb-1 lg:pb-0">
             <button
               type="button"
               onClick={abrirHistorialCierres}
-              className="h-10 px-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+              className="h-10 px-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shrink-0 whitespace-nowrap"
               title="Historial de cierres"
             >
               <History className="w-4 h-4" /> <span className="hidden sm:inline">Cierres</span>
@@ -2551,24 +2688,42 @@ export default function CajaPage({ currentUser }) {
                   setErrorSalidaCaja('');
                   setModalSalidaCajaOpen(true);
                 }}
-                className="h-10 px-3.5 inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 text-sm font-bold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition-colors shadow-2xs active:scale-[0.98]"
+                className="h-10 px-3.5 inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 text-sm font-bold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition-colors shadow-2xs active:scale-[0.98] shrink-0 whitespace-nowrap"
                 title="Registrar salida o retiro de dinero de la gaveta física"
               >
                 <ArrowUpRight className="w-4 h-4 text-rose-600" />
-                <span>Salida de Caja</span>
+                <span>Retirar de caja</span>
+              </button>
+            )}
+            {cajaEstado.abierto ? (
+              <button
+                type="button"
+                onClick={() => setCierreModalOpen(true)}
+                className="h-10 px-3.5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs active:scale-[0.98] shrink-0 whitespace-nowrap"
+                title="Realizar arqueo físico y cerrar turno"
+              >
+                <Lock className="w-4 h-4 text-rose-600" /> Cerrar caja
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setConteoApertura({});
+                  setMontoInicialInput('');
+                  setNotaAperturaInput('');
+                  setErrorApertura('');
+                  setModalAperturaOpen(true);
+                }}
+                className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-sm font-bold text-white shadow-sm shadow-emerald-600/25 transition-all active:scale-[0.98] shrink-0 whitespace-nowrap"
+                title="Iniciar turno y registrar fondo de sencillo"
+              >
+                <Unlock className="w-4 h-4" /> Abrir caja
               </button>
             )}
             <button
               type="button"
-              onClick={() => setCierreModalOpen(true)}
-              className="h-10 px-3.5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-            >
-              <CheckCircle className="w-4 h-4 text-emerald-600" /> Arqueo y cierre
-            </button>
-            <button
-              type="button"
               onClick={abrirDeliveryModal}
-              className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-sky-600 text-sm font-semibold text-white hover:bg-sky-700 shadow-sm shadow-sky-600/25 transition-colors active:scale-[0.98] ml-auto md:ml-0"
+              className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-sky-600 text-sm font-semibold text-white hover:bg-sky-700 shadow-sm shadow-sky-600/25 transition-colors active:scale-[0.98] shrink-0 whitespace-nowrap"
             >
               <ShoppingCart className="w-4 h-4" /> Nuevo pedido
             </button>
@@ -2576,23 +2731,14 @@ export default function CajaPage({ currentUser }) {
         </header>
 
         {!cajaEstado.cargando && !cajaEstado.abierto && (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-xl bg-rose-500 text-white grid place-items-center shrink-0">
-                <Lock className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-rose-800">Caja cerrada</p>
-                <p className="text-sm text-rose-700/80">Inicia un turno con el fondo de sencillo para habilitar cobros y pedidos.</p>
-              </div>
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-rose-500 text-white grid place-items-center shrink-0">
+              <Lock className="w-4 h-4" />
             </div>
-            <button
-              type="button"
-              onClick={() => setModalAperturaOpen(true)}
-              className="h-10 px-4 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold text-white transition-colors shrink-0"
-            >
-              <Unlock className="w-4 h-4" /> Abrir caja
-            </button>
+            <div>
+              <p className="text-sm font-semibold text-rose-800">Caja cerrada</p>
+              <p className="text-sm text-rose-700/80">Inicia un turno con el fondo de sencillo usando el botón "Abrir caja" para habilitar cobros y pedidos.</p>
+            </div>
           </div>
         )}
 
@@ -4783,6 +4929,47 @@ export default function CajaPage({ currentUser }) {
 
       {/* MODAL DE CIERRE DE CAJA (ARQUEO DE TURNO) */}
       {cierreModalOpen && (() => {
+        if (!cajaEstado.abierto) {
+          return (
+            <div id="modal-cierre" className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[200] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl text-center space-y-4 border border-slate-100 animate-slide-up">
+                <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center shadow-xs">
+                  <Lock className="w-7 h-7" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">La caja se encuentra cerrada</h3>
+                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                    No es posible realizar un arqueo o cierre mientras la caja esté cerrada. Por favor, abre un turno de caja primero.
+                  </p>
+                </div>
+                <div className="flex gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setCierreModalOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Entendido
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCierreModalOpen(false);
+                      setConteoApertura({});
+                      setMontoInicialInput('');
+                      setNotaAperturaInput('');
+                      setErrorApertura('');
+                      setModalAperturaOpen(true);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white shadow-sm shadow-emerald-600/25 transition-colors"
+                  >
+                    Abrir caja
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         // Consolidación reactiva de montos del turno actual
         const ventasFiltradas = (ultimoCierre 
           ? ventas.filter(v => new Date(v.createdAt) > new Date(ultimoCierre))
@@ -4866,25 +5053,25 @@ export default function CajaPage({ currentUser }) {
           }
         });
 
-        // Fondo inicial registrado en la apertura del turno actual
-        const fondoInicialTurno = Number(cajaEstado.turno?.montoInicial || 0);
+        // Fondo inicial registrado en la apertura del turno actual (solo valores >= 0)
+        const fondoInicialTurno = Math.max(0, Number(cajaEstado.turno?.montoInicial || 0));
 
         // Salidas / retiros de efectivo de caja en turno (compras de almacén no restan de la gaveta diaria)
-        const retirosCaja = Number(cajaEstado.resumenEnVivo?.retirosCaja || 0);
+        const retirosCaja = Math.max(0, Number(cajaEstado.resumenEnVivo?.retirosCaja || 0));
         const egresosEfectivo = retirosCaja;
 
-        // Total Efectivo Esperado en Gaveta = Fondo Inicial + (Ventas Efec + Abonos Efec) - Salidas de Caja
-        const totalEfectivoEsperado = Math.round((fondoInicialTurno + totalEfectivo - egresosEfectivo) * 100) / 100;
+        // Total Efectivo Esperado en Gaveta = Fondo Inicial + (Ventas Efec + Abonos Efec) - Salidas de Caja (no puede ser negativo)
+        const totalEfectivoEsperado = Math.max(0, Math.round((fondoInicialTurno + totalEfectivo - egresosEfectivo) * 100) / 100);
 
         // Total Caja = ingresos reales cobrados en caja (efectivo neto + tarjeta + yape)
-        const totalCalculado = totalEfectivoEsperado + totalTarjeta + totalYape;
+        const totalCalculado = Math.max(0, totalEfectivoEsperado + Math.max(0, totalTarjeta) + Math.max(0, totalYape));
 
         // Cortesías: solo las ventas con metodoPago === 'Cortesía' o descuentoAplicado parcial
-        const totalCortesias = ventasFiltradas
+        const totalCortesias = Math.max(0, ventasFiltradas
           .filter(v => v.metodoPago === 'Cortesía')
-          .reduce((s, v) => s + (v.descuentoAplicado || v.total || 0), 0);
+          .reduce((s, v) => s + (v.descuentoAplicado || v.total || 0), 0));
 
-        const montoFisicoNum = parseFloat(efectivoFisicoContado || 0);
+        const montoFisicoNum = Math.max(0, parseFloat(efectivoFisicoContado || 0));
         const tieneConteoFisico = efectivoFisicoContado.trim() !== '';
         const diferenciaEfectivo = tieneConteoFisico ? Math.round((montoFisicoNum - totalEfectivoEsperado) * 100) / 100 : 0;
 
@@ -4910,33 +5097,6 @@ export default function CajaPage({ currentUser }) {
         };
 
         const cuadra = Math.abs(diferenciaEfectivo) < 0.05;
-
-        const filaDenominacion = (d) => {
-          const cant = Number(conteoBilletes[d.valor]) || 0;
-          return (
-            <div key={d.valor} className={`flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors ${cant > 0 ? 'bg-emerald-50/70' : ''}`}>
-              <span className={`w-[4.25rem] h-8 rounded-lg grid place-items-center text-xs font-bold font-mono shrink-0 ${d.color}`}>{d.etiqueta}</span>
-              <div className="flex items-center rounded-lg border border-slate-200 bg-white shrink-0">
-                <button type="button" onClick={() => cambiarCantidad(d.valor, cant - 1)} disabled={cant === 0} className="w-8 h-8 grid place-items-center text-slate-500 hover:text-slate-900 disabled:opacity-30 text-lg leading-none" aria-label={`Quitar ${d.etiqueta}`}>−</button>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  value={cant || ''}
-                  placeholder="0"
-                  onChange={(e) => cambiarCantidad(d.valor, e.target.value)}
-                  onFocus={(e) => e.target.select()}
-                  className="w-11 h-8 text-center text-sm font-semibold font-mono text-slate-900 bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  aria-label={`Cantidad de ${d.etiqueta}`}
-                />
-                <button type="button" onClick={() => cambiarCantidad(d.valor, cant + 1)} className="w-8 h-8 grid place-items-center text-slate-500 hover:text-slate-900 text-lg leading-none" aria-label={`Agregar ${d.etiqueta}`}>+</button>
-              </div>
-              <span className={`flex-1 text-right font-mono text-sm tabular-nums ${cant > 0 ? 'text-slate-900 font-semibold' : 'text-slate-300'}`}>
-                S/ {(d.valor * cant).toFixed(2)}
-              </span>
-            </div>
-          );
-        };
 
         return (
           <div id="modal-cierre" className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[200] flex items-end md:items-center justify-center md:p-6 animate-fade-in">
@@ -5096,25 +5256,14 @@ export default function CajaPage({ currentUser }) {
               </div>
                 </div>
 
-                {/* Calculadora de billetes y monedas */}
+                {/* Calculadora de billetes y monedas en 2 columnas */}
                 <div className="cierre-no-print order-1 md:overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-800 flex items-center gap-2"><Coins className="w-4 h-4 text-amber-500" /> Conteo de efectivo</p>
-                    {hayConteoDenominaciones && (
-                      <button type="button" onClick={() => { setConteoBilletes({}); setEfectivoFisicoContado(''); }} className="text-xs font-medium text-slate-400 hover:text-rose-600 inline-flex items-center gap-1">
-                        <RotateCcw className="w-3.5 h-3.5" /> Limpiar
-                      </button>
-                    )}
-                  </div>
-
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Billetes</p>
-                    <div className="space-y-0.5">{DENOMINACIONES_PEN.filter(d => d.tipo === 'billete').map(filaDenominacion)}</div>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Monedas</p>
-                    <div className="space-y-0.5">{DENOMINACIONES_PEN.filter(d => d.tipo === 'moneda').map(filaDenominacion)}</div>
-                  </div>
+                  <CalculadoraEfectivoPEN
+                    conteo={conteoBilletes}
+                    onChangeCantidad={cambiarCantidad}
+                    onLimpiar={() => { setConteoBilletes({}); setEfectivoFisicoContado(''); }}
+                    titulo="Conteo físico de efectivo (Billetes y Monedas)"
+                  />
 
                   {/* Resultado del cuadre */}
                   <div className="rounded-2xl border border-slate-200 overflow-hidden">
@@ -5152,7 +5301,12 @@ export default function CajaPage({ currentUser }) {
                         min="0"
                         placeholder="0.00"
                         value={efectivoFisicoContado}
-                        onChange={(e) => { setConteoBilletes({}); setEfectivoFisicoContado(e.target.value); }}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val !== '' && parseFloat(val) < 0) return;
+                          setConteoBilletes({});
+                          setEfectivoFisicoContado(val);
+                        }}
                         className="w-full h-11 bg-white border border-slate-200 rounded-xl pl-9 pr-3 font-mono text-base font-semibold text-slate-900 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5"
                       />
                     </div>
@@ -5173,6 +5327,17 @@ export default function CajaPage({ currentUser }) {
                   type="button"
                   disabled={guardandoCierre}
                   onClick={async () => {
+                    if (!cajaEstado.abierto) {
+                      alert('⚠️ La caja ya se encuentra cerrada. No es posible registrar un nuevo cierre.');
+                      cerrarModalCierre();
+                      return;
+                    }
+
+                    if (tieneConteoFisico && (isNaN(montoFisicoNum) || montoFisicoNum < 0)) {
+                      alert('⚠️ El efectivo contado no puede ser un valor negativo. Debe ser un monto positivo (0 o mayor a cero).');
+                      return;
+                    }
+
                     const pendientes = mesas.filter(m => m.estado !== 'Libre' && m.pedidoData);
                     if (pendientes.length > 0) {
                       const nombresMesas = pendientes.map(m => `Mesa ${m.num}`).join(', ');
@@ -5191,23 +5356,26 @@ export default function CajaPage({ currentUser }) {
 
                     setGuardandoCierre(true);
                     try {
-                      const abonosEfectivoTotal = abonosFiltrados.reduce((s, a) => s + (parseFloat(a.montoEfectivo) || 0), 0);
+                      const abonosEfectivoTotal = Math.max(0, abonosFiltrados.reduce((s, a) => s + (parseFloat(a.montoEfectivo) || 0), 0));
+                      const contadoFinal = Math.max(0, tieneConteoFisico ? montoFisicoNum : totalEfectivoEsperado);
+                      const esperadoFinal = Math.max(0, totalEfectivoEsperado);
+
                       await api.registrarCierre({
                         fechaApertura: ultimoCierre || new Date(Date.now() - 8 * 3600 * 1000).toISOString(),
                         fechaCierre: newCierreISO,
                         cajeroNombre: cajeroNombre || currentUser?.nombre || 'Cajero',
-                        montoInicial: fondoInicialTurno,
-                        efectivoVentas: totalEfectivo,
-                        efectivoEsperado: totalEfectivoEsperado,
-                        efectivoContado: tieneConteoFisico ? montoFisicoNum : totalEfectivoEsperado,
-                        diferencia: diferenciaEfectivo,
-                        totalTarjeta: totalTarjeta,
-                        totalYape: totalYape,
-                        totalConsumo: totalConsumoClientes + totalConsumoPlanilla,
-                        totalPedidosYa: totalPedidosYa,
-                        egresosEfectivo: egresosEfectivo,
+                        montoInicial: Math.max(0, fondoInicialTurno),
+                        efectivoVentas: Math.max(0, totalEfectivo),
+                        efectivoEsperado: esperadoFinal,
+                        efectivoContado: contadoFinal,
+                        diferencia: Math.round((contadoFinal - esperadoFinal) * 100) / 100,
+                        totalTarjeta: Math.max(0, totalTarjeta),
+                        totalYape: Math.max(0, totalYape),
+                        totalConsumo: Math.max(0, totalConsumoClientes + totalConsumoPlanilla),
+                        totalPedidosYa: Math.max(0, totalPedidosYa),
+                        egresosEfectivo: Math.max(0, egresosEfectivo),
                         abonosEfectivo: abonosEfectivoTotal,
-                        nota: tieneConteoFisico ? `Conteo físico: S/ ${montoFisicoNum.toFixed(2)}. Diferencia: S/ ${diferenciaEfectivo.toFixed(2)}.${textoConteo}` : null,
+                        nota: tieneConteoFisico ? `Conteo físico: S/ ${contadoFinal.toFixed(2)}. Diferencia: S/ ${(Math.round((contadoFinal - esperadoFinal) * 100) / 100).toFixed(2)}.${textoConteo}` : null,
                       });
 
                       localStorage.setItem('ultimoCierre', newCierreISO);
@@ -5247,34 +5415,36 @@ export default function CajaPage({ currentUser }) {
 
       {/* MODAL DE APERTURA DE CAJA / INICIO DE TURNO */}
       {modalAperturaOpen && (
-        <div className="fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col animate-slide-up border border-slate-100">
-            <div className="flex justify-between items-center mb-5 pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-[220] flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+          <div className="bg-white w-full max-w-2xl max-h-[94dvh] rounded-3xl shadow-2xl p-5 sm:p-6 flex flex-col animate-slide-up border border-slate-100 overflow-hidden">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-sm">
                   <Banknote className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight leading-none">Apertura de Caja</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Iniciar nuevo turno y registrar fondo inicial</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Iniciar nuevo turno y registrar fondo inicial de sencillo</p>
                 </div>
               </div>
               <button
-                onClick={() => { setModalAperturaOpen(false); setModoOtroCajero(false); setErrorApertura(''); }}
+                type="button"
+                onClick={() => { setModalAperturaOpen(false); setModoOtroCajero(false); setConteoApertura({}); setErrorApertura(''); }}
                 className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
+                aria-label="Cerrar modal"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {errorApertura && (
-              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-2">
+              <div className="mb-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-2 shrink-0">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
                 <span>{errorApertura}</span>
               </div>
             )}
 
-            <form onSubmit={handleAbrirCaja} className="space-y-4">
+            <form onSubmit={handleAbrirCaja} className="space-y-4 overflow-y-auto custom-scrollbar flex-1 pr-1">
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5 flex justify-between items-center">
                   <span>Cajero(a) a quien se le aperturará la caja:</span>
@@ -5329,35 +5499,64 @@ export default function CajaPage({ currentUser }) {
                 )}
               </div>
 
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5 flex justify-between">
-                  <span>Fondo Inicial en Gaveta (Sencillo):</span>
-                  <span className="text-slate-400 font-normal">Billetes / Monedas</span>
-                </label>
-                <div className="relative mb-2">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-slate-400 text-base">S/</span>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    placeholder="0.00"
-                    value={montoInicialInput}
-                    onChange={(e) => setMontoInicialInput(e.target.value)}
-                    className="w-full bg-white border-2 border-slate-200 focus:border-emerald-500 rounded-xl pl-9 pr-3.5 py-2.5 text-lg font-black text-slate-900 focus:outline-none shadow-inner"
-                  />
+              {/* Calculadora en 2 Columnas para Apertura de Caja */}
+              <div className="pt-1">
+                <CalculadoraEfectivoPEN
+                  conteo={conteoApertura}
+                  onChangeCantidad={cambiarCantidadApertura}
+                  onLimpiar={() => {
+                    setConteoApertura({});
+                    setMontoInicialInput('');
+                  }}
+                  titulo="Calculadora de Sencillo (Billetes y Monedas)"
+                />
+              </div>
+
+              {/* Total y campo manual de fondo inicial */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                      Fondo Inicial Total en Gaveta:
+                    </span>
+                    <p className="text-xs text-slate-400">
+                      Calculado por las denominaciones o ingresado directamente
+                    </p>
+                  </div>
+                  <div className="relative w-full sm:w-44">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-slate-400 text-sm">S/</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="0.00"
+                      value={montoInicialInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val !== '' && parseFloat(val) < 0) return;
+                        setConteoApertura({});
+                        setMontoInicialInput(val);
+                      }}
+                      className="w-full bg-white border-2 border-slate-200 focus:border-emerald-500 rounded-xl pl-8 pr-3 py-1.5 text-base font-black font-mono text-slate-900 focus:outline-none shadow-inner text-right"
+                    />
+                  </div>
                 </div>
 
                 {/* Accesos directos de fondo de caja */}
-                <div className="grid grid-cols-4 gap-1.5">
+                <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-200/60 flex-wrap">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Rápidos:</span>
                   {[0, 50, 100, 150].map((val) => (
                     <button
                       key={val}
                       type="button"
-                      onClick={() => setMontoInicialInput(String(val))}
-                      className={`py-1.5 rounded-lg text-xs font-black transition-all border ${
-                        montoInicialInput === String(val)
+                      onClick={() => {
+                        setConteoApertura({});
+                        setMontoInicialInput(String(val));
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs font-black transition-all border ${
+                        montoInicialInput === String(val) && Object.keys(conteoApertura).length === 0
                           ? 'bg-emerald-500 text-slate-950 border-emerald-600 shadow-sm'
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                          : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
                       }`}
                     >
                       {val === 0 ? 'Sin Sencillo' : `S/ ${val}`}
@@ -5379,18 +5578,18 @@ export default function CajaPage({ currentUser }) {
                 />
               </div>
 
-              <div className="pt-2 flex gap-3">
+              <div className="pt-2 flex gap-3 shrink-0">
                 <button
                   type="button"
-                  onClick={() => { setModalAperturaOpen(false); setModoOtroCajero(false); setErrorApertura(''); }}
-                  className="w-1/3 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-widest transition-colors"
+                  onClick={() => { setModalAperturaOpen(false); setModoOtroCajero(false); setConteoApertura({}); setErrorApertura(''); }}
+                  className="w-1/3 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-widest transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={guardandoApertura}
-                  className="w-2/3 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black rounded-xl text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50"
+                  className="w-2/3 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black rounded-xl text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
                 >
                   {guardandoApertura ? 'Abriendo...' : 'Confirmar Apertura'}
                 </button>
