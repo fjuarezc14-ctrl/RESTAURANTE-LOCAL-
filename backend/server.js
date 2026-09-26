@@ -928,11 +928,12 @@ app.post('/api/clientes/:id/abonar', async (req, res) => {
       return res.status(400).json({ error: 'El monto del abono debe ser mayor a 0.' });
     }
 
-    // 1. Validar que la caja esté abierta
+    // 1. Validar que la caja esté abierta (BUG-05)
     const turnoActivo = await prisma.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
     if (!turnoActivo) {
       return res.status(400).json({
-        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de registrar abonos.'
+        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de registrar abonos.',
+        cajaCerrada: true,
       });
     }
 
@@ -1868,78 +1869,82 @@ app.patch('/api/pedidos/:id/cancelar', async (req, res) => {
       }
     }
 
-    // Cancelar el pedido
-    await prisma.pedido.update({
-      where: { id },
-      data: {
-        estado: 'Cancelado',
-        canceladoPor: canceladoPor || 'Sin especificar',
-        motivoCancela: motivo || 'Sin motivo',
-        canceladoEn: new Date(),
-      },
-    });
-
-    // Anular la venta asociada si existía (pedidos delivery o para llevar cobrados)
-    await prisma.venta.updateMany({
-      where: { pedidoId: id, anulado: false },
-      data: {
-        anulado: true,
-        motivoAnulacion: `[CANCELACIÓN DE PEDIDO #${id}]: ${motivo || 'Cancelado por usuario'}`,
-        anuladoPor: canceladoPor || 'Sistema',
-        anuladoEn: new Date(),
-        total: 0.00,
-        subtotal: 0.00,
-        igv: 0.00,
-        montoEfectivo: 0.00,
-        montoTarjeta: 0.00,
-        montoYape: 0.00,
-        montoCredito: 0.00,
-      },
-    });
-
-    // Restaurar stock de productos limitados
-    for (const item of pedido.items) {
-      if (item.producto?.tipoStock === 'limitado') {
-        await prisma.producto.update({
-          where: { id: item.productoId },
-          data: { stock: { increment: item.cantidad } },
-        });
-      }
-    }
-
+    const now = new Date();
     let mesaLiberada = false;
     let nuevoEstadoMesa = 'Libre';
 
-    // Liberar mesa si no quedan pedidos activos o actualizar su estado
-    if (pedido.mesaId) {
-      const activos = await prisma.pedido.findMany({
-        where: { mesaId: pedido.mesaId, estado: { in: ['Cocina', 'Servido'] } },
+    await prisma.$transaction(async (tx) => {
+      // 1. Cancelar el pedido
+      await tx.pedido.update({
+        where: { id },
+        data: {
+          estado: 'Cancelado',
+          canceladoPor: canceladoPor || 'Sin especificar',
+          motivoCancela: motivo || 'Sin motivo',
+          canceladoEn: now,
+        },
       });
 
-      if (activos.length === 0) {
-        const mObj = await prisma.mesa.update({
-          where: { id: pedido.mesaId },
-          data: { estado: 'Libre' },
-        });
-        if (mObj?.numero) {
-          await prisma.mesa.updateMany({
-            where: { estado: `Unida a Mesa ${mObj.numero}` },
-            data: { estado: 'Libre' },
+      // 2. Si existe venta asociada (ej. pedido delivery o ya cobrado), anularla también
+      await tx.venta.updateMany({
+        where: { pedidoId: id, anulado: false },
+        data: {
+          anulado: true,
+          motivoAnulacion: `[CANCELACIÓN PEDIDO]: ${motivo || 'Sin motivo'}`,
+          anuladoPor: canceladoPor || 'Administrador',
+          anuladoEn: now,
+          total: 0.00,
+          subtotal: 0.00,
+          igv: 0.00,
+          montoEfectivo: 0.00,
+          montoTarjeta: 0.00,
+          montoYape: 0.00,
+          montoCredito: 0.00,
+          descuentoAplicado: 0.00,
+        },
+      });
+
+      // 3. Restaurar stock de productos limitados
+      for (const item of pedido.items) {
+        if (item.producto?.tipoStock === 'limitado') {
+          await tx.producto.update({
+            where: { id: item.productoId },
+            data: { stock: { increment: item.cantidad } },
           });
         }
-        mesaLiberada = true;
-      } else {
-        // Si hay al menos un pedido activo en Cocina, la mesa debe quedarse en Cocina.
-        // Si todos los activos están en Servido, pasa a Servido (Azul).
-        const hayEnCocina = activos.some(p => p.estado === 'Cocina');
-        nuevoEstadoMesa = hayEnCocina ? 'Cocina' : 'Servido';
-
-        await prisma.mesa.update({
-          where: { id: pedido.mesaId },
-          data: { estado: nuevoEstadoMesa },
-        });
       }
-    }
+
+      // 4. Liberar mesa si no quedan pedidos activos o actualizar su estado
+      if (pedido.mesaId) {
+        const activos = await tx.pedido.findMany({
+          where: { mesaId: pedido.mesaId, estado: { in: ['Cocina', 'Servido'] }, id: { not: id } },
+        });
+
+        if (activos.length === 0) {
+          const mObj = await tx.mesa.update({
+            where: { id: pedido.mesaId },
+            data: { estado: 'Libre' },
+          });
+          if (mObj?.numero) {
+            await tx.mesa.updateMany({
+              where: { estado: `Unida a Mesa ${mObj.numero}` },
+              data: { estado: 'Libre' },
+            });
+          }
+          mesaLiberada = true;
+        } else {
+          // Si hay al menos un pedido activo en Cocina, la mesa debe quedarse en Cocina.
+          // Si todos los activos están en Servido, pasa a Servido (Azul).
+          const hayEnCocina = activos.some(p => p.estado === 'Cocina');
+          nuevoEstadoMesa = hayEnCocina ? 'Cocina' : 'Servido';
+
+          await tx.mesa.update({
+            where: { id: pedido.mesaId },
+            data: { estado: nuevoEstadoMesa },
+          });
+        }
+      }
+    });
 
     // 🔔 Registrar alerta de cancelación para cocina (store en memoria)
     const itemsParaCocina = (pedido.items || []).filter(i =>
@@ -2237,11 +2242,12 @@ app.post('/api/pedidos/llevar', async (req, res) => {
   } = req.body;
 
   try {
-    // 0. Validar si la caja se encuentra abierta
+    // 0. Validar si la caja se encuentra abierta (BUG-05)
     const turnoActivo = await prisma.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
     if (!turnoActivo) {
       return res.status(400).json({
-        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de registrar pedidos para llevar o delivery.'
+        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de registrar pedidos para llevar o delivery.',
+        cajaCerrada: true,
       });
     }
 
@@ -2267,6 +2273,7 @@ app.post('/api/pedidos/llevar', async (req, res) => {
     const totalConDescuento = Math.max(0, itemsBruto - descuentoMonto);
     let grandTotal = finalMetodoPago === 'Cortesía' ? 0.00 : (totalConDescuento + shippingFee);
     const descuentoFinal = finalMetodoPago === 'Cortesía' ? itemsBruto : descuentoMonto;
+
 
     // Validar crédito antes de crear el pedido para no dejar comandas huérfanas sin venta
     const tieneCredito = finalMetodoPago === 'Crédito' || (finalMetodoPago === 'Mixto' && parseFloat(montoCredito || 0) > 0);
@@ -2312,14 +2319,14 @@ app.post('/api/pedidos/llevar', async (req, res) => {
     const finalTipoComprobante = 'Ticket';
     const initEstadoSunat = 'NO_APLICA';
 
-    // Transacción atómica completa: Pedido + Stock Decrement + Venta
+    // Transacción atómica completa: Pedido + Stock Decrement + Venta (BUG-04)
     const resultado = await prisma.$transaction(async (tx) => {
       const pedidoCreado = await tx.pedido.create({
         data: {
           mesaId: null,
           mesero: String(cajero),
           total: grandTotal,
-          estado: 'Cocina',
+          estado: 'Cocina', // Todos van a Cocina primero para que la cocina/barra los prepare
           estadoEnsalada: finalEstadoEnsalada,
           tipoEntrega: isOwnDelivery ? 'delivery' : 'llevar',
           codigoPedidosYa: codigoPedidosYa ? String(codigoPedidosYa) : null,
@@ -3441,8 +3448,11 @@ app.patch('/api/ventas/:ventaId/anular', async (req, res) => {
         }
       }
 
-      // Si la venta pertenece a un turno anterior y se pagó en efectivo, registrar la salida de la gaveta de hoy
-      const turnoAbierto = await tx.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
+      // Si la venta pertenece a un turno anterior y se pagó en efectivo, registrar la salida de la gaveta de hoy (BUG-06)
+      const turnoAbierto = await tx.cierreCaja.findFirst({
+        where: { estado: 'ABIERTO' },
+        orderBy: { fechaApertura: 'desc' },
+      });
       const ventaEfectivoPrevio = Number(venta.montoEfectivo) || (venta.metodoPago === 'Efectivo' ? Number(venta.total) : 0);
       if (turnoAbierto && ventaEfectivoPrevio > 0 && new Date(venta.createdAt) < new Date(turnoAbierto.fechaApertura)) {
         await tx.movimientoCaja.create({
@@ -3500,11 +3510,12 @@ app.post('/api/ventas', async (req, res) => {
   const idPrincipal = idsAPagar[idsAPagar.length - 1]; // El más reciente como venta principal
 
   try {
-    // 0. Validar si la caja se encuentra abierta para procesar cobros
+    // 0. Validar si la caja se encuentra abierta para procesar cobros (BUG-05)
     const turnoActivo = await prisma.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
     if (!turnoActivo) {
       return res.status(400).json({
-        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de realizar cobros.'
+        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de realizar cobros.',
+        cajaCerrada: true,
       });
     }
 
