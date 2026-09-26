@@ -8,6 +8,9 @@ import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
 
+// Desactivado por defecto (se emite en portal SUNAT SOL o ticket de control interno)
+const FACTURACION_ELECTRONICA = false;
+
 // Helper para parsear la distribución de crédito en ventas con múltiples clientes
 const parsearCreditoSplit = (ofertaDescripcion, defaultClienteId, defaultMonto) => {
   if (ofertaDescripcion && typeof ofertaDescripcion === 'string') {
@@ -66,15 +69,16 @@ function CalculadoraEfectivoPEN({
   mostrarTitulo = true,
   titulo = "Conteo de efectivo",
 }) {
+  const safeConteo = conteo || {};
   const billetes = DENOMINACIONES_PEN.filter(d => d.tipo === 'billete');
   const monedas = DENOMINACIONES_PEN.filter(d => d.tipo === 'moneda');
 
-  const subtotalBilletes = billetes.reduce((s, d) => s + d.valor * (Number(conteo[d.valor]) || 0), 0);
-  const subtotalMonedas = monedas.reduce((s, d) => s + d.valor * (Number(conteo[d.valor]) || 0), 0);
-  const hayConteo = DENOMINACIONES_PEN.some(d => Number(conteo[d.valor]) > 0);
+  const subtotalBilletes = billetes.reduce((s, d) => s + d.valor * (Number(safeConteo[d.valor]) || 0), 0);
+  const subtotalMonedas = monedas.reduce((s, d) => s + d.valor * (Number(safeConteo[d.valor]) || 0), 0);
+  const hayConteo = DENOMINACIONES_PEN.some(d => Number(safeConteo[d.valor]) > 0);
 
   const renderFila = (d) => {
-    const cant = Number(conteo[d.valor]) || 0;
+    const cant = Number(safeConteo[d.valor]) || 0;
     const subtotal = d.valor * cant;
     return (
       <div
@@ -420,7 +424,7 @@ const normalizePhonetic = (text) => {
 };
 
 const parseDeliveryInfo = (code) => {
-  if (!code || !code.startsWith('DELIVERY -')) return null;
+  if (!code || typeof code !== 'string' || !code.startsWith('DELIVERY -')) return null;
   const parts = code.split(' | ');
   const namePart = parts[0] ? parts[0].replace('DELIVERY - ', '') : '';
   const telPart = parts[1] ? parts[1].replace('TEL: ', '') : '';
@@ -2387,29 +2391,42 @@ export default function CajaPage({ currentUser }) {
   };
 
   const esPedidoListo = (p) => {
+    if (!p) return false;
     const e = (p.estado || '').toUpperCase();
     return p.estado === 'Servido' || e.includes('LISTO') || e.includes('SERVIDO');
   };
 
-  const origenPedido = (codigo = '') => {
-    if (codigo.startsWith('DELIVERY -')) {
-      const info = parseDeliveryInfo(codigo);
-      return { tipo: 'delivery', etiqueta: 'Delivery', nombre: info ? info.nombre : codigo.replace('DELIVERY - ', ''), info, Icon: Bike, color: 'bg-indigo-50 text-indigo-600' };
+  const origenPedido = (codigo = '', pedido = null) => {
+    const cod = typeof codigo === 'string' ? codigo : (codigo != null ? String(codigo) : '');
+    if (cod.startsWith('DELIVERY -')) {
+      const info = parseDeliveryInfo(cod);
+      return { tipo: 'delivery', etiqueta: 'Delivery', nombre: info ? info.nombre : cod.replace('DELIVERY - ', ''), info, Icon: Bike, color: 'bg-indigo-50 text-indigo-600' };
     }
-    if (codigo.startsWith('LLEVAR -')) {
-      return { tipo: 'llevar', etiqueta: 'Para llevar', nombre: codigo.replace('LLEVAR - ', ''), info: null, Icon: ShoppingBag, color: 'bg-cyan-50 text-cyan-700' };
+    if (cod.startsWith('LLEVAR -')) {
+      const nom = cod.replace('LLEVAR - ', '').trim();
+      return { tipo: 'llevar', etiqueta: 'Para llevar', nombre: nom || 'Para Llevar', info: null, Icon: ShoppingBag, color: 'bg-cyan-50 text-cyan-700' };
     }
-    return { tipo: 'pedidosya', etiqueta: 'PedidosYa', nombre: codigo, info: null, Icon: Truck, color: 'bg-rose-50 text-rose-600' };
+    if (cod) {
+      return { tipo: 'pedidosya', etiqueta: 'PedidosYa', nombre: cod, info: null, Icon: Truck, color: 'bg-rose-50 text-rose-600' };
+    }
+    // Si no tiene código de PedidosYa, deducir por tipo de pedido o nombre de cliente
+    if (pedido?.tipoEntrega === 'delivery') {
+      return { tipo: 'delivery', etiqueta: 'Delivery', nombre: pedido?.ventaData?.nombreCliente || 'Delivery Local', info: null, Icon: Bike, color: 'bg-indigo-50 text-indigo-600' };
+    }
+    return { tipo: 'llevar', etiqueta: 'Para llevar', nombre: pedido?.ventaData?.nombreCliente || (pedido?.pedidoId ? `Pedido #${pedido.pedidoId}` : 'Para Llevar'), info: null, Icon: ShoppingBag, color: 'bg-cyan-50 text-cyan-700' };
   };
 
   const clienteDeVenta = (v) => {
+    if (!v) return 'Consumidor Final';
     const info = parseDeliveryInfo(v.codigoPedidosYa) || parseDeliveryInfo(v.nombreCliente);
     if (info) return info.nombre;
-    if (v.nombreCliente?.startsWith('DELIVERY -')) return v.nombreCliente.replace('DELIVERY - ', '');
+    if (typeof v.nombreCliente === 'string' && v.nombreCliente.startsWith('DELIVERY -')) {
+      return v.nombreCliente.replace('DELIVERY - ', '');
+    }
     return v.nombreCliente || 'Consumidor Final';
   };
 
-  const origenDeVenta = (v) => (v.codigoPedidosYa ? origenPedido(v.codigoPedidosYa).etiqueta : `Mesa ${v.mesaNum}`);
+  const origenDeVenta = (v) => (v?.codigoPedidosYa ? origenPedido(v.codigoPedidosYa).etiqueta : (v?.mesaNum ? `Mesa ${v.mesaNum}` : 'Para Llevar'));
 
   const itemsDeVenta = (v) => {
     if (v.items?.length) return v.items.map(i => ({ cant: i.cant, nombre: i.nombre, subtotal: i.cant * i.precio }));
@@ -2810,7 +2827,7 @@ export default function CajaPage({ currentUser }) {
                 </div>
                 <ul className="divide-y divide-slate-100">
                   {pedidosLlevar.map(p => {
-                    const o = origenPedido(p.codigoPedidosYa);
+                    const o = origenPedido(p.codigoPedidosYa, p);
                     const listo = esPedidoListo(p);
                     return (
                       <li
@@ -3042,7 +3059,7 @@ export default function CajaPage({ currentUser }) {
       {/* MODAL: DETALLE DE PEDIDO PARA LLEVAR / DELIVERY */}
       {pedidoDetalle && (() => {
         const p = pedidoDetalle;
-        const o = origenPedido(p.codigoPedidosYa);
+        const o = origenPedido(p.codigoPedidosYa, p);
         const listo = esPedidoListo(p);
         const items = (p.items || []).filter(Boolean);
         return modalDetalle(
@@ -6541,7 +6558,7 @@ export default function CajaPage({ currentUser }) {
                         setTimeout(() => {
                           window.print();
                         }, 200);
-                        activeComprobante.shouldAutoPrint = false; // Evitar disparar de nuevo al recargar
+                        setActiveComprobante(prev => prev ? ({ ...prev, shouldAutoPrint: false }) : null);
                       }
                     }}
                   />
@@ -6556,7 +6573,7 @@ export default function CajaPage({ currentUser }) {
                         setTimeout(() => {
                           window.print();
                         }, 200);
-                        activeComprobante.shouldAutoPrint = false; // Evitar disparar de nuevo al recargar
+                        setActiveComprobante(prev => prev ? ({ ...prev, shouldAutoPrint: false }) : null);
                       }
                     }}
                   />

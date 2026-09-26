@@ -1,9 +1,9 @@
-﻿import React from 'react';
+import React from 'react';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -13,25 +13,37 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error("Error capturado por Error Boundary:", error, errorInfo);
+    this.setState({ errorInfo });
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null });
+    this.setState({ hasError: false, error: null, errorInfo: null });
     window.location.reload();
   };
 
   render() {
     if (this.state.hasError) {
-      // Interfaz de repuesto cuando se cae el sistema/internet
+      // Interfaz de repuesto cuando ocurre un error de renderizado o conexión
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 text-slate-800 p-4 text-center">
-          <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center relative overflow-hidden">
+          <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl max-w-xl w-full text-center relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-red-500 to-amber-500"></div>
-            <span className="text-5xl mb-4 block animate-bounce">📡</span>
-            <h1 className="text-2xl font-black text-white mb-2">¡Ups! Interrupción de Red</h1>
-            <p className="text-slate-400 mb-6 text-xs leading-relaxed">
-              El sistema no pudo cargar o sincronizar la pantalla debido a una demora de red o corte de internet.
+            <span className="text-5xl mb-4 block animate-bounce">⚠️</span>
+            <h1 className="text-2xl font-black text-white mb-2">¡Ups! Ocurrió un Error de Visualización</h1>
+            <p className="text-slate-400 mb-4 text-xs leading-relaxed">
+              El sistema no pudo cargar o renderizar la pantalla debido a una excepción interna o demora de sincronización.
             </p>
+            {this.state.error && (
+              <div className="mb-4 text-left p-3.5 bg-red-950/50 border border-red-800/60 rounded-xl overflow-x-auto text-[11px] font-mono text-red-300 max-h-52 overflow-y-auto">
+                <p className="font-bold text-red-200 mb-1">{this.state.error.toString()}</p>
+                {this.state.errorInfo?.componentStack && (
+                  <pre className="text-[10px] text-red-400 whitespace-pre-wrap">{this.state.errorInfo.componentStack}</pre>
+                )}
+                {this.state.error.stack && (
+                  <pre className="text-[9px] text-slate-500 whitespace-pre-wrap mt-2">{this.state.error.stack}</pre>
+                )}
+              </div>
+            )}
             <button 
               onClick={this.handleReset} 
               className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black py-3.5 px-6 rounded-2xl w-full transition-all shadow-lg shadow-amber-500/20 active:scale-95 text-xs uppercase tracking-wider flex items-center justify-center gap-2"

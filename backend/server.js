@@ -2426,8 +2426,9 @@ app.get('/api/pedidos/llevar', async (req, res) => {
 
     const formateados = pedidos.map(p => ({
       pedidoId: p.id,
-      codigoPedidosYa: p.codigoPedidosYa,
-      cajero: p.mesero,
+      codigoPedidosYa: p.codigoPedidosYa || null,
+      tipoEntrega: p.tipoEntrega || 'llevar',
+      cajero: (p.mesero && p.mesero !== 'undefined') ? p.mesero : 'Cajero',
       estado: p.estado,
       total: p.total,
       hora: p.createdAt.toLocaleTimeString('es-PE', {
