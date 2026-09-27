@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Save, RotateCcw, CheckCircle2, AlertCircle, Phone, MapPin, Mail, FileText, Receipt, ShieldCheck, UtensilsCrossed } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Tags, Building2, Save, RotateCcw, CheckCircle2, AlertCircle, Phone, MapPin, Mail, FileText, Receipt, ShieldCheck, UtensilsCrossed } from 'lucide-react';
 import { api } from '../api';
 import { useCompany } from '../context/CompanyContext';
-import { TIPOS_NEGOCIO, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
+import { TIPOS_NEGOCIO } from '../config/company';
 
 export default function ConfiguracionPage({ currentUser }) {
   const { empresa, reloadEmpresa } = useCompany();
@@ -18,10 +19,8 @@ export default function ConfiguracionPage({ currentUser }) {
     email: '',
     ticketFooter: '',
     tipoNegocio: 'polleria',
-    barraCategorias: DEFAULT_BARRA_CATEGORIAS,
   });
 
-  const [barraInput, setBarraInput] = useState(DEFAULT_BARRA_CATEGORIAS.join(', '));
   const [guardando, setGuardando] = useState(false);
   const [mensajeExito, setMensajeExito] = useState('');
   const [mensajeError, setMensajeError] = useState('');
@@ -29,9 +28,6 @@ export default function ConfiguracionPage({ currentUser }) {
   // Sincronizar estado local con la configuración de empresa
   useEffect(() => {
     if (empresa) {
-      const cats = Array.isArray(empresa.barraCategorias) && empresa.barraCategorias.length > 0
-        ? empresa.barraCategorias
-        : DEFAULT_BARRA_CATEGORIAS;
       setFormData({
         name: empresa.name || '',
         brandShort: empresa.brandShort || '',
@@ -43,9 +39,7 @@ export default function ConfiguracionPage({ currentUser }) {
         email: empresa.email || '',
         ticketFooter: empresa.ticketFooter || '',
         tipoNegocio: empresa.tipoNegocio || 'polleria',
-        barraCategorias: cats,
       });
-      setBarraInput(cats.join(', '));
     }
   }, [empresa]);
 
@@ -58,9 +52,6 @@ export default function ConfiguracionPage({ currentUser }) {
 
   const handleReset = () => {
     if (empresa) {
-      const cats = Array.isArray(empresa.barraCategorias) && empresa.barraCategorias.length > 0
-        ? empresa.barraCategorias
-        : DEFAULT_BARRA_CATEGORIAS;
       setFormData({
         name: empresa.name || '',
         brandShort: empresa.brandShort || '',
@@ -72,9 +63,7 @@ export default function ConfiguracionPage({ currentUser }) {
         email: empresa.email || '',
         ticketFooter: empresa.ticketFooter || '',
         tipoNegocio: empresa.tipoNegocio || 'polleria',
-        barraCategorias: cats,
       });
-      setBarraInput(cats.join(', '));
       setMensajeExito('');
       setMensajeError('');
     }
@@ -373,24 +362,15 @@ export default function ConfiguracionPage({ currentUser }) {
 
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Categorías Destinadas a BARRA (Separadas por comas)
+                Cocina y Barra
               </label>
-              <input
-                type="text"
-                name="barraCategoriasInput"
-                value={barraInput}
-                onChange={e => {
-                  setBarraInput(e.target.value);
-                  const cats = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                  setFormData(prev => ({ ...prev, barraCategorias: cats }));
-                }}
-                disabled={!isAdmin || guardando}
-                placeholder="Bebidas y Refrescos, Cervezas, Bar y Cocteles, Postres"
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 disabled:bg-slate-100 disabled:text-slate-400 transition"
-              />
-              <span className="text-[11px] text-slate-400 mt-1 block">
-                Los platos o productos de estas categorías se despacharán al monitor de Barra. Todas las demás irán automáticamente a Cocina.
-              </span>
+              <Link
+                to="/categorias"
+                className="flex items-center gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-bold text-violet-800 hover:bg-violet-100 transition"
+              >
+                <Tags className="w-5 h-5" />
+                Elige qué categorías van a Barra en la sección Categorías
+              </Link>
             </div>
 
             {isAdmin && (

@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { PlusCircle, Utensils, CupSoda, Wine, AlertCircle, Trash2, BookOpen, Save, X, Tag, ToggleLeft, ToggleRight, Edit2, ChevronDown, ChevronUp, Percent, DollarSign, Search, Sliders, Sparkles, FolderPlus } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { PlusCircle, Utensils, CupSoda, Wine, Trash2, Save, X, Tag, ToggleLeft, ToggleRight, Edit2, ChevronDown, ChevronUp, Percent, DollarSign, Search, Flame, GlassWater, Package, Plus, Minus, Boxes, MessageCircleQuestion, Infinity as InfinityIcon } from 'lucide-react';
 import { api } from '../api';
-import { safeJsonParse } from '../utils/safeJson';
-import { parseComponentes, calcularPrecioComponentes, normalizarOpcion, parseComplementos, COMPLEMENTOS_SUGERIDOS } from '../utils/combos';
-import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, TODAS_CATEGORIAS as MASTER_TODAS_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
+import { parseComponentes, calcularPrecioComponentes, normalizarOpcion, extractIngredientesTexto } from '../utils/combos';
+import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
+import { ordenarCategorias } from '../utils/categorias';
+import { Button, Input, Label, Badge, Dialog, DialogHeader, DialogFooter } from '../components/ui';
+import { cn } from '../utils/cn';
 
 // --- SISTEMA DE BÚSQUEDA INTELIGENTE Y FONÉTICA ---
 const SINONIMOS = {
@@ -72,8 +75,8 @@ const BARRA_CATEGORIAS = (COMPANY_CONFIG.barraCategorias && Array.isArray(COMPAN
   : DEFAULT_BARRA_CATEGORIAS;
 
 // Ícono y color por categoría
-function getCatStyle(cat) {
-  if (BARRA_CATEGORIAS.includes(cat)) {
+function getCatStyle(cat, esBarra) {
+  if (esBarra) {
     if (cat === 'Cervezas') return { Icon: CupSoda, color: 'text-amber-500', bg: 'bg-amber-100', badge: 'bg-amber-100 text-amber-700' };
     if (cat === 'Bar y Cocteles') return { Icon: Wine, color: 'text-purple-500', bg: 'bg-purple-100', badge: 'bg-purple-100 text-purple-700' };
     if (cat === 'Bebidas Calientes') return { Icon: CupSoda, color: 'text-orange-500', bg: 'bg-orange-100', badge: 'bg-orange-100 text-orange-700' };
@@ -83,10 +86,77 @@ function getCatStyle(cat) {
   return { Icon: Utensils, color: 'text-amber-500', bg: 'bg-amber-100', badge: 'bg-amber-100 text-amber-700' };
 }
 
-const TODAS_CATEGORIAS = [
-  ...MASTER_TODAS_CATEGORIAS,
-  'PedidosYa / Ofertas',
-];
+const ACENTOS_BUSCADOR = {
+  violet: { foco: 'focus:border-violet-500 focus:ring-violet-100', hover: 'hover:bg-violet-50', mas: 'bg-violet-100 text-violet-700' },
+  sky: { foco: 'focus:border-sky-500 focus:ring-sky-100', hover: 'hover:bg-sky-50', mas: 'bg-sky-100 text-sky-700' },
+};
+
+// Buscador de productos de la carta; con onTextoLibre también permite agregar lo escrito como texto
+function BuscadorProductos({ productos, onElegir, onTextoLibre, placeholder, acento = 'violet', compacto = false }) {
+  const [q, setQ] = useState('');
+  const texto = q.trim();
+  const resultados = texto ? productos.filter(p => matchProductSemantic(p, texto)).slice(0, 6) : [];
+  const a = ACENTOS_BUSCADOR[acento];
+
+  const elegir = (p) => { onElegir(p); setQ(''); };
+  const agregarTexto = () => {
+    if (!texto || !onTextoLibre) return;
+    onTextoLibre(texto);
+    setQ('');
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (onTextoLibre) agregarTexto();
+      else if (resultados[0]) elegir(resultados[0]);
+    } else if (e.key === 'Escape' && q) {
+      e.stopPropagation(); // limpia la búsqueda sin cerrar el modal
+      setQ('');
+    }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <Input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          className={cn(compacto ? 'h-10 text-sm' : 'h-12', 'pl-10 font-medium', a.foco)}
+        />
+      </div>
+      {texto && (
+        <div className="rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden divide-y divide-slate-100 animate-fade-in">
+          {onTextoLibre && (
+            <button type="button" onClick={agregarTexto} className={cn('w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-bold text-slate-700 cursor-pointer', a.hover)}>
+              <span className={cn('w-6 h-6 rounded-md flex items-center justify-center shrink-0', a.mas)}><Plus className="w-4 h-4" /></span>
+              Agregar “{texto}”
+            </button>
+          )}
+          {onTextoLibre && resultados.length > 0 && (
+            <p className="px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">De la carta</p>
+          )}
+          {resultados.map(p => (
+            <button key={p.id} type="button" onClick={() => elegir(p)} className={cn('w-full flex items-center gap-3 px-3 py-2 text-left cursor-pointer', a.hover)}>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-slate-800 truncate">{p.nombre}</p>
+                <p className="text-xs text-slate-400 truncate">{p.categoria}</p>
+              </div>
+              <span className="text-sm font-mono font-bold text-slate-600">S/ {Number(p.precio || 0).toFixed(2)}</span>
+              <span className={cn('w-7 h-7 rounded-lg flex items-center justify-center shrink-0', a.mas)}><Plus className="w-4 h-4" /></span>
+            </button>
+          ))}
+          {!onTextoLibre && resultados.length === 0 && (
+            <p className="px-3 py-3 text-sm text-slate-400">No se encontró “{texto}”</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function CartaPage({ currentUser }) {
   const [productos, setProductos] = useState([]);
@@ -94,14 +164,9 @@ export default function CartaPage({ currentUser }) {
   const [categoriaActiva, setCategoriaActiva] = useState('Todos');
   const [modalOpen, setModalOpen] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [editProd, setEditProd] = useState({ id: '', nombre: '', categoria: 'Platos de Fondo', precio: '', tipoStock: 'ilimitado', stock: '' });
+  const [editProd, setEditProd] = useState({ id: '', nombre: '', categoria: '', precio: '', stock: '', opcionesConfig: [], componentes: [], ingredientes: '' });
   const [searchQuery, setSearchQuery] = useState('');
-  const [creandoNuevaCat, setCreandoNuevaCat] = useState(false);
-  const [nuevoComplemento, setNuevoComplemento] = useState('');
-  const [nuevaCatNombre, setNuevaCatNombre] = useState('');
-  const [categoriasExtra, setCategoriasExtra] = useState(() => {
-    return safeJsonParse(localStorage.getItem('restaurant_custom_categories'), []);
-  });
+  const [categorias, setCategorias] = useState([]);
 
   // Ofertas
   const [ofertas, setOfertas] = useState([]);
@@ -129,6 +194,15 @@ export default function CartaPage({ currentUser }) {
     }
   }, []);
 
+  const fetchCategorias = useCallback(async () => {
+    try {
+      const data = await api.getCategorias();
+      setCategorias(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error cargando categorías:', err);
+    }
+  }, []);
+
   const fetchOfertas = useCallback(async () => {
     try {
       const data = await api.getOfertas();
@@ -140,14 +214,27 @@ export default function CartaPage({ currentUser }) {
 
   useEffect(() => {
     fetchProductos();
+    fetchCategorias();
     if (isAdmin) fetchOfertas();
-  }, [fetchProductos, fetchOfertas, isAdmin]);
+  }, [fetchProductos, fetchCategorias, fetchOfertas, isAdmin]);
 
-  // Categorías dinámicas desde los productos en BD + categorías agregadas por el usuario
-  const categoriasEnBD = ['Todos', ...new Set([...productos.map(p => p.categoria), ...categoriasExtra])].filter(cat => {
-    if (cat === 'PedidosYa / Ofertas') return hasCajaAccess;
-    return Boolean(cat);
-  });
+  const puedeVerCategoria = (cat) => Boolean(cat) && (cat !== 'PedidosYa / Ofertas' || hasCajaAccess);
+
+  // Destino y color vienen de la sección Categorías; si no está registrada se usa la config de Barra
+  const infoCategoria = (cat) => {
+    const c = categorias.find(x => x.nombre === cat);
+    const barra = c ? c.destino === 'barra' : BARRA_CATEGORIAS.includes(cat);
+    return { barra, color: c?.color || (barra ? 'sky' : 'amber') };
+  };
+  const esBarra = (cat) => infoCategoria(cat).barra;
+
+  // Filtros: solo categorías que tienen productos
+  const categoriasEnBD = ['Todos', ...ordenarCategorias([...new Set(productos.map(p => p.categoria))].filter(puedeVerCategoria))];
+
+  // Categorías para elegir al crear un producto (incluye la actual aunque ya no exista)
+  const todasLasCategorias = ordenarCategorias(
+    [...new Set([...categorias.map(c => c.nombre), editProd.categoria])].filter(puedeVerCategoria)
+  );
   const productosFiltrados = productos.filter(p => {
     if (p.categoria === 'PedidosYa / Ofertas') {
       if (!hasCajaAccess) return false;
@@ -162,100 +249,86 @@ export default function CartaPage({ currentUser }) {
       try {
         const raw = typeof p.opcionesConfig === 'string' ? JSON.parse(p.opcionesConfig) : p.opcionesConfig;
         if (Array.isArray(raw)) {
-          parsedOpciones = raw.map(step => {
-            const opts = (Array.isArray(step.options) ? step.options : []).map(normalizarOpcion);
-            return {
-              name: step.name || '',
-              // Las opciones ligadas a un producto de la carta se editan como fichas aparte
-              vinculadas: opts.filter(o => o.productoId),
-              options: opts.filter(o => !o.productoId).map(o => o.label).join(', '),
-            };
-          });
+          parsedOpciones = raw.map(step => ({
+            name: step.name || '',
+            // Cada respuesta es texto libre o un producto de la carta (este llega solo a cocina/barra y descuenta stock)
+            respuestas: (Array.isArray(step.options) ? step.options : []).map(normalizarOpcion).map(o => (
+              o.productoId ? { label: o.label, productoId: o.productoId, precioExtra: o.precioExtra } : { label: o.label }
+            )),
+          }));
         }
-      } catch (e) {
+      } catch {
         parsedOpciones = [];
       }
     }
-    
-    // Categoría predeterminada estándar gastronómica
-    const defaultCat = productos.some(prod => prod.categoria === 'Platos de Fondo') 
-      ? 'Platos de Fondo' 
-      : (MASTER_TODAS_CATEGORIAS[4] || 'Platos Criollos y Fondos');
+
+    // Por defecto la categoría que se está filtrando, o la primera disponible
+    const disponibles = ordenarCategorias(categorias.map(c => c.nombre).filter(puedeVerCategoria));
+    const defaultCat = categoriaActiva !== 'Todos' ? categoriaActiva : (disponibles[0] || '');
 
     setEditProd(p
       ? {
           ...p,
           precio: String(p.precio),
-          stock: String(p.stock),
-          requiereGuarnicion: !!p.requiereGuarnicion,
-          tieneOpciones: parsedOpciones.length > 0,
+          // Vacío = sin límite; un número = se cuentan las porciones
+          stock: p.tipoStock === 'limitado' ? String(p.stock) : '',
           opcionesConfig: parsedOpciones,
           componentes: parseComponentes(p),
-          complementos: parseComplementos(p),
+          ingredientes: extractIngredientesTexto(p),
         }
-      : {
-          id: '',
-          nombre: '',
-          categoria: defaultCat,
-          precio: '',
-          tipoStock: 'ilimitado',
-          stock: '',
-          requiereGuarnicion: false,
-          tieneOpciones: false,
-          opcionesConfig: [],
-          componentes: [],
-          complementos: [],
-        }
+      : { id: '', nombre: '', categoria: defaultCat, precio: '', stock: '', opcionesConfig: [], componentes: [], ingredientes: '' }
     );
-    setCreandoNuevaCat(false);
-    setNuevaCatNombre('');
     setModalOpen(true);
+    fetchCategorias();
   };
 
-  const aplicarPlantillaOpciones = (tipo) => {
-    if (tipo === 'menu') {
-      setEditProd(prev => ({
-        ...prev,
-        tieneOpciones: true,
-        categoria: 'Menú',
-        opcionesConfig: [
-          { name: "Elige la Entrada", options: "Sopa del Día, Ensalada Fresca, Papa a la Huancaína, Sin Entrada" },
-          { name: "Elige la Bebida", options: "Chicha Morada, Limonada, Gaseosa, Sin Bebida" }
-        ]
-      }));
-    } else if (tipo === 'parrilla') {
-      setEditProd(prev => ({
-        ...prev,
-        tieneOpciones: true,
-        opcionesConfig: [
-          { name: "Elige la Guarnición", options: "Papas Fritas, Arroz Chaufa, Arroz Blanco, Yuca Frita, Ensalada, Sin Guarnición" },
-          { name: "Término de la Carne", options: "Término Medio, Tres Cuartos, Bien Cocido" }
-        ]
-      }));
-    } else if (tipo === 'marino') {
-      setEditProd(prev => ({
-        ...prev,
-        tieneOpciones: true,
-        opcionesConfig: [
-          { name: "Nivel de Picante", options: "Sin Picante / Suave, Picante Medio, Bien Picante" },
-          { name: "Acompañamiento", options: "Clásico (Choclo y Camote), Chifles Piuranos, Cancha Serrana" }
-        ]
-      }));
-    } else if (tipo === 'combo') {
-      setEditProd(prev => ({
-        ...prev,
-        tieneOpciones: true,
-        categoria: 'Combos',
-        opcionesConfig: [
-          { name: "Elige la Guarnición", options: "Papas Fritas, Arroz Chaufa, Arroz Blanco, Ensalada Fresca" },
-          { name: "Bebida del Combo", options: "Chicha Morada (Vaso), Limonada (Vaso), Gaseosa 500ml, Sin Bebida" },
-          { name: "Salsas y Cremas", options: "Todas las Salsas, Solo Ají, Mayonesa y Ketchup, Sin Salsas" }
-        ]
-      }));
-    }
+  const PLANTILLAS_PREGUNTAS = {
+    guarnicion: { name: 'Guarnición', respuestas: ['Papas Fritas', 'Arroz', 'Ensalada', 'Yuca Frita'] },
+    termino: { name: 'Término de la carne', respuestas: ['Término Medio', 'Tres Cuartos', 'Bien Cocido'] },
+    bebida: { name: 'Bebida', respuestas: ['Chicha Morada', 'Limonada', 'Gaseosa', 'Sin Bebida'] },
+    entrada: { name: 'Entrada', respuestas: ['Sopa del Día', 'Ensalada', 'Papa a la Huancaína'] },
+    picante: { name: 'Picante', respuestas: ['Sin Picante', 'Picante Medio', 'Bien Picante'] },
   };
 
-  // Productos que se pueden usar como opción o como parte de un combo
+  const agregarPregunta = (plantilla = null) => {
+    const nueva = plantilla
+      ? { name: plantilla.name, respuestas: plantilla.respuestas.map(label => ({ label })) }
+      : { name: '', respuestas: [] };
+    setEditProd(prev => ({ ...prev, opcionesConfig: [...(prev.opcionesConfig || []), nueva] }));
+  };
+
+  const quitarPregunta = (idx) => {
+    setEditProd(prev => ({ ...prev, opcionesConfig: (prev.opcionesConfig || []).filter((_, i) => i !== idx) }));
+  };
+
+  const editarPregunta = (idx, cambios) => {
+    setEditProd(prev => {
+      const pasos = [...(prev.opcionesConfig || [])];
+      pasos[idx] = { ...pasos[idx], ...cambios };
+      return { ...prev, opcionesConfig: pasos };
+    });
+  };
+
+  // respuesta: { label } (texto) o { label, productoId, precioExtra } (producto de la carta)
+  const agregarRespuesta = (idx, respuesta) => {
+    const paso = editProd.opcionesConfig[idx];
+    const repetida = paso.respuestas.some(r => (
+      respuesta.productoId ? r.productoId === respuesta.productoId : !r.productoId && r.label.toLowerCase() === respuesta.label.toLowerCase()
+    ));
+    if (!repetida) editarPregunta(idx, { respuestas: [...paso.respuestas, respuesta] });
+  };
+
+  const editarRespuesta = (idx, rIdx, cambios) => {
+    const paso = editProd.opcionesConfig[idx];
+    editarPregunta(idx, { respuestas: paso.respuestas.map((r, i) => (i === rIdx ? { ...r, ...cambios } : r)) });
+  };
+
+  const quitarRespuesta = (idx, rIdx) => {
+    const paso = editProd.opcionesConfig[idx];
+    editarPregunta(idx, { respuestas: paso.respuestas.filter((_, i) => i !== rIdx) });
+  };
+
+  // Productos que se pueden usar como respuesta o como parte de un combo
   const productosSeleccionables = productos
     .filter(p => p.activo !== false && String(p.id) !== String(editProd.id))
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -263,24 +336,23 @@ export default function CartaPage({ currentUser }) {
   const componentesActuales = editProd.componentes || [];
   const sumaComponentes = calcularPrecioComponentes(componentesActuales, productos);
 
-  const agregarComponente = (productoId) => {
-    const id = parseInt(productoId);
-    if (!id) return;
+  const agregarComponente = (producto) => {
     setEditProd(prev => {
       const actuales = prev.componentes || [];
-      const idx = actuales.findIndex(c => c.productoId === id);
+      const idx = actuales.findIndex(c => c.productoId === producto.id);
       const nuevos = idx >= 0
         ? actuales.map((c, i) => (i === idx ? { ...c, cantidad: c.cantidad + 1 } : c))
-        : [...actuales, { productoId: id, cantidad: 1 }];
+        : [...actuales, { productoId: producto.id, cantidad: 1 }];
       return { ...prev, componentes: nuevos };
     });
   };
 
-  const cambiarCantidadComponente = (productoId, cantidad) => {
-    const cant = parseInt(cantidad);
+  const cambiarCantidadComponente = (productoId, delta) => {
     setEditProd(prev => ({
       ...prev,
-      componentes: (prev.componentes || []).map(c => (c.productoId === productoId ? { ...c, cantidad: cant > 0 ? cant : 1 } : c)),
+      componentes: (prev.componentes || [])
+        .map(c => (c.productoId === productoId ? { ...c, cantidad: c.cantidad + delta } : c))
+        .filter(c => c.cantidad > 0),
     }));
   };
 
@@ -288,158 +360,50 @@ export default function CartaPage({ currentUser }) {
     setEditProd(prev => ({ ...prev, componentes: (prev.componentes || []).filter(c => c.productoId !== productoId) }));
   };
 
-  const agregarOpcionVinculada = (idx, productoId) => {
-    const prod = productos.find(p => String(p.id) === String(productoId));
-    if (!prod) return;
-    setEditProd(prev => {
-      const pasos = [...(prev.opcionesConfig || [])];
-      const vinculadas = pasos[idx].vinculadas || [];
-      if (vinculadas.some(v => v.productoId === prod.id)) return prev;
-      pasos[idx] = { ...pasos[idx], vinculadas: [...vinculadas, { productoId: prod.id, label: prod.nombre, precioExtra: 0 }] };
-      return { ...prev, opcionesConfig: pasos };
-    });
-  };
-
-  const cambiarExtraOpcion = (idx, productoId, precioExtra) => {
-    setEditProd(prev => {
-      const pasos = [...(prev.opcionesConfig || [])];
-      pasos[idx] = {
-        ...pasos[idx],
-        vinculadas: (pasos[idx].vinculadas || []).map(v => (v.productoId === productoId ? { ...v, precioExtra: parseFloat(precioExtra) || 0 } : v)),
-      };
-      return { ...prev, opcionesConfig: pasos };
-    });
-  };
-
-  const quitarOpcionVinculada = (idx, productoId) => {
-    setEditProd(prev => {
-      const pasos = [...(prev.opcionesConfig || [])];
-      pasos[idx] = { ...pasos[idx], vinculadas: (pasos[idx].vinculadas || []).filter(v => v.productoId !== productoId) };
-      return { ...prev, opcionesConfig: pasos };
-    });
-  };
-
-  const complementosActuales = editProd.complementos || [];
-
-  // Sugerencias: las de fábrica más las que ya se usaron en otros platos de la carta
-  const sugerenciasComplementos = (() => {
-    const usados = new Set();
-    productos.forEach(p => parseComplementos(p).forEach(c => usados.add(c.nombre)));
-    const todas = [...new Set([...COMPLEMENTOS_SUGERIDOS, ...usados])];
-    return todas.filter(n => !complementosActuales.some(c => c.nombre.toLowerCase() === n.toLowerCase()));
-  })();
-
-  const agregarComplemento = (nombre, incluido = true) => {
-    const limpio = String(nombre || '').trim();
-    if (!limpio) return;
-    setEditProd(prev => {
-      const actuales = prev.complementos || [];
-      if (actuales.some(c => c.nombre.toLowerCase() === limpio.toLowerCase())) return prev;
-      return { ...prev, complementos: [...actuales, { nombre: limpio, incluido, precio: 0 }] };
-    });
-    setNuevoComplemento('');
-  };
-
-  const actualizarComplemento = (nombre, campo, valor) => {
-    setEditProd(prev => ({
-      ...prev,
-      complementos: (prev.complementos || []).map(c => (c.nombre === nombre ? { ...c, [campo]: valor } : c)),
-    }));
-  };
-
-  const quitarComplemento = (nombre) => {
-    setEditProd(prev => ({ ...prev, complementos: (prev.complementos || []).filter(c => c.nombre !== nombre) }));
-  };
-
-  const agregarPasoOpcion = () => {
-    setEditProd(prev => ({
-      ...prev,
-      opcionesConfig: [
-        ...(prev.opcionesConfig || []),
-        { name: "", options: "", vinculadas: [] }
-      ]
-    }));
-  };
-
-  const eliminarPasoOpcion = (idx) => {
-    setEditProd(prev => ({
-      ...prev,
-      opcionesConfig: (prev.opcionesConfig || []).filter((_, i) => i !== idx)
-    }));
-  };
-
-  const actualizarPasoOpcion = (idx, campo, valor) => {
-    setEditProd(prev => {
-      const nuevo = [...(prev.opcionesConfig || [])];
-      nuevo[idx] = { ...nuevo[idx], [campo]: valor };
-      return { ...prev, opcionesConfig: nuevo };
-    });
-  };
-
   const guardarProducto = async () => {
     const precio = parseFloat(editProd.precio);
-    if (!editProd.nombre || isNaN(precio)) { alert('Ingresa un nombre y precio válido.'); return; }
-    
-    let categoriaFinal = editProd.categoria;
-    if (creandoNuevaCat) {
-      if (!nuevaCatNombre.trim()) {
-        alert('Por favor ingresa el nombre de la nueva categoría.');
-        return;
-      }
-      categoriaFinal = nuevaCatNombre.trim();
-    }
+    if (!editProd.nombre.trim() || isNaN(precio)) { alert('Ingresa un nombre y precio válido.'); return; }
+    if (!editProd.categoria) { alert('Elige una categoría.'); return; }
 
-    // Procesar opciones configuradas
-    let opcionesPayload = null;
-    let requiereGuarnicionBool = false;
-    
-    if (editProd.tieneOpciones && Array.isArray(editProd.opcionesConfig)) {
-      const pasosValidos = editProd.opcionesConfig
-        .filter(s => s.name && s.name.trim() && ((s.options && s.options.trim()) || (s.vinculadas || []).length > 0))
-        .map((s, idx) => ({
+    // Preguntas al mozo: se ignoran las que están totalmente vacías
+    const preguntas = (editProd.opcionesConfig || []).filter(s => s.name.trim() || s.respuestas.length > 0);
+    const incompleta = preguntas.findIndex(s => !s.name.trim() || s.respuestas.length === 0);
+    if (incompleta >= 0) {
+      alert(`La pregunta ${incompleta + 1} necesita un nombre y al menos una respuesta.`);
+      return;
+    }
+    const opcionesPayload = preguntas.length > 0
+      ? JSON.stringify(preguntas.map((s, idx) => ({
           name: s.name.trim(),
           key: `opcion_${idx + 1}`,
-          options: [
-            // Ligadas a un producto: llegan solas a cocina o barra y descuentan su stock
-            ...(s.vinculadas || []).map(v => ({
-              label: v.label,
-              value: v.label,
-              productoId: v.productoId,
-              precioExtra: parseFloat(v.precioExtra) || 0,
-            })),
-            ...String(s.options || '').split(',').map(o => o.trim()).filter(Boolean),
-          ],
-        }))
-        .filter(s => s.options.length > 0);
+          options: s.respuestas.map(r => (r.productoId
+            ? { label: r.label, value: r.label, productoId: r.productoId, precioExtra: parseFloat(r.precioExtra) || 0 }
+            : r.label)),
+        })))
+      : null;
 
-      if (pasosValidos.length > 0) {
-        opcionesPayload = JSON.stringify(pasosValidos);
-        requiereGuarnicionBool = true;
-      } else {
-        alert("Activaste las opciones pero no has ingresado opciones válidas. Por favor, escribe al menos una opción o desactiva la casilla 'Acompañamientos y Opciones' para venta directa sin guarnición.");
-        return;
-      }
-    }
+    const stockTexto = String(editProd.stock ?? '').trim();
+    const limitado = stockTexto !== '';
 
     setGuardando(true);
     try {
       const body = {
-        nombre: editProd.nombre,
-        categoria: categoriaFinal,
+        nombre: editProd.nombre.trim(),
+        categoria: editProd.categoria,
         precio,
-        tipoStock: editProd.tipoStock,
-        stock: parseInt(editProd.stock) || 0,
-        requiereGuarnicion: requiereGuarnicionBool,
+        tipoStock: limitado ? 'limitado' : 'ilimitado',
+        stock: limitado ? Math.max(0, parseInt(stockTexto) || 0) : 0,
+        requiereGuarnicion: preguntas.length > 0,
         opcionesConfig: opcionesPayload,
         componentes: componentesActuales.length > 0 ? JSON.stringify(componentesActuales) : null,
-        complementos: complementosActuales.length > 0 ? JSON.stringify(complementosActuales) : null,
+        complementos: (editProd.ingredientes || '').trim() || null,
       };
       if (editProd.id) {
         await api.editarProducto(editProd.id, body);
       } else {
         await api.crearProducto(body);
       }
-      await fetchProductos();
+      await Promise.all([fetchProductos(), fetchCategorias()]);
       setModalOpen(false);
     } catch (err) {
       alert('Error guardando producto: ' + err.message);
@@ -670,14 +634,14 @@ export default function CartaPage({ currentUser }) {
       {/* ── FILTROS DE CATEGORÍA ─────────────────────────── */}
       <div className="flex gap-2 overflow-x-auto pb-4 custom-scrollbar mb-4 items-center">
         {categoriasEnBD.map(cat => {
-          const esBarra = BARRA_CATEGORIAS.includes(cat);
+          const catBarra = esBarra(cat);
           return (
             <button
               key={cat}
               onClick={() => setCategoriaActiva(cat)}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap shadow-xs transition-colors flex items-center gap-2 ${
                 categoriaActiva === cat
-                  ? (esBarra ? 'bg-blue-600 text-white' : 'bg-slate-900 text-white')
+                  ? (catBarra ? 'bg-blue-600 text-white' : 'bg-slate-900 text-white')
                   : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
               }`}
             >
@@ -685,7 +649,7 @@ export default function CartaPage({ currentUser }) {
                 <span className={`w-2 h-2 rounded-full shrink-0 ${
                   categoriaActiva === cat 
                     ? 'bg-white' 
-                    : (esBarra ? 'bg-blue-500' : 'bg-amber-500')
+                    : (catBarra ? 'bg-blue-500' : 'bg-amber-500')
                 }`} />
               )}
               <span>{cat === 'Todos' ? 'Todos' : cat}</span>
@@ -699,7 +663,7 @@ export default function CartaPage({ currentUser }) {
         {productosFiltrados.length === 0
           ? <div className="col-span-full text-center py-10 text-slate-400 font-medium">No hay productos en esta categoría.</div>
           : productosFiltrados.map(p => {
-              const { Icon, color, bg, badge } = getCatStyle(p.categoria);
+              const { Icon, color, bg, badge } = getCatStyle(p.categoria, esBarra(p.categoria));
               const isAgotado = p.tipoStock === 'limitado' && p.stock <= 0;
               const tieneOferta = p.precioOferta != null;
 
@@ -722,12 +686,18 @@ export default function CartaPage({ currentUser }) {
                     <div className="text-right">
                       <p className="text-xs text-slate-400 font-bold uppercase tracking-wider leading-none">{p.categoria}</p>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase mt-1 inline-block ${badge}`}>
-                        {BARRA_CATEGORIAS.includes(p.categoria) ? '🍹 Barra' : '🔥 Cocina'}
+                        {esBarra(p.categoria) ? '🍹 Barra' : '🔥 Cocina'}
                       </span>
                     </div>
                   </div>
                   <div className="relative z-0">
-                    <h3 className="font-black text-slate-800 text-sm leading-tight mb-2 line-clamp-2" title={p.nombre}>{p.nombre}</h3>
+                    <h3 className="font-black text-slate-800 text-sm leading-tight mb-1 line-clamp-2" title={p.nombre}>{p.nombre}</h3>
+                    {extractIngredientesTexto(p) && (
+                      <p className="text-[11px] text-slate-500 font-medium line-clamp-1 mb-2 flex items-center gap-1" title={extractIngredientesTexto(p)}>
+                        <span className="text-emerald-500 shrink-0 text-xs">🥗</span>
+                        <span className="truncate">{extractIngredientesTexto(p)}</span>
+                      </p>
+                    )}
                     {tieneOferta ? (
                       <div>
                         <p className="text-sm text-slate-400 font-mono line-through">S/ {parseFloat(p.precio).toFixed(2)}</p>
@@ -752,491 +722,329 @@ export default function CartaPage({ currentUser }) {
       </div>
 
       {/* ── MODAL PRODUCTO ───────────────────────────────── */}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[95vh] flex flex-col">
-            <div className="bg-slate-900 p-5 flex justify-between items-center text-white shrink-0">
-              <h3 className="font-black flex items-center gap-2"><BookOpen className="w-5 h-5 text-amber-500" /> {editProd.id ? 'Editar Producto' : 'Registrar Producto'}</h3>
-              <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+      <Dialog open={modalOpen} onClose={() => setModalOpen(false)} closeOnBackdrop={false} className="sm:max-w-5xl">
+        <DialogHeader
+          icon={editProd.id ? Edit2 : PlusCircle}
+          iconClassName={editProd.id ? 'bg-sky-100 text-sky-600' : 'bg-emerald-100 text-emerald-600'}
+          title={editProd.id ? 'Editar producto' : 'Nuevo producto'}
+          onClose={() => setModalOpen(false)}
+        />
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-6">
+
+          {/* ── Datos principales ── */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_12rem] gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Nombre del Producto</label>
-                <input type="text" value={editProd.nombre} onChange={e => setEditProd({ ...editProd, nombre: e.target.value })} placeholder="Ej. Ceviche Mixto Especial, Bife Angosto..." className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200" />
+                <Label htmlFor="prod-nombre">Nombre</Label>
+                <Input
+                  id="prod-nombre"
+                  autoFocus={!editProd.id}
+                  value={editProd.nombre}
+                  onChange={e => setEditProd({ ...editProd, nombre: e.target.value })}
+                  placeholder="Ej: 1/4 Pollo a la Brasa"
+                  className="h-12 text-base focus:border-amber-500 focus:ring-amber-100"
+                />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Categoría</label>
-                    {!creandoNuevaCat && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCreandoNuevaCat(true);
-                          setNuevaCatNombre('');
-                        }}
-                        className="text-[11px] font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1 hover:underline cursor-pointer"
-                        title="Escribir una nueva categoría"
-                      >
-                        <FolderPlus className="w-3.5 h-3.5" /> + Otra categoría
-                      </button>
-                    )}
-                  </div>
+              <div>
+                <Label htmlFor="prod-precio">Precio</Label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-emerald-600 select-none">S/</span>
+                  <Input
+                    id="prod-precio"
+                    type="number"
+                    step="any"
+                    min="0"
+                    inputMode="decimal"
+                    value={editProd.precio}
+                    onChange={e => setEditProd({ ...editProd, precio: e.target.value })}
+                    placeholder="0.00"
+                    className="h-12 pl-11 text-lg font-black font-mono text-emerald-700 focus:border-emerald-500 focus:ring-emerald-100"
+                  />
+                </div>
+              </div>
+            </div>
 
-                  {creandoNuevaCat ? (
-                    <div className="flex gap-1.5 animate-in fade-in duration-150">
-                      <input
-                        type="text"
-                        autoFocus
-                        value={nuevaCatNombre}
-                        onChange={e => setNuevaCatNombre(e.target.value)}
-                        placeholder="Ej: Chifa, Pastas, Cevichería..."
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (nuevaCatNombre.trim()) {
-                              setEditProd({ ...editProd, categoria: nuevaCatNombre.trim() });
-                            }
-                            setCreandoNuevaCat(false);
-                          }
-                        }}
-                        className="w-full border-2 border-amber-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none bg-white shadow-xs"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (nuevaCatNombre.trim()) {
-                            setEditProd({ ...editProd, categoria: nuevaCatNombre.trim() });
-                          }
-                          setCreandoNuevaCat(false);
-                        }}
-                        className="px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer"
-                      >
-                        OK
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCreandoNuevaCat(false)}
-                        className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl transition-all cursor-pointer"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : (
-                    <select
-                      value={editProd.categoria}
-                      onChange={e => {
-                        if (e.target.value === '__NUEVA__') {
-                          setCreandoNuevaCat(true);
-                          setNuevaCatNombre('');
-                        } else {
-                          setEditProd({ ...editProd, categoria: e.target.value });
-                        }
-                      }}
-                      className="w-full border border-slate-200 focus:border-amber-500 rounded-xl px-4 py-2 text-sm focus:outline-none bg-white font-medium text-slate-800 transition-colors cursor-pointer"
-                    >
-                      {Array.from(new Set([...TODAS_CATEGORIAS, ...productos.map(p => p.categoria).filter(Boolean), ...categoriasExtra])).filter(c => {
-                         if (c === 'PedidosYa / Ofertas') return hasCajaAccess;
-                         return Boolean(c);
-                       }).map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                      <option value="__NUEVA__">➕ Crear otra categoría...</option>
-                    </select>
-                  )}
-
-                  {/* Indicador visual por color de área de despacho (Cocina vs Barra) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="prod-categoria">Categoría</Label>
+                  <Link to="/categorias" className="mb-1.5 text-xs font-bold text-violet-600 hover:underline">Administrar</Link>
+                </div>
+                <div className="relative">
                   {(() => {
-                    const catActual = editProd.categoria;
-                    const esBarra = BARRA_CATEGORIAS.includes(catActual);
-                    return esBarra ? (
-                      <div className="mt-2.5 flex items-center justify-between p-2.5 rounded-xl bg-blue-50/90 border border-blue-200 text-blue-900 text-xs shadow-2xs animate-in fade-in duration-150">
-                        <span className="flex items-center gap-2 font-bold">
-                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0 shadow-xs"></span>
-                          <span>Destino de comanda: <strong className="text-blue-950 font-black uppercase">Barra</strong></span>
-                        </span>
-                        <span className="text-[10px] font-black text-blue-750 bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-md uppercase tracking-wider">
-                          Monitor de Barra
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="mt-2.5 flex items-center justify-between p-2.5 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 text-xs shadow-2xs animate-in fade-in duration-150">
-                        <span className="flex items-center gap-2 font-bold">
-                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 shadow-xs"></span>
-                          <span>Destino de comanda: <strong className="text-amber-950 font-black uppercase">Cocina</strong></span>
-                        </span>
-                        <span className="text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md uppercase tracking-wider">
-                          Monitor de Cocina
-                        </span>
-                      </div>
+                    const info = infoCategoria(editProd.categoria);
+                    const IconoDestino = info.barra ? GlassWater : Flame;
+                    return (
+                      <span className={cn('pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center', info.barra ? 'bg-sky-100 text-sky-600' : 'bg-amber-100 text-amber-600')}>
+                        <IconoDestino className="w-4 h-4" />
+                      </span>
                     );
                   })()}
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Precio (S/)</label>
-                  <input type="number" value={editProd.precio} onChange={e => setEditProd({ ...editProd, precio: e.target.value })} placeholder="0.00" step="any" className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 font-mono" />
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm text-slate-600 font-bold">Control de Stock</span>
-                  <select value={editProd.tipoStock} onChange={e => setEditProd({ ...editProd, tipoStock: e.target.value, stock: e.target.value === 'ilimitado' ? '' : (editProd.stock || '') })} className="border border-slate-300 rounded-lg text-sm p-1 bg-white focus:outline-none">
-                    <option value="ilimitado">Ilimitado</option>
-                    <option value="limitado">Limitado</option>
+                  <select
+                    id="prod-categoria"
+                    value={editProd.categoria}
+                    onChange={e => setEditProd({ ...editProd, categoria: e.target.value })}
+                    className="h-12 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-12 pr-10 text-sm font-bold text-slate-900 focus:outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100 cursor-pointer"
+                  >
+                    {!editProd.categoria && <option value="">Elegir categoría...</option>}
+                    {todasLasCategorias.map(cat => (
+                      <option key={cat} value={cat}>{cat}{esBarra(cat) ? '  · Barra' : ''}</option>
+                    ))}
                   </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 </div>
-                {editProd.tipoStock === 'limitado' && (
-                  <div className="mt-2">
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Cantidad Disponible</label>
-                    <input type="number" min="0" value={editProd.stock} onChange={e => setEditProd({ ...editProd, stock: e.target.value })} placeholder="Ej: 50" className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 font-mono" />
-                  </div>
-                )}
+                <p className="mt-1.5 text-xs font-semibold text-slate-400">
+                  Se prepara en {esBarra(editProd.categoria) ? <span className="text-sky-600">Barra</span> : <span className="text-amber-600">Cocina</span>}
+                </p>
               </div>
 
-              {/* SECCIÓN CONFIGURACIÓN DE GUARNICIONES / ENTRADAS / OPCIONES */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="pr-2">
-                    <span className="text-sm text-slate-800 font-black flex items-center gap-1.5">
-                      <Sliders className="w-4 h-4 text-amber-500" />
-                      Acompañamientos y Opciones al Comandar
-                    </span>
-                    <span className="text-[11px] text-slate-500 block">
-                      ¿Este plato le pide al mozo elegir algo al comandar? (Ej: Entrada, Guarnición, Término)
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nuevoEstado = !editProd.tieneOpciones;
-                      setEditProd(prev => ({
-                        ...prev,
-                        tieneOpciones: nuevoEstado,
-                        opcionesConfig: nuevoEstado && (!prev.opcionesConfig || prev.opcionesConfig.length === 0)
-                          ? [{ name: "Elige Acompañamiento", options: "Papas Fritas, Arroz, Ensalada, Sin Acompañamiento" }]
-                          : prev.opcionesConfig
-                      }));
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0 flex items-center gap-1.5 ${
-                      editProd.tieneOpciones
-                        ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
-                        : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                    }`}
-                  >
-                    {editProd.tieneOpciones ? 'Activado' : 'Desactivado (Directo)'}
-                  </button>
-                </div>
-
-                {!editProd.tieneOpciones ? (
-                  <div className="p-3 bg-white/70 rounded-lg border border-dashed border-slate-200 text-center">
-                    <p className="text-xs text-slate-500">
-                      ⚡ <strong>Comanda Directa:</strong> Al tocar este plato en el Salón, se agregará en 1 clic sin ventanas emergentes. Ideal para ceviches, platos individuales, bebidas y postres.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3 pt-2 border-t border-slate-200">
-                    {/* Plantillas Rápidas */}
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1.5">
-                        Cargar Plantilla Rápida (1 Clic):
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => aplicarPlantillaOpciones('menu')}
-                          className="px-2.5 py-1 text-xs bg-white border border-slate-300 hover:border-amber-400 hover:bg-amber-50 rounded-lg text-slate-700 font-medium transition-colors flex items-center gap-1 shadow-2xs"
-                        >
-                          📋 Menú (Entrada + Bebida)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => aplicarPlantillaOpciones('parrilla')}
-                          className="px-2.5 py-1 text-xs bg-white border border-slate-300 hover:border-amber-400 hover:bg-amber-50 rounded-lg text-slate-700 font-medium transition-colors flex items-center gap-1 shadow-2xs"
-                        >
-                          🥩 Parrilla (Guarnición + Término)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => aplicarPlantillaOpciones('marino')}
-                          className="px-2.5 py-1 text-xs bg-white border border-slate-300 hover:border-amber-400 hover:bg-amber-50 rounded-lg text-slate-700 font-medium transition-colors flex items-center gap-1 shadow-2xs"
-                        >
-                          🐟 Marino (Picante + Guarnición)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => aplicarPlantillaOpciones('combo')}
-                          className="px-2.5 py-1 text-xs bg-white border border-slate-300 hover:border-amber-400 hover:bg-amber-50 rounded-lg text-slate-700 font-medium transition-colors flex items-center gap-1 shadow-2xs"
-                        >
-                          🍔 Combo (Guarnición + Bebida + Salsas)
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Lista de Pasos */}
-                    <div className="space-y-2">
-                      {(editProd.opcionesConfig || []).map((paso, idx) => (
-                        <div key={idx} className="p-3 bg-white rounded-xl border border-slate-200 space-y-2 relative shadow-2xs">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex-1">
-                              <label className="block text-[11px] font-bold text-slate-500 mb-0.5">
-                                Paso {idx + 1}: Pregunta al Mozo
-                              </label>
-                              <input
-                                type="text"
-                                value={paso.name}
-                                onChange={e => actualizarPasoOpcion(idx, 'name', e.target.value)}
-                                placeholder="Ej: Elige la Entrada, Guarnición, Término..."
-                                className="w-full border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500"
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => eliminarPasoOpcion(idx)}
-                              className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors mt-3"
-                              title="Eliminar este paso"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-500 mb-0.5">
-                              Opciones de la carta (llegan solas a Cocina o Barra y descuentan stock)
-                            </label>
-                            <div className="flex flex-wrap gap-1.5 mb-1.5">
-                              {(paso.vinculadas || []).map(v => (
-                                <span key={v.productoId} className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg pl-2 pr-1 py-1 text-[11px] font-bold">
-                                  {v.label}
-                                  <span className="text-emerald-600 font-normal">+S/</span>
-                                  <input
-                                    type="number"
-                                    step="any"
-                                    min="0"
-                                    value={v.precioExtra}
-                                    onChange={e => cambiarExtraOpcion(idx, v.productoId, e.target.value)}
-                                    title="Precio extra si el cliente elige esta opción"
-                                    className="w-12 border border-emerald-200 rounded px-1 py-0.5 text-[11px] text-emerald-900 focus:outline-none focus:border-emerald-500"
-                                  />
-                                  <button type="button" onClick={() => quitarOpcionVinculada(idx, v.productoId)} className="text-emerald-500 hover:text-red-600 p-0.5">
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                            <select
-                              value=""
-                              onChange={e => { agregarOpcionVinculada(idx, e.target.value); e.target.value = ''; }}
-                              className="w-full border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-700 bg-white focus:outline-none focus:border-amber-500"
-                            >
-                              <option value="">+ Agregar producto de la carta como opción...</option>
-                              {productosSeleccionables.map(p => (
-                                <option key={p.id} value={p.id}>{p.nombre} — S/ {Number(p.precio || 0).toFixed(2)} ({p.categoria})</option>
-                              ))}
-                            </select>
-                            <label className="block text-[11px] font-bold text-slate-500 mt-2 mb-0.5">
-                              Opciones libres, separadas por coma (solo texto en la comanda)
-                            </label>
-                            <input
-                              type="text"
-                              value={paso.options}
-                              onChange={e => actualizarPasoOpcion(idx, 'options', e.target.value)}
-                              placeholder="Ej: Término Medio, Bien Cocido, Sin Bebida"
-                              className="w-full border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-700 focus:outline-none focus:border-amber-500"
-                            />
-                          </div>
-                        </div>
-                      ))}
-
-                      <button
-                        type="button"
-                        onClick={agregarPasoOpcion}
-                        className="w-full py-2 border border-dashed border-slate-300 hover:border-amber-500 hover:bg-amber-50/50 rounded-xl text-xs font-bold text-slate-600 hover:text-amber-700 transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5" /> Agregar otro paso de opciones
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ACOMPAÑAMIENTOS DEL PLATO ("INCLUYE") */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                <div>
-                  <span className="text-sm text-slate-800 font-black flex items-center gap-1.5">
-                    <Utensils className="w-4 h-4 text-amber-500" />
-                    Este plato incluye
-                  </span>
-                  <span className="text-[11px] text-slate-500 block">
-                    Toca para agregar. Al comandar, el mozo podrá quitar lo incluido o sumar complementos con precio.
-                  </span>
-                </div>
-
-                {complementosActuales.length > 0 && (
-                  <div className="space-y-1.5">
-                    {complementosActuales.map(c => (
-                      <div key={c.nombre} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
-                        <button
-                          type="button"
-                          onClick={() => actualizarComplemento(c.nombre, 'incluido', !c.incluido)}
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors shrink-0 ${
-                            c.incluido ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
-                          }`}
-                          title="Cambiar entre incluido en el precio u opcional con costo"
-                        >
-                          {c.incluido ? 'Incluido' : 'Opcional'}
-                        </button>
-                        <span className="flex-1 text-xs font-bold text-slate-700 truncate">{c.nombre}</span>
-                        {!c.incluido && (
-                          <span className="flex items-center gap-1 text-xs text-slate-500">
-                            +S/
-                            <input
-                              type="number"
-                              step="any"
-                              min="0"
-                              value={c.precio}
-                              onChange={e => actualizarComplemento(c.nombre, 'precio', parseFloat(e.target.value) || 0)}
-                              className="w-14 border border-slate-200 rounded px-1 py-0.5 text-xs text-slate-800 focus:outline-none focus:border-amber-500"
-                            />
-                          </span>
-                        )}
-                        <button type="button" onClick={() => quitarComplemento(c.nombre)} className="text-slate-400 hover:text-red-600 p-1">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {sugerenciasComplementos.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {sugerenciasComplementos.map(n => (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => agregarComplemento(n, true)}
-                        className="px-2.5 py-1 bg-white border border-slate-200 hover:border-amber-400 hover:bg-amber-50 rounded-lg text-[11px] font-bold text-slate-600 hover:text-amber-700 transition-colors"
-                      >
-                        + {n}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={nuevoComplemento}
-                    onChange={e => setNuevoComplemento(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregarComplemento(nuevoComplemento, true); } }}
-                    placeholder="Otro acompañamiento (ej: Tacu Tacu)"
-                    className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-500"
+              <div>
+                <Label htmlFor="prod-stock">Disponibles</Label>
+                <div className="relative">
+                  <Package className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <Input
+                    id="prod-stock"
+                    type="number"
+                    min="0"
+                    inputMode="numeric"
+                    value={editProd.stock}
+                    onChange={e => setEditProd({ ...editProd, stock: e.target.value })}
+                    placeholder="Sin límite"
+                    className="h-12 pl-12 pr-12 text-base font-black font-mono focus:border-sky-500 focus:ring-sky-100 placeholder:font-sans placeholder:font-semibold"
                   />
-                  <button
-                    type="button"
-                    onClick={() => agregarComplemento(nuevoComplemento, true)}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-[11px] font-black uppercase tracking-wider transition-colors"
-                  >
-                    Agregar
-                  </button>
+                  {String(editProd.stock ?? '') !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setEditProd({ ...editProd, stock: '' })}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+                      title="Sin límite"
+                    >
+                      <InfinityIcon className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
+                <p className="mt-1.5 text-xs font-semibold text-slate-400">
+                  {String(editProd.stock ?? '') === '' ? 'Vacío = siempre hay' : 'Al llegar a 0 sale AGOTADO'}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="prod-ingredientes" className="text-xs text-slate-500">
+                Ingredientes <span className="font-medium text-slate-400">(opcional)</span>
+              </Label>
+              <Input
+                id="prod-ingredientes"
+                value={editProd.ingredientes || ''}
+                onChange={e => setEditProd({ ...editProd, ingredientes: e.target.value })}
+                placeholder="Ej: papas fritas, ensalada, cremas"
+                className="h-10 text-sm font-medium"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+
+            {/* ── Combo ── */}
+            <section className="rounded-2xl border-2 border-violet-200 bg-violet-50/50 p-4 sm:p-5 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-violet-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-violet-600/30">
+                    <Boxes className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-900">Combo</h4>
+                    <p className="text-xs text-slate-500">Une varios productos de la carta en uno</p>
+                  </div>
+                </div>
+                {componentesActuales.length > 0 && (
+                  <Badge className="bg-violet-600 text-white">{componentesActuales.reduce((s, c) => s + c.cantidad, 0)}</Badge>
+                )}
               </div>
 
-              {/* COMBO ARMADO CON PRODUCTOS DE LA CARTA */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                <div>
-                  <span className="text-sm text-slate-800 font-black flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-emerald-500" />
-                    Combo: unir productos de la carta
-                  </span>
-                  <span className="text-[11px] text-slate-500 block">
-                    Cada producto que agregues se prepara en su estación y descuenta su propio stock.
-                  </span>
-                </div>
+              <BuscadorProductos
+                productos={productosSeleccionables}
+                onElegir={agregarComponente}
+                placeholder="Buscar producto para el combo..."
+                acento="violet"
+              />
 
-                {componentesActuales.length > 0 && (
-                  <div className="space-y-1.5">
+              {componentesActuales.length === 0 ? (
+                <p className="rounded-xl border-2 border-dashed border-violet-200 py-5 text-center text-sm text-slate-400">
+                  Aún no es combo
+                </p>
+              ) : (
+                <>
+                  <div className="space-y-2">
                     {componentesActuales.map(c => {
                       const prod = productos.find(p => p.id === c.productoId);
                       return (
-                        <div key={c.productoId} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
-                          <input
-                            type="number"
-                            min="1"
-                            value={c.cantidad}
-                            onChange={e => cambiarCantidadComponente(c.productoId, e.target.value)}
-                            className="w-12 border border-slate-200 rounded px-1 py-0.5 text-xs text-center font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
-                          />
-                          <span className="flex-1 text-xs font-bold text-slate-700 truncate">
-                            {prod ? prod.nombre : `Producto #${c.productoId} (eliminado)`}
-                          </span>
-                          <span className="text-xs text-slate-500 tabular-nums">
-                            S/ {((prod?.precio || 0) * c.cantidad).toFixed(2)}
-                          </span>
-                          <button type="button" onClick={() => quitarComponente(c.productoId)} className="text-slate-400 hover:text-red-600 p-1">
-                            <Trash2 className="w-3.5 h-3.5" />
+                        <div key={c.productoId} className="flex items-center gap-2 rounded-xl bg-white border border-violet-100 p-2 pl-3 shadow-sm">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">{prod ? prod.nombre : `Producto #${c.productoId} (eliminado)`}</p>
+                            <p className="text-xs text-slate-400 font-mono">S/ {((prod?.precio || 0) * c.cantidad).toFixed(2)}</p>
+                          </div>
+                          <div className="flex items-center rounded-lg bg-slate-100">
+                            <button type="button" onClick={() => cambiarCantidadComponente(c.productoId, -1)} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-slate-900 cursor-pointer" aria-label="Quitar uno">
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="w-6 text-center text-sm font-black tabular-nums">{c.cantidad}</span>
+                            <button type="button" onClick={() => cambiarCantidadComponente(c.productoId, 1)} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-slate-900 cursor-pointer" aria-label="Agregar uno">
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <button type="button" onClick={() => quitarComponente(c.productoId)} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 cursor-pointer" aria-label="Quitar">
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       );
                     })}
                   </div>
-                )}
 
-                <select
-                  value=""
-                  onChange={e => { agregarComponente(e.target.value); e.target.value = ''; }}
-                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 bg-white focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="">+ Agregar producto al combo...</option>
-                  {productosSeleccionables.map(p => (
-                    <option key={p.id} value={p.id}>{p.nombre} — S/ {Number(p.precio || 0).toFixed(2)} ({p.categoria})</option>
-                  ))}
-                </select>
-
-                {componentesActuales.length > 0 && (() => {
-                  const precioCombo = parseFloat(editProd.precio) || 0;
-                  const ahorro = sumaComponentes - precioCombo;
-                  return (
-                    <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-1.5">
-                      <div className="flex justify-between text-xs text-slate-600">
-                        <span>Suma de los productos:</span>
-                        <span className="font-black text-slate-800 tabular-nums">S/ {sumaComponentes.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-xs text-slate-600">
-                        <span>Precio del combo (arriba):</span>
-                        <span className="font-black text-slate-800 tabular-nums">S/ {precioCombo.toFixed(2)}</span>
-                      </div>
-                      {precioCombo > 0 && (
-                        <div className={`flex justify-between text-xs font-black ${ahorro > 0 ? 'text-emerald-600' : ahorro < 0 ? 'text-red-500' : 'text-slate-500'}`}>
-                          <span>{ahorro > 0 ? 'Ahorro para el cliente:' : ahorro < 0 ? 'Recargo sobre la suma:' : 'Sin descuento:'}</span>
-                          <span className="tabular-nums">S/ {Math.abs(ahorro).toFixed(2)}</span>
+                  {(() => {
+                    const precioCombo = parseFloat(editProd.precio) || 0;
+                    const ahorro = sumaComponentes - precioCombo;
+                    return (
+                      <div className="rounded-xl bg-white border border-violet-100 p-3 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-500">Por separado</span>
+                          <span className="font-mono font-bold text-slate-700">S/ {sumaComponentes.toFixed(2)}</span>
                         </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setEditProd(prev => ({ ...prev, precio: sumaComponentes.toFixed(2) }))}
-                        className="w-full mt-1 py-1.5 bg-slate-100 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-lg text-[11px] font-bold text-slate-600 hover:text-emerald-700 transition-colors"
-                      >
-                        Usar la suma como precio (sin descuento)
-                      </button>
-                    </div>
-                  );
-                })()}
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-500">Precio del combo</span>
+                          <span className="font-mono font-bold text-slate-700">S/ {precioCombo.toFixed(2)}</span>
+                        </div>
+                        {precioCombo > 0 && ahorro !== 0 && (
+                          <div className={cn('flex justify-between text-sm font-black rounded-lg px-2 py-1', ahorro > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600')}>
+                            <span>{ahorro > 0 ? 'El cliente ahorra' : 'Cuesta más que por separado'}</span>
+                            <span className="font-mono">S/ {Math.abs(ahorro).toFixed(2)}</span>
+                          </div>
+                        )}
+                        {precioCombo !== Number(sumaComponentes.toFixed(2)) && (
+                          <Button variant="outline" size="sm" className="w-full" onClick={() => setEditProd(prev => ({ ...prev, precio: sumaComponentes.toFixed(2) }))}>
+                            Usar S/ {sumaComponentes.toFixed(2)} como precio
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+            </section>
+
+            {/* ── Preguntas al tomar el pedido ── */}
+            <section className="rounded-2xl border-2 border-sky-200 bg-sky-50/50 p-4 sm:p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-sky-600/30">
+                  <MessageCircleQuestion className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-black text-slate-900">Preguntas al pedir</h4>
+                  <p className="text-xs text-slate-500">Ej: ¿Guarnición? → Papas, Arroz</p>
+                </div>
               </div>
 
-              <p className="text-xs text-slate-400 flex items-center gap-1">
-                {BARRA_CATEGORIAS.includes(editProd.categoria) ? '🍹 Este producto irá a la pantalla de BARRA' : '🔥 Este producto irá a la pantalla de COCINA'}
-              </p>
-            </div>
-            <div className="bg-slate-50 p-5 border-t border-slate-100 flex justify-end gap-3">
-              <button onClick={() => setModalOpen(false)} className="px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors">Cancelar</button>
-              <button onClick={guardarProducto} disabled={guardando} className="px-5 py-2 text-sm font-black text-slate-900 bg-amber-500 hover:bg-amber-400 rounded-xl shadow-md transition-colors flex items-center gap-2 disabled:opacity-50">
-                {guardando ? <span className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin"></span> : <Save className="w-4 h-4" />}
-                Guardar
-              </button>
-            </div>
+              {(editProd.opcionesConfig || []).map((paso, idx) => (
+                <div key={idx} className="rounded-xl bg-white border border-sky-100 p-3 space-y-3 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-full bg-sky-100 text-sky-700 text-sm font-black flex items-center justify-center shrink-0">{idx + 1}</span>
+                    <Input
+                      value={paso.name}
+                      onChange={e => editarPregunta(idx, { name: e.target.value })}
+                      placeholder="Pregunta, ej: Guarnición"
+                      className="h-10 focus:border-sky-500 focus:ring-sky-100"
+                    />
+                    <button type="button" onClick={() => quitarPregunta(idx)} className="w-10 h-10 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 cursor-pointer" aria-label="Quitar pregunta">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {paso.respuestas.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {paso.respuestas.map((r, rIdx) => (
+                        r.productoId ? (
+                          <span key={`p${r.productoId}`} className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 pl-3 pr-1 py-1 text-xs font-bold text-emerald-800" title="Producto de la carta: descuenta stock">
+                            <Utensils className="w-3 h-3" /> {r.label}
+                            <span className="ml-1 text-emerald-600">+S/</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={r.precioExtra}
+                              onChange={e => editarRespuesta(idx, rIdx, { precioExtra: e.target.value })}
+                              className="w-12 rounded-md border border-emerald-200 bg-white px-1 py-0.5 text-xs text-emerald-900 focus:outline-none focus:border-emerald-500"
+                              title="Cobro extra si eligen esta opción"
+                            />
+                            <button type="button" onClick={() => quitarRespuesta(idx, rIdx)} className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-emerald-100 cursor-pointer" aria-label="Quitar">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </span>
+                        ) : (
+                          <span key={`t${rIdx}`} className="inline-flex items-center gap-1 rounded-full bg-slate-100 pl-3 pr-1 py-1 text-xs font-bold text-slate-700">
+                            {r.label}
+                            <button type="button" onClick={() => quitarRespuesta(idx, rIdx)} className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-slate-200 cursor-pointer" aria-label="Quitar">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </span>
+                        )
+                      ))}
+                    </div>
+                  )}
+
+                  <BuscadorProductos
+                    productos={productosSeleccionables}
+                    onElegir={prod => agregarRespuesta(idx, { label: prod.nombre, productoId: prod.id, precioExtra: 0 })}
+                    onTextoLibre={texto => agregarRespuesta(idx, { label: texto })}
+                    placeholder="Escribe una respuesta y Enter..."
+                    acento="sky"
+                    compacto
+                  />
+                </div>
+              ))}
+
+              <div className="space-y-2">
+                <Button variant="outline" className="w-full border-dashed border-sky-300 text-sky-700 hover:bg-sky-50" onClick={() => agregarPregunta()}>
+                  <Plus className="w-4 h-4" /> Nueva pregunta
+                </Button>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-bold text-slate-400 mr-1">Rápidas:</span>
+                  {Object.entries(PLANTILLAS_PREGUNTAS).map(([key, pl]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => agregarPregunta(pl)}
+                      className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-bold text-sky-700 hover:bg-sky-100 cursor-pointer"
+                    >
+                      + {pl.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
           </div>
         </div>
-      )}
+
+        <DialogFooter className="justify-between">
+          <div className="hidden sm:flex items-baseline gap-2 min-w-0">
+            <span className="text-sm text-slate-500 truncate max-w-64">{editProd.nombre || 'Sin nombre'}</span>
+            {editProd.precio && (
+              <span className="font-mono text-lg font-black text-emerald-700">S/ {parseFloat(editProd.precio || 0).toFixed(2)}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button variant="ghost" size="lg" onClick={() => setModalOpen(false)} className="flex-1 sm:flex-none">
+              Cancelar
+            </Button>
+            <Button variant="success" size="lg" onClick={guardarProducto} disabled={guardando} className="flex-[2] sm:flex-none sm:min-w-44">
+              {guardando
+                ? <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                : <Save className="w-5 h-5" />}
+              Guardar
+            </Button>
+          </div>
+        </DialogFooter>
+      </Dialog>
 
       {/* ── MODAL OFERTA ────────────────────────────────── */}
       {ofertaModalOpen && (
@@ -1281,14 +1089,59 @@ export default function CartaPage({ currentUser }) {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Categorías con Descuento</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {TODAS_CATEGORIAS.map(cat => (
-                    <label key={cat} className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all text-xs font-bold ${editOferta.categorias.includes(cat) ? 'bg-amber-50 border-amber-400 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}>
-                      <input type="checkbox" checked={editOferta.categorias.includes(cat)} onChange={() => toggleCategoriaOferta(cat)} className="accent-amber-500" />
-                      {cat} {BARRA_CATEGORIAS.includes(cat) ? '🍹' : '🔥'}
-                    </label>
-                  ))}
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                    Categorías con Descuento ({editOferta.categorias.length} seleccionada{editOferta.categorias.length === 1 ? '' : 's'})
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditOferta(prev => ({ ...prev, categorias: [...todasLasCategorias] }))}
+                      className="text-[11px] font-bold text-amber-600 hover:text-amber-700 hover:underline cursor-pointer"
+                    >
+                      Seleccionar todas
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditOferta(prev => ({ ...prev, categorias: [] }))}
+                      className="text-[11px] font-bold text-slate-500 hover:text-slate-700 hover:underline cursor-pointer"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto custom-scrollbar p-1">
+                  {todasLasCategorias.map(cat => {
+                    const isSelected = editOferta.categorias.includes(cat);
+                    const isBarra = esBarra(cat);
+                    return (
+                      <label 
+                        key={cat} 
+                        className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border cursor-pointer transition-all text-xs font-bold ${
+                          isSelected 
+                            ? 'bg-amber-50/90 border-amber-400 text-amber-900 shadow-2xs' 
+                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <input 
+                            type="checkbox" 
+                            checked={isSelected} 
+                            onChange={() => toggleCategoriaOferta(cat)} 
+                            className="accent-amber-500 w-4 h-4 rounded cursor-pointer shrink-0" 
+                          />
+                          <span className="truncate">{cat}</span>
+                        </div>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
+                          isBarra ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {isBarra ? '🍹 Barra' : '🔥 Cocina'}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             </div>

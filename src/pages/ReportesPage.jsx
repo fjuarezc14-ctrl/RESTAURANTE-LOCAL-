@@ -178,7 +178,7 @@ export default function ReportesPage() {
   const reimprimirComprobante = (v) => {
     if (!v) return;
     const serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
-    const correlativoStr = String(v.id % 10000).padStart(4, '0');
+    const correlativoStr = String(v.numero || v.id).padStart(4, '0');
     const igvSafe = Number(v.igv || 0).toFixed(2);
     const totalSafe = Number(v.total || 0).toFixed(2);
     const qrData = `${rucEmpresa}|03|${serie}|${correlativoStr}|${igvSafe}|${totalSafe}|${v.fecha || new Date(v.createdAt).toLocaleDateString('es-PE')}|${v.tipoComprobante === 'Factura'?'6':'1'}|${v.numDocumento || '00000000'}`;

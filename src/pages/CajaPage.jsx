@@ -498,6 +498,7 @@ const agruparProductos = (items) => {
 
 export default function CajaPage({ currentUser }) {
   const { empresa: COMPANY_CONFIG } = useCompany();
+  const FACTURACION_ELECTRONICA = COMPANY_CONFIG?.facturacionElectronica ?? true;
   const [mesas, setMesas] = useState([]);
   const [pedidosLlevar, setPedidosLlevar] = useState([]);
   const [stats, setStats] = useState({ atendidas: 0, ingresos: 0 });
@@ -1058,7 +1059,7 @@ export default function CajaPage({ currentUser }) {
     const rucEmpresa = `R.U.C. N° ${COMPANY_CONFIG.ruc}`;
     
     let serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : (v.tipoComprobante === 'Ticket' ? 'T001' : 'B001'));
-    let correlativoStr = String(v.numero || (v.id % 10000)).padStart(4, '0');
+    let correlativoStr = String(v.numero || v.id).padStart(4, '0');
     const igvSafe = Number(v.igv || 0).toFixed(2);
     const totalSafe = Number(v.total || 0).toFixed(2);
     let qrData = `${rucEmpresa}|${v.tipoComprobante === 'Factura' ? '01' : '03'}|${serie}|${correlativoStr}|${igvSafe}|${totalSafe}|${v.fecha || new Date(v.createdAt).toLocaleDateString('es-PE')}|${v.tipoComprobante === 'Factura'?'6':(v.numDocumento?.length === 8 ? '1' : '0')}|${v.numDocumento || '00000000'}`;
@@ -1151,7 +1152,7 @@ export default function CajaPage({ currentUser }) {
     }
     
     let serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
-    let correlativoStr = String(v.id % 10000).padStart(4, '0');
+    let correlativoStr = String(v.numero || v.id).padStart(4, '0');
     
     const detalle = (v.itemsResumen || '').trim();
     const totalSafe = Number(v.total || 0).toFixed(2);
@@ -2043,7 +2044,8 @@ export default function CajaPage({ currentUser }) {
     const hora = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
     
     let serie = response.serie || (tipoComprobante === 'Factura' ? 'F001' : (tipoComprobante === 'Ticket' ? 'T001' : 'B001'));
-    let correlativoStr = String(response.numero || 1).padStart(4, '0');
+    // Los tickets no llevan correlativo SUNAT: se numeran con el ID de la venta (único e incremental)
+    let correlativoStr = String(response.numero || response.ventaId || response.id || '').padStart(4, '0');
     let subtotal = total / 1.105;
     let igv = total - subtotal;
     let totalLetras = numeroALetras(total);

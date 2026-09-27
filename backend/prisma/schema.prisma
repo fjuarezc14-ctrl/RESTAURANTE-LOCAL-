@@ -89,6 +89,17 @@ model Producto {
 }
 
 // ============================================================
+// CATEGORÍAS DE LA CARTA
+// El destino (Cocina / Barra) se guarda en EmpresaConfig.barraCategorias
+// ============================================================
+model Categoria {
+  id       Int      @id @default(autoincrement())
+  nombre   String   @unique
+  color    String   @default("amber") // clave de color para la interfaz: amber, emerald, sky, violet, rose, orange, lime, slate
+  creadoEn DateTime @default(now())
+}
+
+// ============================================================
 // MESAS Y PEDIDOS
 // ============================================================
 model Mesa {
@@ -295,4 +306,4 @@ model MovimientoCaja {
 
   @@index([turnoId])
   @@index([creadoEn])
-}
+}

@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { UtensilsCrossed, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Building2, Share2, Copy, Check as CheckIcon, Wifi } from 'lucide-react';
+import { UtensilsCrossed, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Tags, Building2, Share2, Copy, Check as CheckIcon, Wifi } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import logoUrl from './assets/logo.png';
 import { COMPANY_CONFIG } from './config/company';
@@ -14,6 +14,7 @@ import CajaPage from './pages/CajaPage';
 import ComprasPage from './pages/ComprasPage';
 import ReportesPage from './pages/ReportesPage';
 import CartaPage from './pages/CartaPage';
+import CategoriasPage from './pages/CategoriasPage';
 import UsuariosPage from './pages/UsuariosPage';
 import CreditosPage from './pages/CreditosPage';
 import ConfiguracionPage from './pages/ConfiguracionPage';
@@ -366,6 +367,7 @@ const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
     { path: '/compras', icon: BookOpen, label: 'Compras / Gastos', permission: 'Compras' },
     { path: '/reportes', icon: PieChart, label: 'Reportes (Contador)', permission: 'Reportes' },
     { path: '/carta', icon: BookOpen, label: 'Carta e Inventario', permission: 'Dashboard' },
+    { path: '/categorias', icon: Tags, label: 'Categorías', permission: 'Dashboard' },
   ];
 
   // Filtrar ítems según permisos del usuario activo o si es administrador
@@ -615,6 +617,7 @@ function App() {
         <Route path="/compras" element={<Layout title="Registro de Compras" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Compras" currentUser={currentUser}><ComprasPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
         <Route path="/reportes" element={<Layout title="Panel Contable" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Reportes" currentUser={currentUser}><ReportesPage /></ProtectedRoute></Layout>} />
         <Route path="/carta" element={<Layout title="Carta e Inventario" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><CartaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+        <Route path="/categorias" element={<Layout title="Categorías de la Carta" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><CategoriasPage /></ProtectedRoute></Layout>} />
         <Route path="/usuarios" element={<Layout title="Personal y Accesos" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Usuarios" currentUser={currentUser}><UsuariosPage /></ProtectedRoute></Layout>} />
         <Route path="/configuracion" element={<Layout title="Configuración de Empresa" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><ConfiguracionPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
       </Routes>

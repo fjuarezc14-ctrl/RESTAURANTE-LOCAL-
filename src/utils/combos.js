@@ -83,6 +83,36 @@ export const COMPLEMENTOS_SUGERIDOS = [
   'Puré de Papas', 'Choclo', 'Salsa Criolla', 'Ají', 'Limón',
 ];
 
+export function extractIngredientesTexto(prod) {
+  if (!prod) return '';
+  const raw = prod.complementos;
+  if (!raw) return '';
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map(c => (typeof c === 'object' && c ? c.nombre : String(c)))
+            .filter(Boolean)
+            .join(', ');
+        }
+      } catch {
+        // Fallback a texto plano si no era JSON válido
+      }
+    }
+    return trimmed;
+  }
+  if (Array.isArray(raw)) {
+    return raw
+      .map(c => (typeof c === 'object' && c ? c.nombre : String(c)))
+      .filter(Boolean)
+      .join(', ');
+  }
+  return '';
+}
+
 export function parseComplementos(prod) {
   const parsed = parseJsonSafe(prod?.complementos, []);
   if (!Array.isArray(parsed)) return [];

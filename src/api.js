@@ -133,6 +133,16 @@ export const api = {
   }),
   eliminarProducto: (id) => apiRequest(`/api/productos/${id}`, { method: 'DELETE' }),
 
+  // Categorías de la carta
+  getCategorias: () => apiRequest('/api/categorias'),
+  crearCategoria: (body) => apiRequest('/api/categorias', {
+    method: 'POST', body: JSON.stringify(body)
+  }),
+  editarCategoria: (id, body) => apiRequest(`/api/categorias/${id}`, {
+    method: 'PUT', body: JSON.stringify(body)
+  }),
+  eliminarCategoria: (id, moverA) => apiRequest(`/api/categorias/${id}${moverA ? `?moverA=${encodeURIComponent(moverA)}` : ''}`, { method: 'DELETE' }),
+
   // Usuarios
   getUsuarios: () => apiRequest('/api/usuarios'),
   crearUsuario: (body) => apiRequest('/api/usuarios', {
