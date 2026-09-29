@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ChefHat, CheckCircle, PlusCircle, Receipt, X, Edit3, ShoppingBag, User, AlertTriangle, Clock, Trash, Lock, Tag, Percent, Link2, Bell, Settings, Plus, Utensils, Save, Trash2, Search, Check, ChevronRight, Wifi, WifiOff, LayoutGrid, List, Sparkles, Flame, Minus } from 'lucide-react';
 import { api } from '../api';
 import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
@@ -253,6 +253,18 @@ export default function SalonPage({ currentUser }) {
     }
   }, []);
 
+  // Mesas abiertas por Cajero o Administrador quedan "compartidas": cualquier mozo
+  // puede entrar a atenderlas y recibe sus avisos como si fueran suyas.
+  const nombresRolElevado = useMemo(() => new Set(
+    (usuarios || [])
+      .filter(u => ['Administrador', 'Cajero'].includes(u.rol))
+      .map(u => String(u.nombre || '').trim().toLowerCase())
+  ), [usuarios]);
+  const esMesaCompartida = useCallback(
+    (meseroNombre) => nombresRolElevado.has(String(meseroNombre || '').trim().toLowerCase()),
+    [nombresRolElevado]
+  );
+
   // Mantener meseroGlobal sincronizado con currentUser si este se carga después
   useEffect(() => {
     if (currentUser?.nombre) {
@@ -337,7 +349,7 @@ export default function SalonPage({ currentUser }) {
     const activeMeseroName = currentUser?.nombre || meseroGlobal;
 
     // Si la mesa está ocupada y el mesero asignado no es el mesero global activo, y el usuario es un Mozo, bloquear acceso
-    if (m.pedidoData && m.pedidoData.mesero && m.pedidoData.mesero !== activeMeseroName && currentUser?.rol === 'Mozo') {
+    if (m.pedidoData && m.pedidoData.mesero && m.pedidoData.mesero !== activeMeseroName && currentUser?.rol === 'Mozo' && !esMesaCompartida(m.pedidoData.mesero)) {
       alert(`⚠️ Esta mesa está ocupada y está siendo atendida por el Mozo "${m.pedidoData.mesero}". No puedes ingresar ni realizar modificaciones.`);
       return;
     }
@@ -656,7 +668,7 @@ export default function SalonPage({ currentUser }) {
         const ant = prevMesasRef.current.find(p => p.num === m.num);
         if (!ant || !m.pedidoData?.items) return;
         const mesaMesero = (m.pedidoData?.mesero || '').trim().toLowerCase();
-        const esMiMesa = !!activeMeseroName && mesaMesero === activeMeseroName;
+        const esMiMesa = (!!activeMeseroName && mesaMesero === activeMeseroName) || esMesaCompartida(mesaMesero);
         const antesListos = new Set((ant.pedidoData?.items || []).filter(i => i.historial).map(i => i.itemId));
 
         m.pedidoData.items.forEach(i => {
@@ -700,7 +712,7 @@ export default function SalonPage({ currentUser }) {
         const ant = prevMesasRef.current.find(p => p.num === m.num);
         if (ant && ant.estado === 'Cocina' && m.estado === 'Servido') {
           const mesaMesero = (m.pedidoData?.mesero || '').trim().toLowerCase();
-          const esMiMesa = !!activeMeseroName && mesaMesero === activeMeseroName;
+          const esMiMesa = (!!activeMeseroName && mesaMesero === activeMeseroName) || esMesaCompartida(mesaMesero);
           listasNuevas.push({
             num: m.num,
             esMiMesa,
@@ -725,7 +737,7 @@ export default function SalonPage({ currentUser }) {
       }
     }
     prevMesasRef.current = mesas;
-  }, [mesas, meseroGlobal, currentUser]);
+  }, [mesas, meseroGlobal, currentUser, esMesaCompartida]);
 
   // Countdown timer para cancelación
   useEffect(() => {
@@ -1050,7 +1062,7 @@ export default function SalonPage({ currentUser }) {
     if (!m.pedidoData || !m.pedidoData.items) return [];
     
     const mesaMesero = (m.pedidoData.mesero || '').trim().toLowerCase();
-    const esMiMesa = !activeMeseroName || mesaMesero === activeMeseroName;
+    const esMiMesa = !activeMeseroName || mesaMesero === activeMeseroName || esMesaCompartida(mesaMesero);
 
     // Listo para llevar a la mesa: lo despachado por cocina y también por barra
     const itemsListos = m.pedidoData.items.filter(i => i.historial && !i.entregado);
@@ -1120,7 +1132,7 @@ export default function SalonPage({ currentUser }) {
 
       <div className="grid-mesas-dinamico gap-3 md:gap-5 pb-20 md:pb-0">
         {mesas.map((m, idx) => {
-          const esMiMesa = m.pedidoData?.mesero === activeMeseroName || isElevatedRole;
+          const esMiMesa = m.pedidoData?.mesero === activeMeseroName || isElevatedRole || esMesaCompartida(m.pedidoData?.mesero);
           const tieneListos = esMiMesa && (m.pedidoData?.items?.some(i => 
             i.historial && 
             !i.entregado

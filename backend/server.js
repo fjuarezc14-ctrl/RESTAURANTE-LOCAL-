@@ -3726,6 +3726,19 @@ app.post('/api/ventas', async (req, res) => {
       });
     }
 
+    // 1.0b Tampoco se cobra si hay platos listos que el mozo aún no llevó a la mesa
+    const porServir = await prisma.itemPedido.findMany({
+      where: { pedidoId: { in: idsAPagar }, historial: true, entregado: false, pedido: { tipoEntrega: 'salon' } },
+      select: { nombre: true, cantidad: true },
+    });
+    if (porServir.length > 0) {
+      const detalle = porServir.map(i => `${i.cantidad}x ${i.nombre}`).join(', ');
+      return res.status(409).json({
+        error: `La mesa tiene platos que el mozo aún no ha servido: ${detalle}. Cóbrala cuando el mozo los marque como servidos.`,
+        porServir: true,
+      });
+    }
+
     const venta = await prisma.$transaction(async (tx) => {
       // 1.1 Doble chequeo atómico dentro de la transacción (Race Condition Guard)
       const ventaExistenteTx = await tx.venta.findFirst({

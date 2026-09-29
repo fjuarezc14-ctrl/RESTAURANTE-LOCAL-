@@ -627,7 +627,10 @@ export default function CajaPage({ currentUser }) {
   // Modal PedidosYa y Para Llevar
   const [deliveryModal, setDeliveryModal] = useState(false);
   const [codigoPY, setCodigoPY] = useState('');
+  // cajeroNombre = responsable del turno (apertura/cierre). Las ventas, retiros y
+  // cancelaciones se registran con quien tiene la sesión iniciada (usuarioOperador).
   const [cajeroNombre, setCajeroNombre] = useState(currentUser?.nombre || 'María');
+  const usuarioOperador = currentUser?.nombre || cajeroNombre || 'Cajero';
   const [usuariosSistema, setUsuariosSistema] = useState([]);
   const [modoOtroCajero, setModoOtroCajero] = useState(false);
 
@@ -819,7 +822,7 @@ export default function CajaPage({ currentUser }) {
         monto,
         motivo: motivoSalidaCaja.trim(),
         tipo: 'RETIRO',
-        cajeroNombre: cajeroNombre || currentUser?.nombre || 'Cajero'
+        cajeroNombre: usuarioOperador
       });
       if (res.error) {
         setErrorSalidaCaja(res.error);
@@ -1281,7 +1284,7 @@ export default function CajaPage({ currentUser }) {
         clienteDireccion: clienteDireccion || '',
         cortesiaItemIds: cortesiaItemIds,
         motivoCortesia: motivoCortesia.trim() || null,
-        cajeroNombre: cajeroNombre || currentUser?.nombre || 'Cajero',
+        cajeroNombre: usuarioOperador,
         codigoPago: codigoPago.trim() || null,
       }
     });
@@ -1971,7 +1974,7 @@ export default function CajaPage({ currentUser }) {
         return;
       }
       const res = await api.cancelarPedido(pedidoACancelarLlevar.pedidoId, {
-        canceladoPor: cajeroNombre,
+        canceladoPor: usuarioOperador,
         motivo: 'Cancelado por cajero (error en pedido)',
         force: true,
       });
@@ -2200,7 +2203,7 @@ export default function CajaPage({ currentUser }) {
 
       const payload = {
         codigoPedidosYa: codigoFormateado,
-        cajero: cajeroNombre,
+        cajero: usuarioOperador,
         items: itemsFinales,
         total: grandTotal,
         tipoDelivery,
@@ -2310,8 +2313,16 @@ export default function CajaPage({ currentUser }) {
 
   // ── Vista principal de caja: helpers de presentación ──
   // Platos aún sin servir de una mesa (cocina y barra los muestran mientras no estén en historial)
-  const platosPorServir = (m) => (m.pedidoData?.items || []).filter(i => i && !i.historial).reduce((s, i) => s + (i.cant || 0), 0);
+  const platosEnPreparacion = (m) => (m.pedidoData?.items || []).filter(i => i && !i.historial).reduce((s, i) => s + (i.cant || 0), 0);
+  // Listos en cocina/barra pero que el mozo aún no marcó como servidos en la mesa
+  const itemsSinServir = (m) => (m.pedidoData?.items || []).filter(i => i && i.historial && !i.entregado);
+  const platosSinServir = (m) => itemsSinServir(m).reduce((s, i) => s + (i.cant || 0), 0);
   const mesaEnPreparacion = (m) => m.estado === 'Cocina';
+  // Solo se cobra una mesa con todo preparado y servido por el mozo
+  const mesaCobrable = (m) => !mesaEnPreparacion(m) && platosSinServir(m) === 0;
+  const textoBloqueoMesa = (m) => mesaEnPreparacion(m)
+    ? (platosEnPreparacion(m) > 0 ? `${platosEnPreparacion(m)} en preparación` : 'En cocina')
+    : `${platosSinServir(m)} por servir`;
 
   const abrirCobroMesa = (m) => {
     if (!cajaEstado.abierto) {
@@ -2320,8 +2331,14 @@ export default function CajaPage({ currentUser }) {
     }
     // No se cobra una mesa con platos en preparación: se perderían de cocina y barra
     if (mesaEnPreparacion(m)) {
-      const n = platosPorServir(m);
+      const n = platosEnPreparacion(m);
       addToast(`⏳ La Mesa ${m.num} aún tiene ${n > 0 ? `${n} plato(s)` : 'pedidos'} en preparación. Podrás cobrarla cuando cocina y barra los marquen como listos.`, 'warning');
+      return;
+    }
+    // Tampoco si hay platos listos que el mozo todavía no llevó a la mesa
+    if (platosSinServir(m) > 0) {
+      const detalle = itemsSinServir(m).map(i => `${i.cant}× ${i.nombre}`).join(', ');
+      addToast(`🍽️ La Mesa ${m.num} tiene platos sin servir: ${detalle}. Podrás cobrarla cuando el mozo los marque como servidos.`, 'warning');
       return;
     }
     setMesaSeleccionada(m);
@@ -2764,7 +2781,7 @@ export default function CajaPage({ currentUser }) {
                   {mesasPendientes.map(m => {
                     const items = (m.pedidoData?.items || []).filter(Boolean);
                     const unidades = items.reduce((s, i) => s + (i.cant || 0), 0);
-                    const listo = m.estado === 'Servido';
+                    const listo = mesaCobrable(m);
                     return (
                       <div
                         key={m.num}
@@ -2790,7 +2807,7 @@ export default function CajaPage({ currentUser }) {
                         </p>
                         <div className="flex items-center justify-between gap-2 mt-auto">
                           <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                            {estadoChip(listo, 'Listo p/ cobrar', 'En preparación')}
+                            {estadoChip(listo, 'Listo p/ cobrar', mesaEnPreparacion(m) ? 'En preparación' : 'Por servir')}
                             {m.pedidoData?.estadoEnsalada === 'Pendiente' && <span className="text-[11px] text-emerald-700 bg-emerald-50 rounded-md px-1.5 py-0.5">🥗 Pendiente</span>}
                             {m.pedidoData?.estadoEnsalada === 'Listo' && <span className="text-[11px] text-blue-700 bg-blue-50 rounded-md px-1.5 py-0.5">🥗 Lista</span>}
                           </div>
@@ -2805,9 +2822,9 @@ export default function CajaPage({ currentUser }) {
                           ) : (
                             <span
                               className="h-8 px-3 rounded-lg bg-slate-100 text-slate-400 text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-not-allowed"
-                              title="Se podrá cobrar cuando todos los platos estén servidos"
+                              title="Se podrá cobrar cuando el mozo marque todos los platos como servidos"
                             >
-                              <Clock className="w-3.5 h-3.5" /> {platosPorServir(m) > 0 ? `${platosPorServir(m)} por servir` : 'En cocina'}
+                              <Clock className="w-3.5 h-3.5" /> {textoBloqueoMesa(m)}
                             </span>
                           )}
                         </div>
@@ -2913,7 +2930,6 @@ export default function CajaPage({ currentUser }) {
                     <option value="Tarjeta">Tarjeta</option>
                     <option value="Yape">Yape / Plin</option>
                     <option value="PedidosYa">PedidosYa</option>
-                    <option value="Consumo">Consumo personal</option>
                     <option value="Cortesía">Cortesías</option>
                     <option value="Salidas">💸 Salidas de caja</option>
                   </select>
@@ -3044,7 +3060,7 @@ export default function CajaPage({ currentUser }) {
               <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{m.pedidoData?.hora}</span>
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {estadoChip(m.estado === 'Servido', 'Listo p/ cobrar', 'En preparación')}
+              {estadoChip(mesaCobrable(m), 'Listo p/ cobrar', mesaEnPreparacion(m) ? 'En preparación' : 'Por servir')}
               {m.pedidoData?.estadoEnsalada && <span className="text-[11px] text-emerald-700 bg-emerald-50 rounded-md px-1.5 py-0.5">🥗 Ensalada {m.pedidoData.estadoEnsalada.toLowerCase()}</span>}
             </div>
           </>,
@@ -3066,16 +3082,20 @@ export default function CajaPage({ currentUser }) {
               <p className="text-xs text-slate-500">Total</p>
               <p className="text-xl font-semibold font-mono tabular-nums text-slate-900">{soles(m.pedidoData?.total)}</p>
             </div>
-            {mesaEnPreparacion(m) ? (
+            {!mesaCobrable(m) ? (
               <div className="text-right">
                 <button
                   type="button"
                   disabled
                   className="h-11 px-6 rounded-xl bg-slate-100 text-slate-400 text-sm font-semibold cursor-not-allowed inline-flex items-center gap-2"
                 >
-                  <Clock className="w-4 h-4" /> En preparación
+                  <Clock className="w-4 h-4" /> {mesaEnPreparacion(m) ? 'En preparación' : 'Por servir'}
                 </button>
-                <p className="mt-1 text-[11px] text-slate-400">{platosPorServir(m) > 0 ? `${platosPorServir(m)} plato(s) por servir` : 'Esperando a cocina y barra'}</p>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  {mesaEnPreparacion(m)
+                    ? (platosEnPreparacion(m) > 0 ? `${platosEnPreparacion(m)} plato(s) en preparación` : 'Esperando a cocina y barra')
+                    : `El mozo debe servir ${platosSinServir(m)} plato(s)`}
+                </p>
               </div>
             ) : (
               <button
@@ -4001,7 +4021,7 @@ export default function CajaPage({ currentUser }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="text-lg font-semibold text-slate-900 leading-tight">{editingPedidoId ? 'Modificar pedido' : 'Nuevo pedido'}</h2>
-                    <p className="text-sm text-slate-500 truncate">Para llevar, delivery o PedidosYa · Cajero: {cajeroNombre}</p>
+                    <p className="text-sm text-slate-500 truncate">Para llevar, delivery o PedidosYa · Cajero: {usuarioOperador}</p>
                   </div>
                   <button type="button" onClick={cerrarDelivery} className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
                     <X className="w-5 h-5" />
