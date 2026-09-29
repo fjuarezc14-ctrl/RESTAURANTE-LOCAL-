@@ -176,6 +176,7 @@ model Venta {
   montoYape       Float    @default(0)
   montoCredito    Float    @default(0) // Monto cargado a crédito
   clienteCreditoId Int?    // Cliente al que se le cargó el crédito
+  codigoPago      String?  // Nº de operación Yape/Plin o voucher de tarjeta
   estadoNubefact  String   @default("PENDIENTE") // Obsoleto (usar estadoSunat en su lugar)
   estadoSunat     String   @default("PENDIENTE")
   serie           String?  // "F001" o "B001"

@@ -188,7 +188,10 @@ export const api = {
   registrarMovimientoCaja: (body) => apiRequest('/api/caja/movimientos', {
     method: 'POST', body: JSON.stringify(body)
   }),
-  getMovimientosCaja: () => apiRequest('/api/caja/movimientos'),
+  getMovimientosCaja: (desde, hasta) => {
+    const qs = desde && hasta ? `?${new URLSearchParams({ desde, hasta })}` : '';
+    return apiRequest(`/api/caja/movimientos${qs}`);
+  },
   cambiarMetodoPago: (ventaId, metodoPago, pin, montos = {}) => apiRequest(`/api/ventas/${ventaId}/metodo-pago`, {
     method: 'PATCH', body: JSON.stringify({ metodoPago, pin, ...montos })
   }),

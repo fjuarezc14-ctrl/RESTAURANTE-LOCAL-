@@ -6,6 +6,7 @@ import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComple
 
 import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
+import { matchProductSemantic, relevanciaBusqueda, ordenarCategorias } from '../utils/busquedaProductos';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
 
 // Desactivado por defecto (se emite en portal SUNAT SOL o ticket de control interno)
@@ -387,41 +388,9 @@ const getComboConfig = (nombre) => {
   return key ? { config: PRODUCT_OPTIONS_CONFIG[key], key } : null;
 };
 
-const SINONIMOS = {
-  gaseosa: ['cola', 'inca', 'coca', 'refresco', 'sprite', 'fanta', 'gaseosa'],
-  bebida: ['chicha', 'limonada', 'gaseosa', 'cerveza', 'pisco', 'trago', 'coctel', 'jugo', 'agua'],
-  chela: ['cerveza', 'cristal', 'pilsen', 'cusquena'],
-  papas: ['papa', 'patata', 'fritas'],
-  carne: ['lomo', 'bife', 'parrilla', 'anticucho', 'res', 'corte'],
-  pollo: ['brasa', 'broaster', 'alitas', 'pechuga'],
-  piqueo: ['entrada', 'porcion', 'tequenos', 'salchipapa'],
-  "1/8": ['octavo', 'octavos', '1/8', 'un octavo'],
-  "1/4": ['cuarto', 'cuartos', '1/4', 'un cuarto'],
-  "1/2": ['medio', 'medios', '1/2', 'un medio', 'mitad'],
-  entero: ['entero', 'completo', 'pollo entero', '1', 'uno']
-};
-
 const BARRA_CATEGORIAS = (COMPANY_CONFIG.barraCategorias && Array.isArray(COMPANY_CONFIG.barraCategorias))
   ? COMPANY_CONFIG.barraCategorias
   : DEFAULT_BARRA_CATEGORIAS;
-
-const normalizePhonetic = (text) => {
-  if (!text) return '';
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // eliminar acentos
-    .replace(/[^a-z0-9]/g, " ")      // remover caracteres especiales
-    .replace(/ch/g, "x")            // ch -> x
-    .replace(/ll/g, "y")            // ll -> y
-    .replace(/z/g, "s")             // z -> s
-    .replace(/c([ei])/g, "s$1")      // ce, ci -> se, si
-    .replace(/h/g, "")              // h muda
-    .replace(/b/g, "v")              // b -> v equivalencia
-    .replace(/k/g, "c")              // k -> c
-    .replace(/q/g, "c")              // q -> c
-    .trim();
-};
 
 const parseDeliveryInfo = (code) => {
   if (!code || typeof code !== 'string' || !code.startsWith('DELIVERY -')) return null;
@@ -439,34 +408,6 @@ const parseDeliveryInfo = (code) => {
     conCuanto: pagaPart,
     vuelto: vueltoPart,
   };
-};
-
-const matchProductSemantic = (prod, query) => {
-  if (!query) return true;
-  const cleanQuery = query.toLowerCase().trim();
-  const queryTokens = cleanQuery.split(/\s+/);
-  
-  const cleanProdName = (prod.nombre || '').toLowerCase();
-  const cleanProdCat = (prod.categoria || '').toLowerCase();
-  
-  const phoneticName = normalizePhonetic(prod.nombre);
-  const phoneticCat = normalizePhonetic(prod.categoria);
-  
-  return queryTokens.every(qToken => {
-    if (cleanProdName.includes(qToken) || cleanProdCat.includes(qToken)) return true;
-    const phoneticToken = normalizePhonetic(qToken);
-    if (phoneticName.includes(phoneticToken) || phoneticCat.includes(phoneticToken)) return true;
-    for (const [key, syns] of Object.entries(SINONIMOS)) {
-      const tokenMatchesSyn = (key === qToken) || syns.some(syn => syn === qToken || normalizePhonetic(syn) === phoneticToken);
-      if (tokenMatchesSyn) {
-        const prodHasKeyOrSyn = cleanProdName.includes(key) || syns.some(syn => cleanProdName.includes(syn));
-        if (prodHasKeyOrSyn) {
-          return true;
-        }
-      }
-    }
-    return false;
-  });
 };
 
 const agruparProductos = (items) => {
@@ -507,6 +448,9 @@ export default function CajaPage({ currentUser }) {
   const [mesaSeleccionada, setMesaSeleccionada] = useState(null);
   const [tipoComprobante, setTipoComprobante] = useState('Ticket');
   const [metodoPago, setMetodoPago] = useState('Efectivo');
+  // Nº de operación de Yape/Plin o voucher de tarjeta
+  const [codigoPago, setCodigoPago] = useState('');
+  const [deliveryCodigoPago, setDeliveryCodigoPago] = useState('');
   const [mixtoEfectivo, setMixtoEfectivo] = useState('');
   const [mixtoTarjeta, setMixtoTarjeta] = useState('');
   const [mixtoYape, setMixtoYape] = useState('');
@@ -714,6 +658,8 @@ export default function CajaPage({ currentUser }) {
 
   const [deliverySearchQuery, setDeliverySearchQuery] = useState('');
   const [deliveryCategoriaFiltro, setDeliveryCategoriaFiltro] = useState('🔥 Más Pedidos');
+  const [deliveryCategoriasModalOpen, setDeliveryCategoriasModalOpen] = useState(false);
+  const deliverySearchInputRef = useRef(null);
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selections, setSelections] = useState({});
@@ -733,6 +679,7 @@ export default function CajaPage({ currentUser }) {
       setToasts(prev => prev.filter(t => t.id !== toastId));
     }, 5000);
   };
+  const avisarPedidosYaPrueba = () => addToast('🔒 PedidosYa está en versión de prueba. Contacta con VALETEC para activarlo.', 'warning');
   const prevPedidosLlevarRef = useRef([]);
 
 
@@ -1334,7 +1281,8 @@ export default function CajaPage({ currentUser }) {
         clienteDireccion: clienteDireccion || '',
         cortesiaItemIds: cortesiaItemIds,
         motivoCortesia: motivoCortesia.trim() || null,
-        cajeroNombre: cajeroNombre || currentUser?.nombre || 'Cajero'
+        cajeroNombre: cajeroNombre || currentUser?.nombre || 'Cajero',
+        codigoPago: codigoPago.trim() || null,
       }
     });
 
@@ -1653,9 +1601,10 @@ export default function CajaPage({ currentUser }) {
     setDeliveryConCuanto('');
     setDeliveryTipoComprobante('Ticket');
     setDeliveryMetodoPago('Efectivo');
+    setDeliveryCodigoPago('');
     setDeliveryClienteNombre('');
     setDeliveryNumDocumento('');
-    setTipoDelivery('PedidosYa');
+    setTipoDelivery('ParaLlevar');
     setPinAdminDelivery('');
     setCortesiaDeliveryIndices([]);
     setDeliveryMotivoCortesia('');
@@ -1681,6 +1630,7 @@ export default function CajaPage({ currentUser }) {
       calculatedTipo = 'ParaLlevar';
     }
     setTipoDelivery(calculatedTipo);
+    setDeliveryCodigoPago('');
 
     // Poblar campos según tipo
     if (calculatedTipo === 'DeliveryPropio') {
@@ -2093,7 +2043,9 @@ export default function CajaPage({ currentUser }) {
 
   const enviarDeliveryACocina = async () => {
     if (itemsDelivery.length === 0) { alert('Debes agregar al menos un producto.'); return; }
-    
+    // Pedidos nuevos por PedidosYa deshabilitados (versión de prueba)
+    if (tipoDelivery === 'PedidosYa' && !editingPedidoId) { avisarPedidosYaPrueba(); return; }
+
     // Validar datos según el canal seleccionado
     if (tipoDelivery === 'PedidosYa') {
       if (!codigoPY.trim()) {
@@ -2268,6 +2220,7 @@ export default function CajaPage({ currentUser }) {
         descuentoMonto: descEsPct ? 0 : descuentoMonto,
         descuentoDescripcion: descuentoFinal > 0 ? `Descuento manual ${descuentoEtiqueta}` : null,
         motivoCortesia: deliveryMotivoCortesia.trim() || null,
+        codigoPago: deliveryCodigoPago.trim() || null,
       };
 
       const result = editingPedidoId 
@@ -2374,6 +2327,7 @@ export default function CajaPage({ currentUser }) {
     setMesaSeleccionada(m);
     setTipoComprobante('Boleta');
     setMetodoPago('Efectivo');
+    setCodigoPago('');
     setPagaConEfectivoMesa('');
     setNumDocumento('');
     setClienteNombre('');
@@ -2493,6 +2447,40 @@ export default function CajaPage({ currentUser }) {
     </div>
   );
 
+  // Campo del Nº de operación (Yape/Plin) o voucher (tarjeta), para verificar el pago después
+  const campoCodigoPago = (valor, setValor, medio) => (
+    <div className="animate-fade-in">
+      <label className="block text-xs font-medium text-slate-500 mb-1.5">
+        {medio === 'Tarjeta' ? 'Nº de voucher / operación POS' : medio === 'Yape' ? 'Código de operación Yape / Plin' : 'Código de operación (Yape / tarjeta)'}
+      </label>
+      <input
+        type="text"
+        inputMode="numeric"
+        maxLength={60}
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        placeholder="Ej. 01234567"
+        className="w-full h-11 bg-white border border-slate-200 rounded-xl px-3 text-sm font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5 transition"
+      />
+    </div>
+  );
+
+  // ── Categorías del modal de nuevo pedido: unas pocas en la barra + "Ver todas" ──
+  const CATEGORIAS_VISIBLES = 5;
+  const deliveryCategoriasOrdenadas = ordenarCategorias(
+    ['🔥 Más Pedidos', 'Todos', ...new Set(productosMenu.filter(p => p.activo && p.categoria !== 'PedidosYa / Ofertas').map(p => p.categoria))],
+    ORDEN_PRIORIDADES_CATEGORIAS
+  );
+  const deliveryCategoriasBarra = deliveryCategoriasOrdenadas.slice(0, CATEGORIAS_VISIBLES);
+  if (!deliveryCategoriasBarra.includes(deliveryCategoriaFiltro) && deliveryCategoriasOrdenadas.includes(deliveryCategoriaFiltro)) {
+    deliveryCategoriasBarra.push(deliveryCategoriaFiltro);
+  }
+  const contarProductosCategoriaDelivery = (cat) => {
+    const activos = productosMenu.filter(p => p.activo && p.categoria !== 'PedidosYa / Ofertas');
+    if (cat === '🔥 Más Pedidos') return Math.min(8, activos.length);
+    return cat === 'Todos' ? activos.length : activos.filter(p => p.categoria === cat).length;
+  };
+
   // ── Resumen del turno ──
   const obtenerMontosVentaFrontend = (v) => {
     if (!v || v.anulado || v.estadoPedido === 'Cancelado') return { efec: 0, tarj: 0, yape: 0 };
@@ -2542,9 +2530,6 @@ export default function CajaPage({ currentUser }) {
     activeYape += a.montoYape || 0;
   });
   const activeIngresosCaja = activeEfectivo + activeTarjeta + activeYape;
-  const activeIngresosPedidosYa = ventasTurno
-    .filter(v => v.metodoPago === 'PedidosYa' && !v.anulado && v.estadoPedido !== 'Cancelado')
-    .reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
   const activeCortesias = ventasTurno
     .filter(v => v.metodoPago === 'Cortesía' && !v.anulado && v.estadoPedido !== 'Cancelado')
     .reduce((sum, v) => sum + (parseFloat(v.descuentoAplicado || v.total) || (v.items?.reduce((s, i) => s + (i.cant * i.precio), 0) || 0)), 0);
@@ -2574,7 +2559,8 @@ export default function CajaPage({ currentUser }) {
 
   // ── Lista de ventas (filtro + búsqueda) ──
   const busquedaVentasNorm = busquedaVentas.trim().toLowerCase();
-  const ventasLista = ventasTurno.filter(v => {
+  const soloSalidas = filtroMetodoPago === 'Salidas';
+  const ventasFiltradas = soloSalidas ? [] : ventasTurno.filter(v => {
     if (filtroMetodoPago !== 'Todos') {
       let method = v.metodoPago;
       if (method === 'PedidosYa' && (v.codigoPedidosYa?.startsWith('DELIVERY -') || v.codigoPedidosYa?.startsWith('LLEVAR -'))) {
@@ -2583,10 +2569,27 @@ export default function CajaPage({ currentUser }) {
       if (method !== filtroMetodoPago) return false;
     }
     if (!busquedaVentasNorm) return true;
-    return [`vt-${v.id}`, String(v.id), clienteDeVenta(v), origenDeVenta(v), v.itemsResumen, v.serie && `${v.serie}-${v.numero}`]
+    return [`vt-${v.id}`, String(v.id), clienteDeVenta(v), origenDeVenta(v), v.itemsResumen, v.serie && `${v.serie}-${v.numero}`, v.codigoPago]
       .some(s => s && String(s).toLowerCase().includes(busquedaVentasNorm));
   });
+
+  // Salidas (y entradas) de efectivo del turno abierto, mezcladas con las ventas por hora
+  const movimientosTurno = (cajaEstado?.resumenEnVivo?.movimientos || []).filter(m =>
+    !(ultimoCierre && !mostrarTodoElDia) || new Date(m.creadoEn) >= new Date(ultimoCierre)
+  );
+  const movimientosFiltrados = (filtroMetodoPago === 'Todos' || soloSalidas)
+    ? movimientosTurno.filter(m => {
+        if (!busquedaVentasNorm) return true;
+        return [m.motivo, m.cajeroNombre, m.tipo === 'INGRESO' ? 'ingreso de caja' : 'salida de caja']
+          .some(s => s && String(s).toLowerCase().includes(busquedaVentasNorm));
+      })
+    : [];
+  const ventasLista = [
+    ...ventasFiltradas.map(v => ({ tipoFila: 'venta', fecha: new Date(v.createdAt).getTime() || 0, venta: v })),
+    ...movimientosFiltrados.map(m => ({ tipoFila: 'movimiento', fecha: new Date(m.creadoEn).getTime() || 0, mov: m })),
+  ].sort((a, b) => b.fecha - a.fecha);
   const ventasVisibles = ventasLista.slice(0, ventasLimite);
+  const horaMovimiento = (fecha) => new Date(fecha).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   const ventaDetalle = ventaDetalleId != null ? ventas.find(v => v.id === ventaDetalleId) : null;
   const mesaDetalle = mesaDetalleNum != null ? mesasPendientes.find(m => m.num === mesaDetalleNum) : null;
@@ -2700,7 +2703,7 @@ export default function CajaPage({ currentUser }) {
         )}
 
         {/* RESUMEN DEL TURNO */}
-        <div className={`grid grid-cols-2 lg:grid-cols-6 gap-3 ${ingresosDesglose ? 'items-start' : ''}`}>
+        <div className={`grid grid-cols-2 lg:grid-cols-5 gap-3 ${ingresosDesglose ? 'items-start' : ''}`}>
           <div className="col-span-2 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white p-4 sm:p-5 shadow-sm shadow-emerald-600/20">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-medium text-emerald-50/90">Ingresos en caja</p>
@@ -2732,7 +2735,6 @@ export default function CajaPage({ currentUser }) {
           {[
             { label: 'Ventas', valor: ventasTurno.length, hint: `${mesasPendientes.length + pedidosLlevar.length} por cobrar/entregar`, Icon: Receipt, color: 'bg-sky-50 text-sky-600', borde: 'border-t-sky-500' },
             { label: 'Créditos', valor: soles(totalCreditosTurno), hint: `Clientes ${soles(activeConsumoClientes)} · Planilla ${soles(activeConsumoPlanilla)}`, Icon: Wallet, color: 'bg-teal-50 text-teal-600', borde: 'border-t-teal-500' },
-            { label: 'PedidosYa', valor: soles(activeIngresosPedidosYa), hint: 'Cobro semanal · fuera del cuadre', Icon: Truck, color: 'bg-rose-50 text-rose-600', borde: 'border-t-rose-500' },
             { label: 'Cortesías', valor: soles(activeCortesias), hint: 'Valor referencial', Icon: Gift, color: 'bg-orange-50 text-orange-600', borde: 'border-t-orange-500' },
           ].map(({ label, valor, hint, Icon, color, borde }) => (
             <div key={label} className={`rounded-2xl border border-slate-200/70 border-t-4 ${borde} bg-white p-4 min-w-0`}>
@@ -2875,7 +2877,7 @@ export default function CajaPage({ currentUser }) {
           <section className="xl:col-span-2 bg-white rounded-2xl border border-slate-200/70 min-w-0">
             <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-slate-100">
               <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 grid place-items-center"><Receipt className="w-4 h-4" /></span> Últimas ventas
+                <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 grid place-items-center"><Receipt className="w-4 h-4" /></span> Ventas y Salidas de Turno
                 <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 rounded-full px-2.5 py-0.5">{ventasLista.length}</span>
               </h2>
               <button
@@ -2913,6 +2915,7 @@ export default function CajaPage({ currentUser }) {
                     <option value="PedidosYa">PedidosYa</option>
                     <option value="Consumo">Consumo personal</option>
                     <option value="Cortesía">Cortesías</option>
+                    <option value="Salidas">💸 Salidas de caja</option>
                   </select>
                   {ultimoCierre && (
                     <div className="inline-flex h-9 p-0.5 rounded-lg bg-slate-100/80 text-xs font-medium">
@@ -2933,7 +2936,34 @@ export default function CajaPage({ currentUser }) {
 
                 {ventasVisibles.length > 0 ? (
                   <ul className="divide-y divide-slate-100">
-                    {ventasVisibles.map(v => {
+                    {ventasVisibles.map(fila => {
+                      if (fila.tipoFila === 'movimiento') {
+                        const m = fila.mov;
+                        const esIngreso = m.tipo === 'INGRESO';
+                        return (
+                          <li key={`mov-${m.id}`} className="flex items-center gap-3 px-4 sm:px-5 py-3">
+                            <div className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                              <ArrowUpRight className={`w-4 h-4 ${esIngreso ? 'rotate-180' : ''}`} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate text-slate-900">
+                                {esIngreso ? 'Ingreso de Caja' : 'Salida de Caja'} <span className="text-slate-300">·</span> {m.motivo}
+                              </p>
+                              <p className="text-xs text-slate-500 truncate">
+                                {horaMovimiento(m.creadoEn)}
+                                {m.cajeroNombre && <> · <span className="text-slate-600">{m.cajeroNombre}</span></>}
+                              </p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className={`font-mono text-sm font-semibold tabular-nums ${esIngreso ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {esIngreso ? '+ ' : '- '}{soles(m.monto)}
+                              </p>
+                              <p className={`text-[11px] font-medium ${esIngreso ? 'text-emerald-600' : 'text-red-600'}`}>Efectivo</p>
+                            </div>
+                          </li>
+                        );
+                      }
+                      const v = fila.venta;
                       const est = estiloMetodo(v.metodoPago);
                       const conCortesia = v.metodoPago === 'Cortesía' || v.itemsResumen?.includes('CORTESÍA');
                       return (
@@ -2970,7 +3000,9 @@ export default function CajaPage({ currentUser }) {
                   </ul>
                 ) : (
                   <p className="px-5 py-10 text-center text-sm text-slate-400">
-                    {busquedaVentasNorm || filtroMetodoPago !== 'Todos' ? 'Ninguna venta coincide con el filtro.' : 'Aún no se registran ventas en este turno.'}
+                    {soloSalidas && !busquedaVentasNorm
+                      ? 'No hay salidas de caja en este turno.'
+                      : (busquedaVentasNorm || filtroMetodoPago !== 'Todos' ? 'Nada coincide con el filtro.' : 'Aún no se registran ventas en este turno.')}
                   </p>
                 )}
 
@@ -3176,6 +3208,12 @@ export default function CajaPage({ currentUser }) {
                 <dd className="text-slate-800">{v.cajeroNombre || 'Cajero Principal'}</dd>
                 {v.mesero && <dd className="text-xs text-slate-500">Mesero: {v.mesero}</dd>}
               </div>
+              {v.codigoPago && (
+                <div className="min-w-0">
+                  <dt className="text-xs text-slate-400">Código de pago</dt>
+                  <dd className="font-mono text-slate-800 break-all">{v.codigoPago}</dd>
+                </div>
+              )}
               <div className="min-w-0">
                 <dt className="text-xs text-slate-400">Origen</dt>
                 <dd className="flex items-center gap-1 text-slate-800">
@@ -3525,10 +3563,15 @@ export default function CajaPage({ currentUser }) {
                   })()}
 
                   {(metodoPago === 'Tarjeta' || metodoPago === 'Yape') && (
-                    <p className="text-sm text-slate-500 bg-slate-50 rounded-xl px-4 py-3 animate-fade-in">
-                      Se registrará <span className="font-mono font-semibold text-slate-900">{soles(totalConCortesias)}</span> pagado íntegramente con {metodoPago === 'Tarjeta' ? 'tarjeta (POS)' : 'Yape / Plin'}.
-                    </p>
+                    <div className="space-y-3 animate-fade-in">
+                      <p className="text-sm text-slate-500 bg-slate-50 rounded-xl px-4 py-3">
+                        Se registrará <span className="font-mono font-semibold text-slate-900">{soles(totalConCortesias)}</span> pagado íntegramente con {metodoPago === 'Tarjeta' ? 'tarjeta (POS)' : 'Yape / Plin'}.
+                      </p>
+                      {campoCodigoPago(codigoPago, setCodigoPago, metodoPago)}
+                    </div>
                   )}
+                  {metodoPago === 'Mixto' && (parseMonto(mixtoTarjeta) > 0 || parseMonto(mixtoYape) > 0) &&
+                    campoCodigoPago(codigoPago, setCodigoPago, 'Mixto')}
 
                   {metodoPago === 'Crédito' && (
                     <div className="animate-fade-in">
@@ -3879,6 +3922,57 @@ export default function CajaPage({ currentUser }) {
         </div>
       )}
 
+      {/* MODAL: TODAS LAS CATEGORÍAS DEL NUEVO PEDIDO */}
+      {deliveryModal && deliveryCategoriasModalOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] z-[120] flex items-end md:items-center justify-center md:p-6 animate-fade-in"
+          onClick={() => setDeliveryCategoriasModalOpen(false)}
+        >
+          <div
+            className="bg-white w-full max-w-lg max-h-[85dvh] rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-4 border-b border-slate-100">
+              <div className="min-w-0">
+                <p className="text-lg font-semibold text-slate-900">Categorías</p>
+                <p className="text-sm text-slate-500">Toca una para ver sus productos</p>
+              </div>
+              <button type="button" onClick={() => setDeliveryCategoriasModalOpen(false)} className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 grid grid-cols-2 gap-2 content-start">
+              {deliveryCategoriasOrdenadas.map(cat => {
+                const activa = deliveryCategoriaFiltro === cat;
+                const isMasPedidos = cat === '🔥 Más Pedidos';
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => { setDeliveryCategoriaFiltro(cat); setDeliveryCategoriasModalOpen(false); }}
+                    className={`min-h-[3.5rem] px-3 py-2.5 rounded-xl border text-left flex flex-col justify-center transition active:scale-95 ${
+                      activa
+                        ? 'bg-sky-600 border-sky-600 text-white shadow-sm'
+                        : isMasPedidos
+                          ? 'bg-amber-50 border-amber-200 text-amber-900'
+                          : 'bg-white border-slate-200 text-slate-700 hover:border-sky-300'
+                    }`}
+                  >
+                    <span className="text-sm font-medium leading-tight flex items-center gap-1.5">
+                      {isMasPedidos && <Flame className={`w-3.5 h-3.5 shrink-0 ${activa ? 'text-white' : 'text-amber-500'}`} />}
+                      {isMasPedidos ? 'Más pedidos' : cat}
+                    </span>
+                    <span className={`text-[11px] mt-0.5 ${activa ? 'text-sky-100' : 'text-slate-400'}`}>
+                      {contarProductosCategoriaDelivery(cat)} productos
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL PEDIDOS YA */}
       {deliveryModal && (() => {
         const cerrarDelivery = () => { setDeliveryModal(false); setCodigoPY(''); setItemsDelivery([]); setEditingPedidoId(null); };
@@ -3892,7 +3986,14 @@ export default function CajaPage({ currentUser }) {
         const tituloSeccion = 'text-xs font-semibold uppercase tracking-wider text-sky-700 flex items-center gap-2 before:w-1 before:h-3.5 before:rounded-full before:bg-sky-500';
 
         return (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] z-[110] flex items-end md:items-center justify-center md:p-6 animate-fade-in">
+          <div
+            onPointerDown={(e) => {
+              // Cierra el teclado del celular al tocar fuera del buscador
+              const input = deliverySearchInputRef.current;
+              if (input && document.activeElement === input && !input.contains(e.target)) input.blur();
+            }}
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] z-[110] flex items-end md:items-center justify-center md:p-6 animate-fade-in"
+          >
             <div className="bg-white w-full max-w-6xl h-[96dvh] md:h-[min(92dvh,880px)] rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
 
               {/* Header */}
@@ -3911,15 +4012,26 @@ export default function CajaPage({ currentUser }) {
                     {[
                       { id: 'ParaLlevar', label: 'Para llevar', Icon: ShoppingBag, activo: 'bg-cyan-600 text-white shadow-sm', onSel: () => { setTipoDelivery('ParaLlevar'); setCodigoPY(''); setDeliveryMontoEnvio(''); } },
                       { id: 'DeliveryPropio', label: 'Delivery', Icon: Bike, activo: 'bg-indigo-600 text-white shadow-sm', onSel: () => { setTipoDelivery('DeliveryPropio'); setCodigoPY(''); } },
-                      { id: 'PedidosYa', label: 'PedidosYa', Icon: Truck, activo: 'bg-rose-600 text-white shadow-sm', onSel: () => { setTipoDelivery('PedidosYa'); setCodigoPY(''); setDeliveryMontoEnvio(''); } },
+                      {
+                        id: 'PedidosYa', label: 'PedidosYa', Icon: Truck, activo: 'bg-rose-600 text-white shadow-sm',
+                        // Los pedidos nuevos por PedidosYa están deshabilitados (versión de prueba);
+                        // los que ya existían se pueden seguir modificando.
+                        bloqueado: !editingPedidoId,
+                        onSel: () => {
+                          if (!editingPedidoId) { avisarPedidosYaPrueba(); return; }
+                          setTipoDelivery('PedidosYa'); setCodigoPY(''); setDeliveryMontoEnvio('');
+                        },
+                      },
                     ].map(t => (
                       <button
                         key={t.id}
                         type="button"
                         onClick={t.onSel}
-                        className={`h-9 px-3 sm:px-4 rounded-lg text-sm font-medium inline-flex items-center justify-center gap-1.5 transition-all ${tipoDelivery === t.id ? t.activo : 'text-slate-500 hover:text-slate-800'}`}
+                        className={`h-9 px-3 sm:px-4 rounded-lg text-sm font-medium inline-flex items-center justify-center gap-1.5 transition-all ${
+                          tipoDelivery === t.id ? t.activo : (t.bloqueado ? 'text-slate-400 opacity-60' : 'text-slate-500 hover:text-slate-800')
+                        }`}
                       >
-                        <t.Icon className="w-4 h-4 shrink-0" /> <span className="truncate">{t.label}</span>
+                        {t.bloqueado ? <Lock className="w-3.5 h-3.5 shrink-0" /> : <t.Icon className="w-4 h-4 shrink-0" />} <span className="truncate">{t.label}</span>
                       </button>
                     ))}
                   </div>
@@ -3948,10 +4060,14 @@ export default function CajaPage({ currentUser }) {
                     <div className="relative">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                       <input
+                        ref={deliverySearchInputRef}
                         type="text"
-                        placeholder="Buscar plato (ej: cuarto, octavo, chela)…"
+                        inputMode="search"
+                        enterKeyHint="search"
+                        placeholder="Buscar por nombre (ej: pollo, 1/4, parri)…"
                         value={deliverySearchQuery}
                         onChange={(e) => setDeliverySearchQuery(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                         className={`${inp} pl-9 pr-9`}
                       />
                       {deliverySearchQuery && (
@@ -3960,37 +4076,36 @@ export default function CajaPage({ currentUser }) {
                         </button>
                       )}
                     </div>
-                    <div className="flex gap-1.5 overflow-x-auto custom-scrollbar pb-1 -mx-1 px-1">
-                      {(() => {
-                        const ordenPrioridades = ORDEN_PRIORIDADES_CATEGORIAS;
-                        const cats = ['🔥 Más Pedidos', 'Todos', ...new Set(productosMenu.filter(p => p.activo && p.categoria !== 'PedidosYa / Ofertas').map(p => p.categoria))];
-                        return cats.sort((a, b) => {
-                          const idxA = ordenPrioridades.indexOf(a);
-                          const idxB = ordenPrioridades.indexOf(b);
-                          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-                          if (idxA !== -1) return -1;
-                          if (idxB !== -1) return 1;
-                          return a.localeCompare(b);
-                        }).map(cat => {
-                          const isMasPedidos = cat === '🔥 Más Pedidos';
-                          const isSelected = deliveryCategoriaFiltro === cat;
-                          return (
-                            <button
-                              key={cat}
-                              type="button"
-                              onClick={() => setDeliveryCategoriaFiltro(cat)}
-                              className={`h-8 px-3 rounded-full text-xs font-medium whitespace-nowrap transition-colors inline-flex items-center gap-1 shrink-0 ${
-                                isSelected
-                                  ? (isMasPedidos ? 'bg-amber-500 text-white shadow-sm' : 'bg-sky-600 text-white shadow-sm')
-                                  : (isMasPedidos ? 'bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100' : 'bg-white border border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-700')
-                              }`}
-                            >
-                              {isMasPedidos && <Flame className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-amber-500'}`} />}
-                              {isMasPedidos ? 'Más pedidos' : cat}
-                            </button>
-                          );
-                        });
-                      })()}
+                    {/* Categorías: solo unas pocas + botón para ver todas (deslizar era incómodo en celular) */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {deliveryCategoriasBarra.map(cat => {
+                        const isMasPedidos = cat === '🔥 Más Pedidos';
+                        const isSelected = deliveryCategoriaFiltro === cat;
+                        return (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setDeliveryCategoriaFiltro(cat)}
+                            className={`max-w-[11rem] h-8 px-3 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1 ${
+                              isSelected
+                                ? (isMasPedidos ? 'bg-amber-500 text-white shadow-sm' : 'bg-sky-600 text-white shadow-sm')
+                                : (isMasPedidos ? 'bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100' : 'bg-white border border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-700')
+                            }`}
+                          >
+                            {isMasPedidos && <Flame className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-amber-500'}`} />}
+                            <span className="truncate">{isMasPedidos ? 'Más pedidos' : cat}</span>
+                          </button>
+                        );
+                      })}
+                      {deliveryCategoriasOrdenadas.length > CATEGORIAS_VISIBLES && (
+                        <button
+                          type="button"
+                          onClick={() => setDeliveryCategoriasModalOpen(true)}
+                          className="h-8 px-3 rounded-full text-xs font-medium inline-flex items-center gap-1 bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100 active:scale-95 transition"
+                        >
+                          <Layers className="w-3.5 h-3.5 shrink-0" /> Ver todas ({deliveryCategoriasOrdenadas.length - 2})
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -4011,7 +4126,10 @@ export default function CajaPage({ currentUser }) {
                           if (deliveryCategoriaFiltro !== 'Todos' && p.categoria !== deliveryCategoriaFiltro) return false;
                           return matchProductSemantic(p, deliverySearchQuery);
                         });
-                        const menuFiltrado = agruparProductos(menuFiltradoPre);
+                        const menuAgrupado = agruparProductos(menuFiltradoPre);
+                        const menuFiltrado = deliverySearchQuery.trim()
+                          ? [...menuAgrupado].sort((a, b) => relevanciaBusqueda(a, deliverySearchQuery) - relevanciaBusqueda(b, deliverySearchQuery))
+                          : menuAgrupado;
 
                         if (menuFiltrado.length === 0) {
                           return <p className="col-span-full text-center text-sm text-slate-400 py-12">No se encontraron productos.</p>;
@@ -4241,7 +4359,7 @@ export default function CajaPage({ currentUser }) {
                     {conCobro && (
                       <section className="space-y-4">
                         <p className={tituloSeccion}>Cobro</p>
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                           {[
                             { id: 'Efectivo', Icon: Banknote, label: 'Efectivo' },
                             { id: 'Tarjeta', Icon: CreditCard, label: 'Tarjeta' },
@@ -4249,7 +4367,6 @@ export default function CajaPage({ currentUser }) {
                             { id: 'Mixto', Icon: Layers, label: 'Mixto' },
                             { id: 'Crédito', Icon: Wallet, label: 'Crédito' },
                             { id: 'Cortesía', Icon: Gift, label: 'Cortesía' },
-                            { id: 'Consumo', Icon: Users, label: 'Personal' },
                           ].map(m => {
                             const active = deliveryMetodoPago === m.id;
                             return (
@@ -4304,10 +4421,15 @@ export default function CajaPage({ currentUser }) {
                         })()}
 
                         {(deliveryMetodoPago === 'Tarjeta' || deliveryMetodoPago === 'Yape') && (
-                          <p className="text-sm text-slate-500 bg-slate-50 rounded-xl px-4 py-3 animate-fade-in">
-                            Se registrará <span className="font-mono font-semibold text-slate-900">{soles(grandTotalDelivery)}</span> con {deliveryMetodoPago === 'Tarjeta' ? 'tarjeta (POS)' : 'Yape / Plin'}.
-                          </p>
+                          <div className="space-y-3 animate-fade-in">
+                            <p className="text-sm text-slate-500 bg-slate-50 rounded-xl px-4 py-3">
+                              Se registrará <span className="font-mono font-semibold text-slate-900">{soles(grandTotalDelivery)}</span> con {deliveryMetodoPago === 'Tarjeta' ? 'tarjeta (POS)' : 'Yape / Plin'}.
+                            </p>
+                            {campoCodigoPago(deliveryCodigoPago, setDeliveryCodigoPago, deliveryMetodoPago)}
+                          </div>
                         )}
+                        {deliveryMetodoPago === 'Mixto' && (parseFloat(deliveryMixtoTarjeta || 0) > 0 || parseFloat(deliveryMixtoYape || 0) > 0) &&
+                          campoCodigoPago(deliveryCodigoPago, setDeliveryCodigoPago, 'Mixto')}
 
                         {deliveryMetodoPago === 'Crédito' && (
                           <div className="animate-fade-in">

@@ -2217,6 +2217,14 @@ app.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
 // DELIVERY / PEDIDOS YA
 // ============================================================
 
+// Código de operación de Yape/Plin o voucher de tarjeta: solo se guarda si el cobro usa esos medios
+const limpiarCodigoPago = (codigoPago, metodoPago, montoTarjeta, montoYape) => {
+  const usaDigital = metodoPago === 'Tarjeta' || metodoPago === 'Yape'
+    || (metodoPago === 'Mixto' && ((parseFloat(montoTarjeta) || 0) > 0 || (parseFloat(montoYape) || 0) > 0));
+  const codigo = codigoPago ? String(codigoPago).trim().slice(0, 60) : '';
+  return usaDigital && codigo ? codigo : null;
+};
+
 app.post('/api/pedidos/llevar', async (req, res) => {
   const {
     codigoPedidosYa,
@@ -2239,7 +2247,8 @@ app.post('/api/pedidos/llevar', async (req, res) => {
     descuentoPorcentaje,
     descuentoMonto: descuentoMontoFijo,
     descuentoDescripcion,
-    motivoCortesia
+    motivoCortesia,
+    codigoPago
   } = req.body;
 
   try {
@@ -2376,6 +2385,7 @@ app.post('/api/pedidos/llevar', async (req, res) => {
           montoYape: finalMontoYape,
           montoCredito: finalMontoCredito,
           clienteCreditoId: clienteCreditoId ? parseInt(clienteCreditoId) : null,
+          codigoPago: limpiarCodigoPago(codigoPago, finalMetodoPago, finalMontoTarjeta, finalMontoYape),
           estadoNubefact: initEstadoSunat,
           estadoSunat: initEstadoSunat,
           serie: null,
@@ -2483,7 +2493,8 @@ app.put('/api/pedidos/llevar/:id', async (req, res) => {
     clienteCreditoId,
     descuentoPorcentaje,
     descuentoMonto: descuentoMontoFijo,
-    descuentoDescripcion
+    descuentoDescripcion,
+    codigoPago
   } = req.body;
 
   try {
@@ -2622,6 +2633,8 @@ app.put('/api/pedidos/llevar/:id', async (req, res) => {
           montoYape: finalMontoYape,
           montoCredito: finalMontoCredito,
           clienteCreditoId: clienteCreditoId ? parseInt(clienteCreditoId) : null,
+          // Al modificar un pedido sin reescribir el código, se conserva el que ya tenía
+          codigoPago: limpiarCodigoPago(codigoPago, finalMetodoPago, finalMontoTarjeta, finalMontoYape) ?? undefined,
           descuentoAplicado: descuentoFinal,
           ofertaDescripcion: descuentoFinal > 0 ? (descuentoDescripcion || `Descuento manual ${descPct}%`) : null
         }
@@ -3664,7 +3677,8 @@ app.post('/api/ventas', async (req, res) => {
     creditosDetalle,
     cortesiaItemIds,
     motivoCortesia,
-    cajeroNombre
+    cajeroNombre,
+    codigoPago
   } = req.body;
   const idsAPagar = pedidoIds || [pedidoId];
   const idPrincipal = idsAPagar[idsAPagar.length - 1]; // El más reciente como venta principal
@@ -3883,6 +3897,7 @@ app.post('/api/ventas', async (req, res) => {
           montoYape: finalMontoYape,
           montoCredito: finalMontoCredito,
           clienteCreditoId: finalClienteCreditoId,
+          codigoPago: limpiarCodigoPago(codigoPago, metodoPago, finalMontoTarjeta, finalMontoYape),
           estadoNubefact: initEstadoSunat,
           estadoSunat: initEstadoSunat,
           serie,
@@ -4055,6 +4070,7 @@ app.get('/api/ventas', async (req, res) => {
       mesaNum: v.pedido?.mesa?.numero || null,
       mesero: v.pedido?.mesero || null,
       cajeroNombre: v.cajeroNombre || 'Cajero Principal',
+      codigoPago: v.codigoPago || null,
       codigoPedidosYa: v.pedido?.codigoPedidosYa || null,
       tipoEntrega: v.pedido?.tipoEntrega || 'salon',
       estadoPedido: v.pedido?.estado || null,
@@ -4362,10 +4378,19 @@ app.post('/api/caja/movimientos', async (req, res) => {
 // GET /api/caja/movimientos → Listar salidas y movimientos del turno activo o histórico
 app.get('/api/caja/movimientos', async (req, res) => {
   try {
-    const { turnoId } = req.query;
+    const { turnoId, desde, hasta } = req.query;
     let whereClause = {};
 
-    if (turnoId) {
+    if (desde && hasta) {
+      // Rango de reportes: el día contable va de 03:00 a 02:59 (hora de Lima)
+      const nextDay = new Date(hasta + 'T00:00:00.000-05:00');
+      nextDay.setDate(nextDay.getDate() + 1);
+      const nextDayStr = nextDay.toISOString().split('T')[0];
+      whereClause.creadoEn = {
+        gte: new Date(desde + 'T03:00:00.000-05:00'),
+        lte: new Date(nextDayStr + 'T02:59:59.999-05:00'),
+      };
+    } else if (turnoId) {
       whereClause.turnoId = parseInt(turnoId);
     } else {
       const turnoAbierto = await prisma.cierreCaja.findFirst({

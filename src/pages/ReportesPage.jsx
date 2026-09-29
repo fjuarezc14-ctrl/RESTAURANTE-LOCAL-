@@ -97,6 +97,7 @@ export default function ReportesPage() {
   const [sunatModalOpen, setSunatModalOpen] = useState(false);
   const [rotacion, setRotacion] = useState([]);
   const [compras, setCompras] = useState([]);
+  const [retirosCaja, setRetirosCaja] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [gerencialModalOpen, setGerencialModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('resumen');
@@ -269,7 +270,7 @@ export default function ReportesPage() {
   const fetchReportes = useCallback(async (desde, hasta) => {
     setFiltrando(true);
     try {
-      const [data, cancs, mzs, vts, rot, cmps, clients, cierresRes, cajs] = await Promise.all([
+      const [data, cancs, mzs, vts, rot, cmps, clients, cierresRes, cajs, movs] = await Promise.all([
         api.getReporteContable(desde, hasta),
         api.getCancelaciones(desde, hasta),
         api.getReporteMozos(desde, hasta),
@@ -279,8 +280,13 @@ export default function ReportesPage() {
         api.getClientes().catch(() => []),
         api.getHistorialCierres(100).catch(() => []),
         api.getReporteCajeros(desde, hasta).catch(() => []),
+        api.getMovimientosCaja(desde, hasta).catch(() => null),
       ]);
       setResumen(data);
+      // Retiros de caja: salidas de efectivo que no son devoluciones de ventas
+      setRetirosCaja((movs?.movimientos || []).filter(m =>
+        m.tipo === 'RETIRO' && !String(m.motivo || '').startsWith('[DEVOLUCIÓN TICKET')
+      ));
       setCancelaciones(cancs || []);
       setMozos(mzs || []);
       setVentas(vts || []);
@@ -582,7 +588,7 @@ export default function ReportesPage() {
           <div className="space-y-5">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {kpi({ label: 'Ventas del periodo', valor: soles(resumen.ventasTotal), hint: `Base ${soles(resumen.ventasBase)} · IGV ${soles(resumen.ventasIGV)}`, Icon: TrendingUp, color: 'bg-sky-50 text-sky-600', borde: 'border-t-sky-500' })}
-              {kpi({ label: 'Compras RCE', valor: soles(resumen.comprasTotal), hint: `Base ${soles(resumen.comprasBase)} · IGV ${soles(resumen.comprasIGV)}`, Icon: TrendingDown, color: 'bg-rose-50 text-rose-600', borde: 'border-t-rose-500' })}
+              {kpi({ label: 'Retiros de caja', valor: soles(retirosCaja.reduce((s, m) => s + (Number(m.monto) || 0), 0)), hint: `${retirosCaja.length} salida${retirosCaja.length !== 1 ? 's' : ''} · sin devoluciones de ventas`, Icon: TrendingDown, color: 'bg-rose-50 text-rose-600', borde: 'border-t-rose-500' })}
               {kpi({ label: 'Margen operativo', valor: soles(margen), valorClase: margen >= 0 ? 'text-emerald-600' : 'text-rose-600', hint: `Rentabilidad ${resumen.ventasTotal > 0 ? ((margen / resumen.ventasTotal) * 100).toFixed(1) : '0.0'}%`, Icon: DollarSign, color: 'bg-emerald-50 text-emerald-600', borde: 'border-t-emerald-500' })}
               {kpi({ label: 'Ticket promedio', valor: soles(ventas.length > 0 ? resumen.ventasTotal / ventas.length : 0), hint: `${ventas.length} comandas cobradas`, Icon: Receipt, color: 'bg-amber-50 text-amber-600', borde: 'border-t-amber-500' })}
             </div>
