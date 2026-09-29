@@ -7,18 +7,12 @@ import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS 
 const LIMITE_CANCELACION_MS = 5 * 60 * 1000;
 
 // --- SISTEMA DE BÚSQUEDA INTELIGENTE Y FONÉTICA ---
+// Solo formas equivalentes de escribir lo mismo que aparece en el nombre ("cuarto" = "1/4").
+// No se agregan sinónimos que amplíen la búsqueda a otros platos (ej: "pollo" -> "alitas").
 const SINONIMOS = {
-  gaseosa: ['cola', 'inca', 'coca', 'refresco', 'sprite', 'fanta', 'gaseosa'],
-  bebida: ['chicha', 'limonada', 'gaseosa', 'cerveza', 'pisco', 'trago', 'coctel', 'jugo', 'agua'],
-  chela: ['cerveza', 'cristal', 'pilsen', 'cusquena'],
-  papas: ['papa', 'patata', 'fritas'],
-  carne: ['lomo', 'bife', 'parrilla', 'anticucho', 'res', 'corte'],
-  pollo: ['brasa', 'broaster', 'alitas', 'pechuga'],
-  piqueo: ['entrada', 'porcion', 'tequenos', 'salchipapa'],
   "1/8": ['octavo', 'octavos', '1/8', 'un octavo'],
   "1/4": ['cuarto', 'cuartos', '1/4', 'un cuarto'],
-  "1/2": ['medio', 'medios', '1/2', 'un medio', 'mitad'],
-  entero: ['entero', 'completo', 'pollo entero', '1', 'uno']
+  "1/2": ['medio', 'medios', '1/2', 'un medio', 'mitad']
 };
 
 const normalizePhonetic = (text) => {
@@ -40,24 +34,24 @@ const normalizePhonetic = (text) => {
     .trim();
 };
 
+// Solo busca en el NOMBRE del producto (no en la categoría): "pollo" muestra los platos
+// cuyo nombre contiene "pollo", tolerando faltas de ortografía comunes ("poyo").
 const matchProductSemantic = (prod, query) => {
   if (!query) return true;
   const cleanQuery = query.toLowerCase().trim();
+  if (!cleanQuery) return true;
   const queryTokens = cleanQuery.split(/\s+/);
   
   const cleanProdName = (prod.nombre || '').toLowerCase();
-  const cleanProdCat = (prod.categoria || '').toLowerCase();
-  
   const phoneticName = normalizePhonetic(prod.nombre);
-  const phoneticCat = normalizePhonetic(prod.categoria);
   
   return queryTokens.every(qToken => {
     // 1. Coincidencia directa simple
-    if (cleanProdName.includes(qToken) || cleanProdCat.includes(qToken)) return true;
+    if (cleanProdName.includes(qToken)) return true;
     
     // 2. Coincidencia fonética
     const phoneticToken = normalizePhonetic(qToken);
-    if (phoneticName.includes(phoneticToken) || phoneticCat.includes(phoneticToken)) return true;
+    if (phoneticToken && phoneticName.includes(phoneticToken)) return true;
     
     for (const [key, syns] of Object.entries(SINONIMOS)) {
       const tokenMatchesSyn = (key === qToken) || syns.some(syn => syn === qToken || normalizePhonetic(syn) === phoneticToken);
@@ -73,6 +67,46 @@ const matchProductSemantic = (prod, query) => {
   });
 };
 
+// Relevancia de un producto para la búsqueda (menor = más arriba):
+// 1) el nombre empieza con lo buscado, 2) alguna palabra empieza con lo buscado,
+// 3) lo contiene en medio de una palabra, 4) solo coincide por fonética/sinónimo.
+// Dentro del mismo nivel gana la coincidencia más cercana al inicio y luego el nombre más corto.
+const normalizarBusqueda = (text) => (text || '')
+  .toLowerCase()
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/\s+/g, " ")
+  .trim();
+
+const puntajeCoincidencia = (nombre, texto) => {
+  const idx = nombre.indexOf(texto);
+  if (idx === -1) return null;
+  if (idx === 0) return 0;
+  const inicioDePalabra = !/[a-z0-9]/.test(nombre[idx - 1]);
+  return (inicioDePalabra ? 1000 : 2000) + idx;
+};
+
+const relevanciaBusqueda = (prod, query) => {
+  if (prod.esAgrupado && Array.isArray(prod.variantes)) {
+    const puntajes = prod.variantes
+      .filter(v => matchProductSemantic(v, query))
+      .map(v => relevanciaBusqueda(v, query));
+    return puntajes.length > 0 ? Math.min(...puntajes) : Number.MAX_SAFE_INTEGER;
+  }
+  const nombre = normalizarBusqueda(prod.nombre);
+  const q = normalizarBusqueda(query);
+  const desempate = nombre.length / 1000;
+
+  // Frase completa ("pollo entero")
+  const completo = puntajeCoincidencia(nombre, q);
+  if (completo !== null) return completo + desempate;
+
+  // Varias palabras en distinto orden: se usa la peor coincidencia de cada palabra
+  const tokens = q.split(' ').filter(Boolean);
+  const puntajes = tokens.map(t => puntajeCoincidencia(nombre, t));
+  if (puntajes.every(p => p !== null)) return 3000 + Math.max(...puntajes) + desempate;
+  return 9000 + desempate;
+};
 
 const BARRA_CATEGORIAS = (COMPANY_CONFIG.barraCategorias && Array.isArray(COMPANY_CONFIG.barraCategorias))
   ? COMPANY_CONFIG.barraCategorias
@@ -229,6 +263,14 @@ export default function SalonPage({ currentUser }) {
   const [unionDropdownOpen, setUnionDropdownOpen] = useState(false);
   const [esReclamo, setEsReclamo] = useState(false);
   const [bandejaOpen, setBandejaOpen] = useState(false);
+  const [servirConfirm, setServirConfirm] = useState(null); // { mesaNum, items, onConfirm }
+  const [sirviendo, setSirviendo] = useState(false);
+
+  // Al abrir la bandeja se quitan las notificaciones flotantes para que no la tapen
+  const abrirBandeja = () => {
+    setToasts([]);
+    setBandejaOpen(true);
+  };
   
   // Administración de Mesas (solo Admin/Cajero)
   const [adminMesasOpen, setAdminMesasOpen] = useState(false);
@@ -270,6 +312,8 @@ export default function SalonPage({ currentUser }) {
   const [nuevaMesaNum, setNuevaMesaNum] = useState('');
   const [editandoMesas, setEditandoMesas] = useState({}); // { [mesaNum]: nuevoMesaNum }
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef(null);
+  const [categoriasModalOpen, setCategoriasModalOpen] = useState(false);
 
   // Estados para el Modal de Opciones y Combos
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
@@ -729,16 +773,21 @@ export default function SalonPage({ currentUser }) {
         });
       });
 
-      if (reciénListos.length > 0) {
-        // Alerta sonora y vibración para todo el equipo de salón
+      // Un Mozo solo recibe aviso flotante (y sonido) de sus propias mesas; lo demás
+      // queda en la Bandeja de Despacho. Admin/Cajero siguen viendo todo el salón.
+      const esRolMozo = currentUser?.rol === 'Mozo';
+      const listosAvisar = reciénListos.filter(item => !esRolMozo || item.esMiMesa);
+
+      if (listosAvisar.length > 0) {
         playChimeNotification();
 
-        reciénListos.slice(0, 4).forEach(item => {
+        listosAvisar.slice(0, 4).forEach(item => {
           const toastId = Date.now() + Math.random();
           const tituloEstacion = item.esBarra ? '🍹 Bebida lista en BARRA' : '🍽️ Plato listo en COCINA';
           const detalleMesero = item.esMiMesa ? '⭐ ¡Tu Mesa!' : `Atiende: ${item.mesero}`;
           setToasts(prev => [...prev, {
             id: toastId,
+            tipo: 'listo',
             mesa: item.mesa,
             esMiMesa: item.esMiMesa,
             mensaje: `${tituloEstacion}: ${item.nombre} · Mesa ${item.mesa} (${detalleMesero})`,
@@ -761,14 +810,15 @@ export default function SalonPage({ currentUser }) {
         }
       });
 
-      if (listasNuevas.length > 0) {
+      const listasAvisar = listasNuevas.filter(info => !esRolMozo || info.esMiMesa);
+      if (listasAvisar.length > 0) {
         playChimeNotification();
-        listasNuevas.forEach(info => {
+        listasAvisar.forEach(info => {
           const toastId = Date.now() + Math.random();
           const texto = info.esMiMesa 
             ? `🛎️ ¡Tu Mesa ${info.num} está lista para servir!` 
             : `🛎️ ¡Mesa ${info.num} lista para servir! (${info.mesero})`;
-          setToasts(prev => [...prev, { id: toastId, mesa: info.num, esMiMesa: info.esMiMesa, mensaje: texto }]);
+          setToasts(prev => [...prev, { id: toastId, tipo: 'listo', mesa: info.num, esMiMesa: info.esMiMesa, mensaje: texto }]);
           setTimeout(() => {
             setToasts(prev => prev.filter(t => t.id !== toastId));
           }, 6500);
@@ -1053,7 +1103,37 @@ export default function SalonPage({ currentUser }) {
     return [...list, ...otros];
   };
 
-  const menuFiltrado = agruparProductos(menuFiltradoPre);
+  const menuAgrupado = agruparProductos(menuFiltradoPre);
+  const menuFiltrado = searchQuery.trim()
+    ? [...menuAgrupado].sort((a, b) => relevanciaBusqueda(a, searchQuery) - relevanciaBusqueda(b, searchQuery))
+    : menuAgrupado;
+
+  const categoriasOrdenadas = ['🔥 Más Pedidos', 'Todos', ...new Set(productos.filter(p => p.categoria !== 'PedidosYa / Ofertas').map(p => p.categoria))]
+    .sort((a, b) => {
+      const idxA = ORDEN_PRIORIDADES_CATEGORIAS.indexOf(a);
+      const idxB = ORDEN_PRIORIDADES_CATEGORIAS.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  // En el celular deslizar la barra era incómodo: solo se muestran unas pocas
+  // (más la seleccionada) y el resto se abre en la ventana "Ver todas".
+  const CATEGORIAS_VISIBLES = 5;
+  const categoriasBarra = categoriasOrdenadas.slice(0, CATEGORIAS_VISIBLES);
+  if (!categoriasBarra.includes(categoriaActiva) && categoriasOrdenadas.includes(categoriaActiva)) {
+    categoriasBarra.push(categoriaActiva);
+  }
+  const contarProductosCategoria = (cat) => {
+    if (cat === '🔥 Más Pedidos') return topProductosIds.length;
+    return productos.filter(p => p.categoria !== 'PedidosYa / Ofertas' && (cat === 'Todos' || p.categoria === cat)).length;
+  };
+
+  // Cierra el teclado del celular al tocar cualquier parte fuera del buscador
+  const cerrarTecladoSiTocaFuera = (e) => {
+    const input = searchInputRef.current;
+    if (input && document.activeElement === input && !input.contains(e.target)) input.blur();
+  };
   const totalTicket = ticketActual.reduce((acc, item) => acc + (item.cant * item.precio), 0);
   const badgeEstado = mesaActual?.estado === 'Servido' && ticketActual.length > 0
     ? 'text-blue-700 bg-blue-100' : (ticketActual.length > 0 ? 'text-amber-700 bg-amber-100' : 'text-emerald-700 bg-emerald-100');
@@ -1204,7 +1284,7 @@ export default function SalonPage({ currentUser }) {
       </div>
 
       {modalOpen && mesaActual && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-end md:items-center justify-center p-0 md:p-4">
+        <div onPointerDown={cerrarTecladoSiTocaFuera} className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-end md:items-center justify-center p-0 md:p-4">
           <div className="bg-white w-full h-[95vh] md:h-auto md:max-h-[90vh] max-w-6xl rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
             <div className="p-3 md:p-5 bg-slate-900 text-white flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3">
@@ -1262,10 +1342,14 @@ export default function SalonPage({ currentUser }) {
                     <div className="relative flex-1">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                       <input 
+                        ref={searchInputRef}
                         type="text" 
-                        placeholder="Buscar plato (ej: 'poyo papas', 'chela', 'parri')..." 
+                        inputMode="search"
+                        enterKeyHint="search"
+                        placeholder="Buscar por nombre (ej: pollo, 1/4, parri)..." 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                         className="w-full pl-10 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-cyan-500 focus:bg-white font-medium text-slate-800"
                       />
                       {searchQuery && (
@@ -1300,37 +1384,36 @@ export default function SalonPage({ currentUser }) {
                       )}
                     </button>
                   </div>
-                  {/* Categorías */}
-                  <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-0.5 whitespace-nowrap">
-                    {(() => {
-                      const ordenPrioridades = ORDEN_PRIORIDADES_CATEGORIAS;
-                      const cats = ['🔥 Más Pedidos', 'Todos', ...new Set(productos.filter(p => p.categoria !== 'PedidosYa / Ofertas').map(p => p.categoria))];
-                      
-                      return cats.sort((a, b) => {
-                        const idxA = ordenPrioridades.indexOf(a);
-                        const idxB = ordenPrioridades.indexOf(b);
-                        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-                        if (idxA !== -1) return -1;
-                        if (idxB !== -1) return 1;
-                        return a.localeCompare(b);
-                      }).map(cat => {
-                        const isMasPedidos = cat === '🔥 Más Pedidos';
-                        return (
-                          <button 
-                            key={cat} 
-                            onClick={() => setCategoriaActiva(cat)} 
-                            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase whitespace-nowrap shadow-xs transition-all flex items-center gap-1.5 ${
-                              categoriaActiva === cat 
-                                ? (isMasPedidos ? 'bg-amber-500 text-slate-950 shadow-md scale-105' : 'bg-slate-900 text-white shadow-md') 
-                                : (isMasPedidos ? 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200' : 'bg-white border border-slate-200 text-slate-700 hover:bg-amber-50')
-                            }`}
-                          >
-                            {isMasPedidos && <Flame className="w-3.5 h-3.5 text-amber-600 animate-bounce" />}
-                            {cat}
-                          </button>
-                        );
-                      });
-                    })()}
+                  {/* Categorías: solo unas pocas + botón para ver todas */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {categoriasBarra.map(cat => {
+                      const isMasPedidos = cat === '🔥 Más Pedidos';
+                      return (
+                        <button 
+                          key={cat} 
+                          type="button"
+                          onClick={() => setCategoriaActiva(cat)} 
+                          className={`max-w-[11rem] px-3 py-2 rounded-xl text-xs font-black uppercase shadow-xs transition-all flex items-center gap-1.5 ${
+                            categoriaActiva === cat 
+                              ? (isMasPedidos ? 'bg-amber-500 text-slate-950 shadow-md' : 'bg-slate-900 text-white shadow-md') 
+                              : (isMasPedidos ? 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200' : 'bg-white border border-slate-200 text-slate-700 hover:bg-amber-50')
+                          }`}
+                        >
+                          {isMasPedidos && <Flame className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
+                          <span className="truncate">{cat}</span>
+                        </button>
+                      );
+                    })}
+                    {categoriasOrdenadas.length > CATEGORIAS_VISIBLES && (
+                      <button
+                        type="button"
+                        onClick={() => setCategoriasModalOpen(true)}
+                        className="px-3 py-2 rounded-xl text-xs font-black uppercase shadow-xs transition-all flex items-center gap-1.5 bg-cyan-50 border border-cyan-300 text-cyan-800 hover:bg-cyan-100 active:scale-95"
+                      >
+                        <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
+                        Ver todas ({categoriasOrdenadas.length - 2})
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className={`p-3 overflow-y-auto custom-scrollbar content-start flex-1 ${
@@ -2341,12 +2424,78 @@ export default function SalonPage({ currentUser }) {
           </div>
         </div>
       )}
+      {/* MODAL: TODAS LAS CATEGORÍAS (reemplaza el deslizamiento horizontal en celulares) */}
+      {categoriasModalOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[260] flex items-end md:items-center justify-center p-0 md:p-4"
+          onClick={() => setCategoriasModalOpen(false)}
+        >
+          <div
+            className="bg-white w-full max-w-lg max-h-[85vh] rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-cyan-500 rounded-xl flex items-center justify-center text-slate-900">
+                  <LayoutGrid className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="font-black text-sm md:text-base uppercase tracking-tight leading-none">Categorías</h2>
+                  <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">Toca una para ver sus productos</p>
+                </div>
+              </div>
+              <button onClick={() => setCategoriasModalOpen(false)} className="bg-slate-800 hover:bg-red-500 p-2 rounded-xl transition-colors text-slate-300 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 custom-scrollbar grid grid-cols-2 gap-2 content-start">
+              {categoriasOrdenadas.map(cat => {
+                const activa = categoriaActiva === cat;
+                const isMasPedidos = cat === '🔥 Más Pedidos';
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      setCategoriaActiva(cat);
+                      setCategoriasModalOpen(false);
+                    }}
+                    className={`min-h-[3.5rem] px-3 py-2.5 rounded-2xl border text-left flex flex-col justify-center transition-all active:scale-95 ${
+                      activa
+                        ? 'bg-slate-900 border-slate-900 text-white shadow-md'
+                        : isMasPedidos
+                          ? 'bg-amber-50 border-amber-300 text-amber-900'
+                          : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-amber-50'
+                    }`}
+                  >
+                    <span className="font-black text-xs uppercase leading-tight flex items-center gap-1.5">
+                      {isMasPedidos && <Flame className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                      {cat}
+                    </span>
+                    <span className={`text-[10px] font-bold mt-0.5 ${activa ? 'text-slate-300' : 'text-slate-400'}`}>
+                      {contarProductosCategoria(cat)} productos
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* FLOATING TOASTS NOTIFICATIONS SYSTEM - RESPONSIVE MÓVIL Y TABLET */}
+      {!bandejaOpen && (
       <div className="fixed top-3 inset-x-3 sm:top-20 sm:right-6 sm:inset-x-auto sm:max-w-sm z-[300] flex flex-col gap-2.5 pointer-events-none">
         {toasts.map(t => (
           <div 
             key={t.id} 
-            className={`pointer-events-auto border rounded-2xl shadow-2xl p-3.5 flex items-center gap-3 animate-slide-up relative overflow-hidden backdrop-blur-md transition-all ${
+            role="button"
+            onClick={() => {
+              // Tocar un aviso de "listo" abre la bandeja; los demás avisos solo se cierran
+              if (t.tipo === 'listo') abrirBandeja();
+              else setToasts(prev => prev.filter(item => item.id !== t.id));
+            }}
+            className={`pointer-events-auto cursor-pointer active:scale-[0.98] border rounded-2xl shadow-2xl p-3.5 flex items-center gap-3 animate-slide-up relative overflow-hidden backdrop-blur-md transition-all ${
               t.esMiMesa 
                 ? 'bg-slate-900 border-emerald-400 ring-2 ring-emerald-500/40 text-white' 
                 : 'bg-slate-900/95 border-amber-500/40 text-slate-100'
@@ -2367,9 +2516,15 @@ export default function SalonPage({ currentUser }) {
                 </span>
               </div>
               <p className="font-bold text-xs sm:text-sm leading-tight text-white">{t.mensaje}</p>
+              {t.tipo === 'listo' && (
+                <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">Toca para ver la bandeja</p>
+              )}
             </div>
             <button 
-              onClick={() => setToasts(prev => prev.filter(item => item.id !== t.id))}
+              onClick={(e) => {
+                e.stopPropagation();
+                setToasts(prev => prev.filter(item => item.id !== t.id));
+              }}
               className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg transition-colors relative z-10 shrink-0"
               aria-label="Cerrar notificación"
             >
@@ -2378,12 +2533,13 @@ export default function SalonPage({ currentUser }) {
           </div>
         ))}
       </div>
+      )}
 
       {/* Botón flotante para Bandeja de Despacho (Platos Listos).
           En el celular se oculta mientras haya una ventana abierta: antes tapaba sus botones. */}
       {!modalOpen && !optionsModalOpen && !cancelModal && !authModal.open && (
       <button
-        onClick={() => setBandejaOpen(true)}
+        onClick={abrirBandeja}
         className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[220] flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs md:text-sm p-3 md:px-4 md:py-3 rounded-2xl shadow-2xl transition-all active:scale-95 hover:-translate-y-1 uppercase tracking-wider border border-indigo-500/30"
       >
         <Bell className={`w-5 h-5 ${platosListosDespacho.length > 0 ? 'animate-bounce' : ''}`} />
@@ -2400,7 +2556,7 @@ export default function SalonPage({ currentUser }) {
 
       {/* DRAWER / MODAL DE BANDEJA DE DESPACHO */}
       {bandejaOpen && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[230] flex justify-end">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[270] flex justify-end">
           <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col overflow-hidden animate-slide-left">
             <div className="p-4 bg-indigo-600 text-white flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3">
@@ -2426,81 +2582,175 @@ export default function SalonPage({ currentUser }) {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {Object.entries(
-                    platosListosDespacho.reduce((groups, item) => {
-                      const key = item.mesaNum;
-                      if (!groups[key]) groups[key] = [];
-                      groups[key].push(item);
-                      return groups;
-                    }, {})
-                  ).map(([mesaNum, items]) => {
-                    const primerItem = items[0];
-                    const esMiMesaGrupo = items.some(i => i.esMiMesa);
-                    return (
-                      <div key={mesaNum} className={`bg-white border rounded-2xl p-4 shadow-sm transition-all ${
-                        esMiMesaGrupo ? 'border-emerald-300 ring-1 ring-emerald-400/30' : 'border-slate-200'
-                      }`}>
-                        <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-black text-slate-900 text-sm md:text-base uppercase tracking-tight">Mesa {mesaNum}</h3>
-                              {esMiMesaGrupo && (
-                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                  ⭐ Mi Mesa
-                                </span>
-                              )}
+                  {(() => {
+                    const grupos = Object.entries(
+                      platosListosDespacho.reduce((groups, item) => {
+                        const key = item.mesaNum;
+                        if (!groups[key]) groups[key] = [];
+                        groups[key].push(item);
+                        return groups;
+                      }, {})
+                    ).map(([mesaNum, items]) => ({ mesaNum, items, esMiMesa: items.some(i => i.esMiMesa) }));
+                    // Primero las mesas que atiende este mozo; al final (y en gris) las de otros mozos
+                    const misMesas = grupos.filter(g => g.esMiMesa);
+                    const otrasMesas = grupos.filter(g => !g.esMiMesa);
+
+                    const renderGrupo = ({ mesaNum, items, esMiMesa }) => {
+                      const primerItem = items[0];
+                      const pedidoIds = [...new Set(items.map(i => i.pedidoId).filter(Boolean))];
+                      return (
+                        <div key={mesaNum} className={`border rounded-2xl p-4 shadow-sm transition-all ${
+                          esMiMesa ? 'bg-white border-emerald-300 ring-1 ring-emerald-400/30' : 'bg-slate-200/70 border-slate-300 border-dashed'
+                        }`}>
+                          <div className={`flex justify-between items-center gap-2 mb-3 pb-2 border-b ${esMiMesa ? 'border-slate-100' : 'border-slate-300'}`}>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className={`font-black text-sm md:text-base uppercase tracking-tight ${esMiMesa ? 'text-slate-900' : 'text-slate-600'}`}>Mesa {mesaNum}</h3>
+                                {esMiMesa ? (
+                                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                    ⭐ Mi Mesa
+                                  </span>
+                                ) : (
+                                  <span className="bg-slate-300 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                    Otro mozo
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`text-[10px] mt-0.5 ${esMiMesa ? 'text-slate-400' : 'text-slate-500 font-bold'}`}>Mozo: {primerItem.mesero || 'Salón'}</p>
                             </div>
-                            <p className="text-[10px] text-slate-400 mt-0.5">Mozo: {primerItem.mesero || 'Salón'}</p>
-                          </div>
-                          <button
-                            onClick={async () => {
-                              try {
-                                const res = await api.entregarTodoPedido(primerItem.pedidoId);
-                                if (res.error) throw new Error(res.error);
-                                await fetchMesas();
-                              } catch (err) {
-                                alert("Error al entregar: " + err.message);
-                              }
-                            }}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black text-[10px] px-3 py-1.5 rounded-lg border border-indigo-100 transition-colors uppercase tracking-wider active:scale-95"
-                          >
-                            Servir Todo
-                          </button>
-                        </div>
-                        <ul className="space-y-2">
-                          {items.map((item, idx) => (
-                            <li key={idx} className="flex items-center justify-between text-xs bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
-                              <span className="font-bold text-slate-800 uppercase flex-1 pr-2 flex items-center gap-2 flex-wrap">
-                                <span className="font-black text-indigo-600">{item.cant}x</span> {item.nombre}
-                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md tracking-wider ${
-                                  item.estacion === 'Barra' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
-                                }`}>
-                                  {item.estacion === 'Barra' ? '🍹 BARRA' : '🔥 COCINA'}
-                                </span>
-                              </span>
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    const res = await api.entregarItem(item.itemId);
+                            <button
+                              onClick={() => setServirConfirm({
+                                mesaNum,
+                                items,
+                                esMiMesa,
+                                mesero: primerItem.mesero,
+                                onConfirm: async () => {
+                                  for (const pid of pedidoIds) {
+                                    const res = await api.entregarTodoPedido(pid);
                                     if (res.error) throw new Error(res.error);
-                                    await fetchMesas();
-                                  } catch (err) {
-                                    alert("Error al entregar: " + err.message);
                                   }
-                                }}
-                                className="p-1.5 bg-white hover:bg-emerald-500 hover:text-white border border-slate-200 rounded-lg text-slate-400 hover:border-emerald-500 transition-all active:scale-90"
-                                title="Marcar como Servido"
-                              >
-                                <CheckCircle className="w-4 h-4" />
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                                },
+                              })}
+                              className={`font-black text-[11px] px-3 py-2 rounded-lg border transition-colors uppercase tracking-wider active:scale-95 shrink-0 ${
+                                esMiMesa ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-100' : 'bg-white/70 hover:bg-white text-slate-600 border-slate-300'
+                              }`}
+                            >
+                              Servir Todo
+                            </button>
+                          </div>
+                          <ul className="space-y-2">
+                            {items.map((item, idx) => (
+                              <li key={idx} className={`flex items-center justify-between text-xs px-3 py-2 rounded-xl border ${
+                                esMiMesa ? 'bg-slate-50 border-slate-100' : 'bg-white/60 border-slate-300'
+                              }`}>
+                                <span className={`font-bold uppercase flex-1 pr-2 flex items-center gap-2 flex-wrap ${esMiMesa ? 'text-slate-800' : 'text-slate-600'}`}>
+                                  <span className={`font-black ${esMiMesa ? 'text-indigo-600' : 'text-slate-500'}`}>{item.cant}x</span> {item.nombre}
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md tracking-wider ${
+                                    item.estacion === 'Barra' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {item.estacion === 'Barra' ? '🍹 BARRA' : '🔥 COCINA'}
+                                  </span>
+                                </span>
+                                <button
+                                  onClick={() => setServirConfirm({
+                                    mesaNum,
+                                    items: [item],
+                                    esMiMesa,
+                                    mesero: primerItem.mesero,
+                                    onConfirm: async () => {
+                                      const res = await api.entregarItem(item.itemId);
+                                      if (res.error) throw new Error(res.error);
+                                    },
+                                  })}
+                                  className="p-2 bg-white hover:bg-emerald-500 hover:text-white border border-slate-200 rounded-lg text-slate-400 hover:border-emerald-500 transition-all active:scale-90 shrink-0"
+                                  title="Marcar como Servido"
+                                >
+                                  <CheckCircle className="w-5 h-5" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    };
+
+                    return (
+                      <>
+                        {misMesas.map(renderGrupo)}
+                        {otrasMesas.length > 0 && (
+                          <>
+                            <div className="flex items-center gap-2 pt-2">
+                              <div className="h-px bg-slate-300 flex-1"></div>
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mesas de otros mozos</span>
+                              <div className="h-px bg-slate-300 flex-1"></div>
+                            </div>
+                            {otrasMesas.map(renderGrupo)}
+                          </>
+                        )}
+                      </>
                     );
-                  })}
+                  })()}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMACIÓN ANTES DE MARCAR COMO SERVIDO (evita toques por error del mozo) */}
+      {servirConfirm && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[280] flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="bg-white w-full max-w-sm rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-slide-up max-h-[85vh]">
+            <div className="p-5 text-center shrink-0">
+              <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <CheckCircle className="w-8 h-8" />
+              </div>
+              <h2 className="font-black text-slate-900 text-base uppercase tracking-tight">¿Ya lo serviste?</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Confirma que llevaste a la <strong className="text-slate-900 text-lg">Mesa {servirConfirm.mesaNum}</strong>:
+              </p>
+              {!servirConfirm.esMiMesa && (
+                <p className="mt-2 text-[11px] font-black text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 uppercase tracking-wide">
+                  ⚠️ Esta mesa la atiende {servirConfirm.mesero || 'otro mozo'}
+                </p>
+              )}
+            </div>
+            <ul className="px-5 space-y-1.5 overflow-y-auto custom-scrollbar">
+              {servirConfirm.items.map((item, idx) => (
+                <li key={idx} className="flex items-center gap-2 text-sm bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 font-bold text-slate-800 uppercase">
+                  <span className="font-black text-indigo-600">{item.cant}x</span>
+                  <span className="flex-1">{item.nombre}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="p-5 grid grid-cols-2 gap-3 shrink-0">
+              <button
+                type="button"
+                disabled={sirviendo}
+                onClick={() => setServirConfirm(null)}
+                className="py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-2xl text-sm uppercase transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={sirviendo}
+                onClick={async () => {
+                  setSirviendo(true);
+                  try {
+                    await servirConfirm.onConfirm();
+                    setServirConfirm(null);
+                    await fetchMesas();
+                  } catch (err) {
+                    alert("Error al entregar: " + err.message);
+                  } finally {
+                    setSirviendo(false);
+                  }
+                }}
+                className="py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl text-sm uppercase transition-colors shadow-md shadow-emerald-500/20 active:scale-95 disabled:opacity-50"
+              >
+                {sirviendo ? 'Guardando...' : 'Sí, servido'}
+              </button>
             </div>
           </div>
         </div>

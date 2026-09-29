@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { UtensilsCrossed, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Tags, Building2, Share2, Copy, Check as CheckIcon, Wifi } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import logoUrl from './assets/logo.png';
 import { COMPANY_CONFIG } from './config/company';
 import { useCompany } from './context/CompanyContext';
@@ -19,6 +19,24 @@ import UsuariosPage from './pages/UsuariosPage';
 import CreditosPage from './pages/CreditosPage';
 import ConfiguracionPage from './pages/ConfiguracionPage';
 
+// === SESIÓN ===
+// La sesión vive en sessionStorage: al cerrar la pestaña/navegador hay que volver a poner el PIN.
+// En celulares el navegador mantiene la pestaña viva por días, así que además se cierra
+// por inactividad (salvo en el monitor de cocina, que queda fijo todo el día).
+const SESSION_KEY = 'currentUser';
+const ACTIVIDAD_KEY = 'ultimaActividad';
+const INACTIVIDAD_MS = 5 * 60 * 1000;
+const AVISO_INACTIVIDAD_MS = 30 * 1000;
+const ROLES_SIN_CIERRE_POR_INACTIVIDAD = ['Cocinero'];
+
+const guardarSesion = (user) => sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+const borrarSesion = () => {
+  sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(ACTIVIDAD_KEY);
+};
+const leerUltimaActividad = () => Number(sessionStorage.getItem(ACTIVIDAD_KEY)) || 0;
+const aplicaInactividad = (user) => !!user && !ROLES_SIN_CIERRE_POR_INACTIVIDAD.includes(user.rol);
+
 // === PROTECTED ROUTE NAVIGATION GUARD ===
 const ProtectedRoute = ({ children, permission, currentUser }) => {
   const userPermissions = currentUser?.permisos || [];
@@ -33,7 +51,7 @@ const ProtectedRoute = ({ children, permission, currentUser }) => {
             <h2 className="text-xl font-black text-rose-500 mb-2">Acceso Restringido</h2>
             <p className="text-slate-400 text-sm mb-6">Tu usuario no cuenta con permisos asignados para acceder a ningún módulo.</p>
             <button 
-              onClick={() => { localStorage.clear(); window.location.reload(); }}
+              onClick={() => { localStorage.clear(); sessionStorage.clear(); window.location.reload(); }}
               className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-6 py-2.5 rounded-xl uppercase text-xs tracking-wider transition-all"
             >
               Cerrar Sesión
@@ -56,7 +74,7 @@ const ProtectedRoute = ({ children, permission, currentUser }) => {
 };
 
 // === LOGIN GATE (PANTALLA DE BLOQUEO PREMIUM POR PIN) ===
-const LoginGate = ({ onLoginSuccess }) => {
+const LoginGate = ({ onLoginSuccess, aviso }) => {
   const { empresa } = useCompany();
   const [brandMain, brandHighlight] = splitBrand(empresa.brandShort);
   const [pin, setPin] = useState('');
@@ -180,6 +198,7 @@ const LoginGate = ({ onLoginSuccess }) => {
           {/* Mensaje de Error / Cargando */}
           <div className="min-h-[24px] mb-4 flex items-center justify-center">
             {error && <p className="text-xs text-rose-400 font-bold bg-rose-500/10 border border-rose-500/20 px-3 py-1 rounded-lg animate-shake">{error}</p>}
+            {!error && !cargando && aviso && <p className="text-xs text-amber-300 font-bold bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-lg text-center">{aviso}</p>}
             {cargando && <p className="text-xs text-cyan-400 font-bold animate-pulse flex items-center gap-2"><span>⏳</span> Validando PIN...</p>}
           </div>
 
@@ -505,10 +524,27 @@ const Layout = ({ children, title, currentUser, onLogout }) => {
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [avisoLogin, setAvisoLogin] = useState('');
+  const [segundosParaCierre, setSegundosParaCierre] = useState(null);
+  const ultimaEscrituraRef = useRef(0);
 
   useEffect(() => {
     const initSession = async () => {
-      const saved = localStorage.getItem('currentUser');
+      // Sesiones antiguas guardadas de forma permanente: ya no se reutilizan
+      localStorage.removeItem(SESSION_KEY);
+      const saved = sessionStorage.getItem(SESSION_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          const ultima = leerUltimaActividad();
+          if (aplicaInactividad(parsed) && ultima && Date.now() - ultima >= INACTIVIDAD_MS) {
+            borrarSesion();
+            setAvisoLogin('Tu sesión se cerró por inactividad. Ingresa tu PIN.');
+            setLoading(false);
+            return;
+          }
+        } catch { /* se valida abajo */ }
+      }
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -516,10 +552,10 @@ function App() {
             // Validar directamente contra el servidor
             const status = await api.checkUserStatus(parsed.id);
             if (!status || !status.exists || !status.activo) {
-              localStorage.removeItem('currentUser');
+              borrarSesion();
               setCurrentUser(null);
             } else if (parsed.pinSignature && status.pinSignature && parsed.pinSignature !== status.pinSignature) {
-              localStorage.removeItem('currentUser');
+              borrarSesion();
               setCurrentUser(null);
               alert('⚠️ La contraseña/PIN de tu cuenta ha sido modificada por el administrador. Por favor, inicia sesión con tu nuevo PIN.');
             } else {
@@ -532,10 +568,10 @@ function App() {
                 pinSignature: status.pinSignature || parsed.pinSignature,
               };
               setCurrentUser(updatedUser);
-              localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+              guardarSesion(updatedUser);
             }
           } else {
-            localStorage.removeItem('currentUser');
+            borrarSesion();
             setCurrentUser(null);
           }
         } catch (e) {
@@ -543,7 +579,7 @@ function App() {
           try {
             setCurrentUser(JSON.parse(saved));
           } catch (err) {
-            localStorage.removeItem('currentUser');
+            borrarSesion();
           }
         }
       }
@@ -554,14 +590,63 @@ function App() {
   }, []);
 
   const handleLoginSuccess = (user) => {
+    sessionStorage.setItem(ACTIVIDAD_KEY, String(Date.now()));
+    setAvisoLogin('');
     setCurrentUser(user);
-    localStorage.setItem('currentUser', JSON.stringify(user));
+    guardarSesion(user);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('currentUser');
+    setSegundosParaCierre(null);
+    borrarSesion();
   };
+
+  // Cierre de sesión por inactividad. Se compara contra la hora de la última actividad
+  // (no contra un temporizador) porque al bloquear el celular los timers se congelan.
+  useEffect(() => {
+    if (!aplicaInactividad(currentUser)) return;
+
+    const registrarActividad = (e) => {
+      // El botón "Cerrar sesión" del aviso no debe contar como actividad
+      if (e?.target?.closest?.('[data-sin-actividad]')) return;
+      const ahora = Date.now();
+      // Evitar escribir en cada movimiento: basta con una vez por segundo
+      if (ahora - ultimaEscrituraRef.current < 1000) return;
+      ultimaEscrituraRef.current = ahora;
+      sessionStorage.setItem(ACTIVIDAD_KEY, String(ahora));
+      setSegundosParaCierre(null);
+    };
+
+    const revisar = () => {
+      const restante = INACTIVIDAD_MS - (Date.now() - leerUltimaActividad());
+      if (restante <= 0) {
+        handleLogout();
+        setAvisoLogin('Tu sesión se cerró por inactividad. Ingresa tu PIN.');
+      } else if (restante <= AVISO_INACTIVIDAD_MS) {
+        setSegundosParaCierre(Math.ceil(restante / 1000));
+      } else {
+        setSegundosParaCierre(null);
+      }
+    };
+
+    const alVolverALaApp = () => {
+      if (document.visibilityState === 'visible') revisar();
+    };
+
+    if (!leerUltimaActividad()) sessionStorage.setItem(ACTIVIDAD_KEY, String(Date.now()));
+    const eventos = ['pointerdown', 'keydown', 'touchstart', 'wheel'];
+    eventos.forEach(ev => window.addEventListener(ev, registrarActividad, { passive: true }));
+    document.addEventListener('visibilitychange', alVolverALaApp);
+    window.addEventListener('focus', revisar);
+    const interval = setInterval(revisar, 1000);
+    return () => {
+      eventos.forEach(ev => window.removeEventListener(ev, registrarActividad));
+      document.removeEventListener('visibilitychange', alVolverALaApp);
+      window.removeEventListener('focus', revisar);
+      clearInterval(interval);
+    };
+  }, [currentUser?.id, currentUser?.rol]);
 
   // Polling de seguridad activo: detectar si el usuario fue eliminado, desactivado o si cambió su PIN/rol
   useEffect(() => {
@@ -584,7 +669,7 @@ function App() {
             pinSignature: res.pinSignature,
           };
           setCurrentUser(syncedUser);
-          localStorage.setItem('currentUser', JSON.stringify(syncedUser));
+          guardarSesion(syncedUser);
         }
       } catch (err) {
         // Ignorar errores de red 502 temporales durante reinicios del servidor
@@ -602,10 +687,41 @@ function App() {
   }
 
   if (!currentUser) {
-    return <LoginGate onLoginSuccess={handleLoginSuccess} />;
+    return <LoginGate onLoginSuccess={handleLoginSuccess} aviso={avisoLogin} />;
   }
 
   return (
+    <>
+    {segundosParaCierre !== null && (
+      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
+        <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 text-center">
+          <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+            <Lock className="w-7 h-7" />
+          </div>
+          <h2 className="font-black text-slate-900 text-base uppercase tracking-tight">¿Sigues ahí?</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Tu sesión se cerrará por inactividad en <strong className="text-slate-900 text-lg">{segundosParaCierre}s</strong>
+          </p>
+          <div className="grid grid-cols-2 gap-3 mt-5">
+            <button
+              type="button"
+              data-sin-actividad
+              onClick={handleLogout}
+              className="py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-2xl text-xs uppercase transition-colors"
+            >
+              Cerrar sesión
+            </button>
+            <button
+              type="button"
+              onClick={() => setSegundosParaCierre(null)}
+              className="py-3.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black rounded-2xl text-xs uppercase transition-colors active:scale-95"
+            >
+              Seguir aquí
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout title="Resumen de Ventas" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><DashboardPage /></ProtectedRoute></Layout>} />
@@ -622,6 +738,7 @@ function App() {
         <Route path="/configuracion" element={<Layout title="Configuración de Empresa" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><ConfiguracionPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
       </Routes>
     </BrowserRouter>
+    </>
   );
 }
 
