@@ -48,6 +48,16 @@ const CONCEPTOS_RAPIDOS = [
   { label: '🛠️ Mantenimiento / Luz', nombre: 'Mantenimiento / Fluorescentes', cat: 'Otros' },
 ];
 
+// Helper para obtener fecha local de Perú en formato YYYY-MM-DD (America/Lima)
+export const getFechaPeru = (dateObj = new Date()) => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(dateObj);
+};
+
 // Helper para parsear métodos de pago (incluyendo desglose mixto)
 export function parsearGastoMetodos(metodoPagoStr, totalMonto = 0) {
   if (!metodoPagoStr) return { efec: totalMonto, yape: 0, tarj: 0, esMixto: false };
@@ -78,54 +88,25 @@ export function parsearGastoMetodos(metodoPagoStr, totalMonto = 0) {
 
 export default function ComprasPage() {
   const [compras, setCompras] = useState([]);
-  const [ventas, setVentas] = useState([]);
   const [stats, setStats] = useState(null);
   const [cargando, setCargando] = useState(true);
-  const [sincronizando, setSincronizando] = useState(false);
-  const [ultimaSync, setUltimaSync] = useState(null);
   const [toastMsg, setToastMsg] = useState(null);
   
   // Modales
   const [modalManual, setModalManual] = useState(false);
   const [modalEditar, setModalEditar] = useState(false);
-  const [modalReporteCaja, setModalReporteCaja] = useState(false);
   const [compraEditando, setCompraEditando] = useState(null);
   const [compraEliminando, setCompraEliminando] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [editCatId, setEditCatId] = useState(null);
 
-  // Filtros
-  const hoyStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  // Filtros en hora de Lima
+  const hoyStr = useMemo(() => getFechaPeru(), []);
   const [fechaDesde, setFechaDesde] = useState(hoyStr);
   const [fechaHasta, setFechaHasta] = useState(hoyStr);
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
   const [filtroMetodoPago, setFiltroMetodoPago] = useState('Todos');
   const [busquedaTexto, setBusquedaTexto] = useState('');
-
-  // Parámetros de Control de Caja Borrador. Se recuerdan en este equipo: antes venían
-  // con valores fijos (S/ 400 y la dirección de otro local) que descuadraban el control.
-  const leerGuardado = (clave, porDefecto) => {
-    try {
-      return localStorage.getItem(clave) ?? porDefecto;
-    } catch {
-      return porDefecto;
-    }
-  };
-  const [cajaInicialEfec, setCajaInicialEfec] = useState(() => leerGuardado('caja_inicial_efectivo', '0.00'));
-  const [cajaInicialYape, setCajaInicialYape] = useState(() => leerGuardado('caja_inicial_yape', '0.00'));
-  const [cajaInicialOtros, setCajaInicialOtros] = useState(() => leerGuardado('caja_inicial_otros', '0.00'));
-  const [tiendaInfo, setTiendaInfo] = useState(() => leerGuardado('caja_tienda_info', COMPANY_CONFIG.address || ''));
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('caja_inicial_efectivo', cajaInicialEfec);
-      localStorage.setItem('caja_inicial_yape', cajaInicialYape);
-      localStorage.setItem('caja_inicial_otros', cajaInicialOtros);
-      localStorage.setItem('caja_tienda_info', tiendaInfo);
-    } catch {
-      // Sin almacenamiento local: los valores solo duran mientras la pantalla esté abierta
-    }
-  }, [cajaInicialEfec, cajaInicialYape, cajaInicialOtros, tiendaInfo]);
 
   const hoy = new Date();
   const [periodoMes, setPeriodoMes] = useState(
@@ -150,7 +131,7 @@ export default function ComprasPage() {
   const fetchTodo = useCallback(async () => {
     setCargando(true);
     try {
-      const [cs, st, stApi, vts] = await Promise.all([
+      const [cs, st, stApi] = await Promise.all([
         api.getCompras(fechaDesde, fechaHasta, {
           categoria: filtroCategoria !== 'Todas' ? filtroCategoria : undefined,
           metodoPago: filtroMetodoPago !== 'Todos' ? filtroMetodoPago : undefined,
@@ -158,10 +139,8 @@ export default function ComprasPage() {
         }),
         api.getComprasStats(),
         api.getStatus().catch(() => null),
-        api.getHistorialVentas(fechaDesde, fechaHasta).catch(() => [])
       ]);
       setCompras(cs || []);
-      setVentas(vts || []);
       setStats(st);
       if (stApi && stApi.ok) {
         setApiStatus({ modoDemo: stApi.modoDemo, apisunatActivo: stApi.apisunatActivo });
@@ -178,28 +157,30 @@ export default function ComprasPage() {
     fetchTodo();
   }, [fetchTodo]);
 
-  // Accesos rápidos de fechas
+  // Accesos rápidos de fechas (en hora local de Lima America/Lima)
   const setRangoPreset = (preset) => {
-    const d = new Date();
     if (preset === 'hoy') {
-      const s = d.toISOString().split('T')[0];
-      setFechaDesde(s);
-      setFechaHasta(s);
+      const hoy = getFechaPeru();
+      setFechaDesde(hoy);
+      setFechaHasta(hoy);
     } else if (preset === 'ayer') {
+      const d = new Date();
       d.setDate(d.getDate() - 1);
-      const s = d.toISOString().split('T')[0];
-      setFechaDesde(s);
-      setFechaHasta(s);
+      const ayer = getFechaPeru(d);
+      setFechaDesde(ayer);
+      setFechaHasta(ayer);
     } else if (preset === 'semana') {
+      const d = new Date();
       const day = d.getDay() || 7;
       d.setDate(d.getDate() - day + 1);
-      const sDesde = d.toISOString().split('T')[0];
-      const sHasta = new Date().toISOString().split('T')[0];
+      const sDesde = getFechaPeru(d);
+      const sHasta = getFechaPeru(new Date());
       setFechaDesde(sDesde);
       setFechaHasta(sHasta);
     } else if (preset === 'mes') {
-      const sDesde = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
-      const sHasta = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+      const d = new Date();
+      const sDesde = getFechaPeru(new Date(d.getFullYear(), d.getMonth(), 1));
+      const sHasta = getFechaPeru(new Date(d.getFullYear(), d.getMonth() + 1, 0));
       setFechaDesde(sDesde);
       setFechaHasta(sHasta);
     }
@@ -407,27 +388,6 @@ export default function ComprasPage() {
     }
   };
 
-  // ── CÁLCULO DETALLADO DE INGRESOS POR VENTAS DEL PERIODO ─────────────────
-  const ventasDetalle = useMemo(() => {
-    let efec = 0, tarj = 0, yape = 0, total = 0;
-    (ventas || []).forEach(v => {
-      if (v.anulado || v.estadoPedido === 'Cancelado') return;
-      total += (parseFloat(v.total) || 0);
-      if (v.metodoPago === 'Efectivo') {
-        efec += (parseFloat(v.total) || 0);
-      } else if (v.metodoPago === 'Tarjeta') {
-        tarj += (parseFloat(v.total) || 0);
-      } else if (v.metodoPago === 'Yape') {
-        yape += (parseFloat(v.total) || 0);
-      } else if (v.metodoPago === 'Mixto') {
-        efec += (parseFloat(v.montoEfectivo) || 0);
-        tarj += (parseFloat(v.montoTarjeta) || 0);
-        yape += (parseFloat(v.montoYape) || 0);
-      }
-    });
-    return { total, efec, tarj, yape };
-  }, [ventas]);
-
   // ── CÁLCULO DETALLADO DE EGRESOS POR GASTOS DEL PERIODO ───────────────────
   const gastosDetalle = useMemo(() => {
     let efec = 0, tarj = 0, yape = 0, total = 0;
@@ -442,53 +402,27 @@ export default function ComprasPage() {
     return { total, efec, tarj, yape };
   }, [compras]);
 
-  // ── CUADRE DE CAJA FÍSICA Y BALANCE NETO ──────────────────────────────────
-  const cuadreCaja = useMemo(() => {
-    const ciEfec = parseFloat(cajaInicialEfec) || 0;
-    const ciYape = parseFloat(cajaInicialYape) || 0;
-    const ciOtros = parseFloat(cajaInicialOtros) || 0;
-    const totalCI = ciEfec + ciYape + ciOtros;
-
-    // Efectivo real esperado en cajón físico:
-    const saldoEfectivoFinal = ciEfec + ventasDetalle.efec - gastosDetalle.efec;
-
-    // Balance neto operativo del periodo (Ingresos Totales - Gastos Totales):
-    const utilidadNetaOperativa = ventasDetalle.total - gastosDetalle.total;
-
-    return {
-      ciEfec,
-      ciYape,
-      ciOtros,
-      totalCI,
-      saldoEfectivoFinal,
-      utilidadNetaOperativa
-    };
-  }, [cajaInicialEfec, cajaInicialYape, cajaInicialOtros, ventasDetalle, gastosDetalle]);
-
-  // ── EXPORTAR CONTROL CAJA BORRADOR A EXCEL (.XLS) ──────────────────────
-  const exportarControlCajaExcel = () => {
+  // ── EXPORTAR GASTOS Y COMPRAS A EXCEL (.XLS) ──────────────────────
+  const exportarGastosExcel = () => {
     if (compras.length === 0) {
       showToast('No hay gastos registrados en el periodo seleccionado.', 'error');
       return;
     }
 
-    const fechaObj = new Date(fechaDesde + 'T12:00:00');
-    const diaNombre = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'][fechaObj.getDay()];
-    const mesNombre = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'][fechaObj.getMonth()];
-    const anio = fechaObj.getFullYear();
-
     let tableRows = '';
     compras.forEach((c, idx) => {
-      const comprobante = c.serieNumero ? `${c.tipoDocumento} ${c.serieNumero}` : (c.metodoPago === 'Yape' ? 'YAPE' : (c.tipoDocumento || ''));
+      const comprobante = c.serieNumero ? `${c.tipoDocumento} ${c.serieNumero}` : (c.tipoDocumento || 'Recibo Interno');
       const bg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+      const fechaFormat = c.fechaEmision ? new Date(c.fechaEmision).toLocaleDateString('es-PE') : (c.fecha ? new Date(c.fecha).toLocaleDateString('es-PE') : '');
       tableRows += `
         <tr style="background-color: ${bg};">
-          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center; mso-number-format:'\\@';">${idx + 1}</td>
+          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${idx + 1}</td>
+          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${fechaFormat}</td>
           <td style="border: 1px solid #CBD5E1; padding: 6px; font-weight: bold;">${c.proveedor || 'Sin descripción'}</td>
           <td style="border: 1px solid #CBD5E1; padding: 6px;">${c.categoria || 'Otros'}</td>
-          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; font-weight: bold; mso-number-format:'\\&quot;S/\\&quot;\\ #\\,##0\\.00';">${parseFloat(c.total || 0).toFixed(2)}</td>
-          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${c.metodoPago || comprobante}</td>
-          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;"></td>
+          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${comprobante}</td>
+          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: right; font-weight: bold;">S/ ${parseFloat(c.total || 0).toFixed(2)}</td>
+          <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${c.metodoPago || 'Efectivo'}</td>
         </tr>
       `;
     });
@@ -497,102 +431,51 @@ export default function ComprasPage() {
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
       <head>
         <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-        <!--[if gte mso 9]>
-        <xml>
-          <x:ExcelWorkbook>
-            <x:ExcelWorksheets>
-              <x:ExcelWorksheet>
-                <x:Name>Control Caja Borrador</x:Name>
-                <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-              </x:ExcelWorksheet>
-            </x:ExcelWorksheets>
-          </x:ExcelWorkbook>
-        </xml>
-        <![endif]-->
         <style>
           body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1E293B; }
           .header-title { font-size: 16px; font-weight: 900; text-align: center; color: #0F172A; }
           .sub-header { font-size: 11px; font-weight: 800; color: #475569; text-align: center; }
           .table-header { background-color: #0F172A; color: #FFFFFF; font-weight: 800; text-align: center; border: 1px solid #0F172A; padding: 6px; }
           .total-row { background-color: #FEF3C7; font-weight: 900; font-size: 12px; }
-          .ingreso-row { background-color: #ECFDF5; font-weight: 800; }
           .egreso-row { background-color: #FFF1F2; font-weight: 800; }
         </style>
       </head>
       <body>
         <table>
-          <tr><td colspan="6" class="header-title">CONTROL CAJA BORRADOR Y CUADRE DEL DÍA</td></tr>
-          <tr><td colspan="6" class="sub-header">TIENDA: ${tiendaInfo}</td></tr>
-          <tr>
-            <td colspan="2"><b>FECHA:</b> ${fechaDesde} al ${fechaHasta}</td>
-            <td><b>DÍA:</b> ${diaNombre}</td>
-            <td><b>MES:</b> ${mesNombre}</td>
-            <td colspan="2"><b>AÑO:</b> ${anio}</td>
-          </tr>
-          <tr>
-            <td colspan="6"><b>C.I. (Caja Inicial):</b> S/ ${cuadreCaja.ciEfec.toFixed(2)} (Efectivo) + S/ ${cuadreCaja.ciYape.toFixed(2)} (Yape) = <b>S/ ${cuadreCaja.totalCI.toFixed(2)}</b></td>
-          </tr>
-          <tr><td colspan="6"></td></tr>
-          
-          <!-- RESUMEN CONSOLIDADO CON MONEDAS POR SEPARADO -->
-          <tr class="ingreso-row">
-            <td colspan="3" style="border: 1px solid #000; padding: 6px;"><b>1. TOTAL INGRESOS POR VENTAS:</b></td>
-            <td style="border: 1px solid #000; text-align: right; padding: 6px; font-weight: bold;">S/ ${ventasDetalle.total.toFixed(2)}</td>
-            <td colspan="2" style="border: 1px solid #000; padding: 6px;"></td>
-          </tr>
-          <tr>
-            <td colspan="3" style="border: 1px solid #ccc; padding: 4px; padding-left: 20px;">• Efectivo en Ventas:</td>
-            <td style="border: 1px solid #ccc; text-align: right; padding: 4px;">S/ ${ventasDetalle.efec.toFixed(2)}</td>
-            <td colspan="2" style="border: 1px solid #ccc;"></td>
-          </tr>
-          <tr>
-            <td colspan="3" style="border: 1px solid #ccc; padding: 4px; padding-left: 20px;">• Yape / Plin en Ventas:</td>
-            <td style="border: 1px solid #ccc; text-align: right; padding: 4px;">S/ ${ventasDetalle.yape.toFixed(2)}</td>
-            <td colspan="2" style="border: 1px solid #ccc;"></td>
-          </tr>
-          <tr>
-            <td colspan="3" style="border: 1px solid #ccc; padding: 4px; padding-left: 20px;">• Tarjeta / POS en Ventas:</td>
-            <td style="border: 1px solid #ccc; text-align: right; padding: 4px;">S/ ${ventasDetalle.tarj.toFixed(2)}</td>
-            <td colspan="2" style="border: 1px solid #ccc;"></td>
-          </tr>
-
+          <tr><td colspan="7" class="header-title">REPORTE DETALLADO DE GASTOS Y COMPRAS</td></tr>
+          <tr><td colspan="7" class="sub-header">Rango: ${fechaDesde} al ${fechaHasta}</td></tr>
+          <tr><td colspan="7"></td></tr>
           <tr class="egreso-row">
-            <td colspan="3" style="border: 1px solid #000; padding: 6px;"><b>2. TOTAL GASTOS Y EGRESOS DEL DÍA:</b></td>
+            <td colspan="4" style="border: 1px solid #000; padding: 6px;"><b>TOTAL GENERAL GASTOS:</b></td>
             <td style="border: 1px solid #000; text-align: right; padding: 6px; font-weight: bold;">S/ ${gastosDetalle.total.toFixed(2)}</td>
-            <td colspan="2" style="border: 1px solid #000; padding: 6px;"></td>
+            <td colspan="2" style="border: 1px solid #000; padding: 6px;">${compras.length} comprobantes</td>
           </tr>
           <tr>
-            <td colspan="3" style="border: 1px solid #ccc; padding: 4px; padding-left: 20px;">• Salidas en Efectivo (Caja):</td>
+            <td colspan="4" style="border: 1px solid #ccc; padding: 4px; padding-left: 20px;">• Efectivo:</td>
             <td style="border: 1px solid #ccc; text-align: right; padding: 4px;">S/ ${gastosDetalle.efec.toFixed(2)}</td>
             <td colspan="2" style="border: 1px solid #ccc;"></td>
           </tr>
           <tr>
-            <td colspan="3" style="border: 1px solid #ccc; padding: 4px; padding-left: 20px;">• Pagos en Yape / Plin:</td>
+            <td colspan="4" style="border: 1px solid #ccc; padding: 4px; padding-left: 20px;">• Yape / Plin:</td>
             <td style="border: 1px solid #ccc; text-align: right; padding: 4px;">S/ ${gastosDetalle.yape.toFixed(2)}</td>
             <td colspan="2" style="border: 1px solid #ccc;"></td>
           </tr>
           <tr>
-            <td colspan="3" style="border: 1px solid #ccc; padding: 4px; padding-left: 20px;">• Pagos en Tarjeta / Banco:</td>
+            <td colspan="4" style="border: 1px solid #ccc; padding: 4px; padding-left: 20px;">• Tarjeta / POS:</td>
             <td style="border: 1px solid #ccc; text-align: right; padding: 4px;">S/ ${gastosDetalle.tarj.toFixed(2)}</td>
             <td colspan="2" style="border: 1px solid #ccc;"></td>
           </tr>
-
-          <tr class="total-row">
-            <td colspan="3" style="border: 1px solid #000; padding: 6px;"><b>3. SALDO FINAL ESTIMADO EN EFECTIVO (CAJÓN):</b></td>
-            <td style="border: 1px solid #000; text-align: right; padding: 6px; font-weight: bold;">S/ ${cuadreCaja.saldoEfectivoFinal.toFixed(2)}</td>
-            <td colspan="2" style="border: 1px solid #000; padding: 6px;">(C.I. Efectivo S/ ${cuadreCaja.ciEfec.toFixed(2)} + Ventas Efec S/ ${ventasDetalle.efec.toFixed(2)} - Gastos Efec S/ ${gastosDetalle.efec.toFixed(2)})</td>
-          </tr>
+          <tr><td colspan="7"></td></tr>
           <tr>
-            <td colspan="3" style="border: 1px solid #999; padding: 4px; font-weight: bold;">4. SALDO DIGITAL / BANCARIO (YAPE + TARJETA):</td>
-            <td style="border: 1px solid #999; text-align: right; padding: 4px; font-weight: bold;">S/ ${(ventasDetalle.yape + ventasDetalle.tarj - gastosDetalle.yape - gastosDetalle.tarj + cuadreCaja.ciYape).toFixed(2)}</td>
-            <td colspan="2" style="border: 1px solid #999;"></td>
+            <th class="table-header">#</th>
+            <th class="table-header">FECHA</th>
+            <th class="table-header">DESCRIPCIÓN / PROVEEDOR</th>
+            <th class="table-header">CATEGORÍA</th>
+            <th class="table-header">COMPROBANTE</th>
+            <th class="table-header">TOTAL (S/)</th>
+            <th class="table-header">MÉTODO PAGO</th>
           </tr>
-          <tr>
-            <td colspan="3" style="border: 1px solid #000; font-weight: bold; padding: 6px; background-color: #E2E8F0;">5. UTILIDAD OPERATIVA NETA DEL DÍA (VENTAS - GASTOS):</td>
-            <td style="border: 1px solid #000; font-weight: bold; text-align: right; padding: 6px; background-color: #E2E8F0;">S/ ${cuadreCaja.utilidadNetaOperativa.toFixed(2)}</td>
-            <td colspan="2" style="border: 1px solid #000; background-color: #E2E8F0;"></td>
-          </tr>
-          <tr><td colspan="6"></td></tr>
+          ${tableRows}
         </table>
       </body>
       </html>
@@ -603,11 +486,12 @@ export default function ComprasPage() {
     const a = document.createElement('a');
     a.href = url;
     const marca = (COMPANY_CONFIG.brandShort || 'EMPRESA').replace(/\s+/g, '_');
-    a.download = `Control_Caja_Borrador_${fechaDesde}_${marca}.xls`;
+    a.download = `Reporte_Gastos_${fechaDesde}_${fechaHasta}_${marca}.xls`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('✅ Archivo Excel descargado con éxito.');
   };
+  const exportarControlCajaExcel = exportarGastosExcel;
 
   // ── EXPORTAR CSV SIRE (ORIGINAL) ────────────────────────────────────────
   const exportarCSV = () => {
@@ -665,10 +549,10 @@ export default function ComprasPage() {
       <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2.5">
-            <Wallet className="w-7 h-7 text-amber-500" /> Control de Gastos y Cuadre de Caja
+            <Wallet className="w-7 h-7 text-amber-500" /> Control de Gastos y Compras
           </h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Registro diario de salidas de caja, ingresos por ventas y generación del reporte <strong>Control Caja Borrador</strong>.
+            Registro y control contable de compras, egresos operativos y facturas de proveedores.
           </p>
         </div>
 
@@ -681,17 +565,11 @@ export default function ComprasPage() {
             <PlusCircle className="w-4 h-4" /> + Registrar Gasto
           </button>
           <button
-            onClick={() => setModalReporteCaja(true)}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-md transition-all cursor-pointer"
-          >
-            <Printer className="w-4 h-4 text-amber-400" /> Control Caja
-          </button>
-          <button
-            onClick={exportarControlCajaExcel}
+            onClick={exportarGastosExcel}
             className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-md transition-all cursor-pointer"
-            title="Descargar formato Excel compatible con el cuaderno físico"
+            title="Descargar reporte detallado en Excel"
           >
-            <Download className="w-4 h-4" /> Excel Caja
+            <Download className="w-4 h-4" /> Exportar a Excel
           </button>
         </div>
       </div>
@@ -802,66 +680,70 @@ export default function ComprasPage() {
       </div>
 
       {/* ═══════════════════════════════════════════════════
-          PANEL DE CUADRE DEL DÍA: INGRESOS vs EGRESOS
+          PANEL DE RESUMEN DE GASTOS Y COMPRAS
       ═══════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         
-        {/* TARJETA 1: INGRESOS POR VENTAS */}
-        <div className="bg-white rounded-3xl border border-emerald-100 shadow-sm p-5 relative overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1">
-              <ArrowDownRight className="w-3.5 h-3.5 text-emerald-500" /> Ingresos por Ventas
-            </span>
-            <span className="text-[10px] font-bold text-slate-400">{ventas.length} ventas</span>
-          </div>
-          <p className="text-2xl font-black font-mono text-slate-900">
-            S/ {ventasDetalle.total.toFixed(2)}
-          </p>
-          <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1 text-[10px] text-slate-600 font-bold">
-            <div>💵 Efec: S/ {ventasDetalle.efec.toFixed(2)}</div>
-            <div>📱 Yape: S/ {ventasDetalle.yape.toFixed(2)}</div>
-            <div>💳 Tarj: S/ {ventasDetalle.tarj.toFixed(2)}</div>
-          </div>
-        </div>
-
-        {/* TARJETA 2: GASTOS Y EGRESOS */}
+        {/* TARJETA 1: TOTAL GASTOS Y COMPRAS */}
         <div className="bg-white rounded-3xl border border-rose-100 shadow-sm p-5 relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1">
-              <ArrowUpRight className="w-3.5 h-3.5 text-rose-500" /> Gastos y Compras
+              <ArrowUpRight className="w-3.5 h-3.5 text-rose-500" /> Total Gastos del Periodo
             </span>
-            <span className="text-[10px] font-bold text-slate-400">{compras.length} gastos</span>
+            <span className="text-[10px] font-bold text-slate-400">{compras.length} registros</span>
           </div>
-          <p className="text-2xl font-black font-mono text-rose-600">
+          <p className="text-3xl font-black font-mono text-rose-600">
             S/ {gastosDetalle.total.toFixed(2)}
           </p>
-          <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1 text-[10px] text-slate-600 font-bold">
-            <div>💵 Efec: S/ {gastosDetalle.efec.toFixed(2)}</div>
-            <div>📱 Yape: S/ {gastosDetalle.yape.toFixed(2)}</div>
-            <div>💳 Tarj: S/ {gastosDetalle.tarj.toFixed(2)}</div>
+          <p className="text-[10px] text-slate-400 mt-2">
+            Monto acumulado en facturas, recibos y egresos operativos
+          </p>
+        </div>
+
+        {/* TARJETA 2: DESGLOSE POR FORMA DE PAGO */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-5 relative overflow-hidden flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+              <DollarSign className="w-3.5 h-3.5 text-slate-500" /> Formas de Pago
+            </span>
+            <span className="text-[10px] font-bold text-slate-400 font-mono">100% Egresos</span>
+          </div>
+          <div className="space-y-1.5 text-xs text-slate-700 font-bold">
+            <div className="flex justify-between items-center py-0.5 border-b border-slate-50">
+              <span className="flex items-center gap-1">💵 Efectivo:</span>
+              <span className="font-mono font-black text-slate-900">S/ {gastosDetalle.efec.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center py-0.5 border-b border-slate-50">
+              <span className="flex items-center gap-1">📱 Yape / Plin:</span>
+              <span className="font-mono font-black text-slate-900">S/ {gastosDetalle.yape.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center py-0.5">
+              <span className="flex items-center gap-1">💳 Tarjeta / Banco:</span>
+              <span className="font-mono font-black text-slate-900">S/ {gastosDetalle.tarj.toFixed(2)}</span>
+            </div>
           </div>
         </div>
 
-        {/* TARJETA 3: SALDO EFECTIVO EN CAJA Y BALANCE NETO */}
+        {/* TARJETA 3: PROMEDIO Y PERIODO */}
         <div className="bg-slate-900 rounded-3xl shadow-lg p-5 text-white flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1">
-                <Scale className="w-3.5 h-3.5 text-amber-400" /> Efectivo Esperado en Caja
+                <Tag className="w-3.5 h-3.5 text-amber-400" /> Promedio por Comprobante
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">C.I.: S/ {cuadreCaja.ciEfec.toFixed(2)}</span>
+              <span className="text-[10px] text-slate-400 font-mono">{compras.length} gastos</span>
             </div>
-            <p className="text-3xl font-black font-mono text-emerald-400">
-              S/ {cuadreCaja.saldoEfectivoFinal.toFixed(2)}
+            <p className="text-3xl font-black font-mono text-amber-400">
+              S/ {compras.length > 0 ? (gastosDetalle.total / compras.length).toFixed(2) : '0.00'}
             </p>
             <p className="text-[10px] text-slate-400 mt-0.5">
-              (Caja Inicial + Ventas Efectivo - Gastos Efectivo)
+              Promedio por factura o recibo en este rango
             </p>
           </div>
           <div className="mt-3 pt-2.5 border-t border-slate-800 flex justify-between items-center text-xs font-bold">
-            <span className="text-slate-400">Utilidad Neta del Periodo:</span>
-            <span className={`font-mono font-black ${cuadreCaja.utilidadNetaOperativa >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              S/ {cuadreCaja.utilidadNetaOperativa.toFixed(2)}
+            <span className="text-slate-400">Rango seleccionado:</span>
+            <span className="font-mono text-slate-300 font-black">
+              {fechaDesde} al {fechaHasta}
             </span>
           </div>
         </div>
@@ -1494,290 +1376,6 @@ export default function ComprasPage() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════
-          MODAL / VISTA DE IMPRESIÓN 'CONTROL CAJA BORRADOR'
-      ═══════════════════════════════════════════════════ */}
-      {modalReporteCaja && (() => {
-        const fechaObj = new Date(fechaDesde + 'T12:00:00');
-        const diaNombre = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'][fechaObj.getDay()];
-        const mesNombre = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'][fechaObj.getMonth()];
-        const anio = fechaObj.getFullYear();
-
-        return (
-          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-6 overflow-y-auto">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-scale-in">
-              
-              {/* Barra de control superior (no se imprime) */}
-              <div className="p-4 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                <div className="flex items-center gap-3">
-                  <Printer className="w-5 h-5 text-amber-400" />
-                  <span className="font-black text-sm uppercase tracking-wider">Vista Previa — Control Caja Borrador</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => window.print()}
-                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
-                  >
-                    <Printer className="w-4 h-4" /> Imprimir / Guardar PDF
-                  </button>
-                  <button
-                    onClick={exportarControlCajaExcel}
-                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                  >
-                    <Download className="w-4 h-4" /> Excel
-                  </button>
-                  <button onClick={() => setModalReporteCaja(false)} className="text-slate-400 hover:text-white ml-2 cursor-pointer">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* CONTENIDO IMPRIMIBLE (Hoja física A4 idéntica a la foto) */}
-              <div className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar bg-slate-100 print:p-0 print:bg-white" id="imprimible-control-caja">
-                <div className="bg-white p-8 md:p-12 shadow-lg border border-slate-300 rounded-2xl mx-auto max-w-[820px] print:shadow-none print:border-none print:p-0 print:max-w-none text-slate-900 font-sans">
-                  
-                  {/* Encabezado del documento */}
-                  <div className="text-center mb-6 border-b-2 border-slate-900 pb-4">
-                    <h1 className="text-2xl font-black uppercase tracking-wider text-slate-950">CONTROL CAJA BORRADOR</h1>
-                    <p className="text-xs font-bold text-slate-700 mt-1 uppercase tracking-widest">
-                      TIENDA: <input type="text" value={tiendaInfo} onChange={e => setTiendaInfo(e.target.value)} className="font-black border-b border-dashed border-slate-400 focus:outline-none text-center px-2 py-0.5 bg-transparent" />
-                    </p>
-                  </div>
-
-                  {/* Metadatos Fecha / Caja Inicial */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-bold mb-4 pb-4 border-b border-slate-300">
-                    <div>
-                      <span className="text-slate-500 block text-[10px] uppercase">Fecha:</span>
-                      <span className="font-mono font-black">{fechaDesde === fechaHasta ? fechaDesde : `${fechaDesde} al ${fechaHasta}`}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] uppercase">Día:</span>
-                      <span className="font-black">{diaNombre}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] uppercase">Mes:</span>
-                      <span className="font-black">{mesNombre}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] uppercase">Año:</span>
-                      <span className="font-mono font-black">{anio}</span>
-                    </div>
-                  </div>
-
-                  {/* C.I. (Caja Inicial Editable en Pantalla) */}
-                  <div className="bg-slate-50 border border-slate-300 rounded-xl p-3.5 mb-6 text-xs flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-black uppercase text-slate-700">C.I. (Caja Inicial):</span>
-                      <span className="font-mono font-bold">S/</span>
-                      <input
-                        type="number"
-                        step="any"
-                        value={cajaInicialEfec}
-                        onChange={e => setCajaInicialEfec(e.target.value)}
-                        placeholder="Efectivo"
-                        className="w-20 font-mono font-black text-slate-900 border-b border-slate-400 bg-transparent text-center focus:outline-none"
-                        title="Caja Inicial Efectivo"
-                      />
-                      <span className="text-slate-500 font-bold">+</span>
-                      <input
-                        type="number"
-                        step="any"
-                        value={cajaInicialYape}
-                        onChange={e => setCajaInicialYape(e.target.value)}
-                        placeholder="Yape"
-                        className="w-20 font-mono font-black text-slate-900 border-b border-slate-400 bg-transparent text-center focus:outline-none"
-                        title="Caja Inicial Yape"
-                      />
-                      <span className="text-[10px] text-slate-500 font-bold">(Yape)</span>
-                    </div>
-                    <div className="font-mono font-black text-sm text-slate-950">
-                      Total C.I.: S/ {cuadreCaja.totalCI.toFixed(2)}
-                    </div>
-                  </div>
-
-                  {/* TABLA FORMAL CONTROL CAJA */}
-                  <table className="w-full text-xs border-collapse border border-slate-900 mb-6">
-                    <thead>
-                      <tr className="bg-slate-200 text-slate-900 font-black uppercase text-[11px] border-b-2 border-slate-900">
-                        <th className="border border-slate-900 p-2 text-center w-8">Nº</th>
-                        <th className="border border-slate-900 p-2 text-left">NOMBRE / DESCRIPCIÓN</th>
-                        <th className="border border-slate-900 p-2 text-left w-32">CATEGORÍA</th>
-                        <th className="border border-slate-900 p-2 text-right w-24">MONTO</th>
-                        <th className="border border-slate-900 p-2 text-center w-36">Nº COMPROBANTE / PAGO</th>
-                        <th className="border border-slate-900 p-2 text-center w-24">FIRMA</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-400">
-                      {compras.length > 0 ? compras.map((c, i) => {
-                        const comprobanteStr = c.serieNumero ? `${c.tipoDocumento} ${c.serieNumero}` : (c.metodoPago === 'Yape' ? 'YAPE' : (c.tipoDocumento || ''));
-                        return (
-                          <tr key={c.id} className="hover:bg-slate-50">
-                            <td className="border border-slate-900 p-2 text-center font-mono text-slate-500 font-bold">{i + 1}</td>
-                            <td className="border border-slate-900 p-2 font-bold uppercase">{c.proveedor}</td>
-                            <td className="border border-slate-900 p-2 text-slate-600">{c.categoria || 'Otros'}</td>
-                            <td className="border border-slate-900 p-2 text-right font-mono font-black">
-                              {parseFloat(c.total || 0).toFixed(2)}
-                            </td>
-                            <td className="border border-slate-900 p-2 text-center font-mono font-bold text-slate-700">
-                              {c.metodoPago || comprobanteStr}
-                            </td>
-                            <td className="border border-slate-900 p-2 text-center"></td>
-                          </tr>
-                        );
-                      }) : (
-                        <tr>
-                          <td colSpan="6" className="border border-slate-900 p-8 text-center text-slate-400 font-bold">
-                            Sin registros de gastos en la fecha seleccionada.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-amber-100 font-black border-t-2 border-slate-900 text-slate-950">
-                        <td colSpan="3" className="border border-slate-900 p-2.5 text-right uppercase tracking-wider">
-                          TOTAL GASTOS / EGRESOS (S.T.):
-                        </td>
-                        <td className="border border-slate-900 p-2.5 text-right font-mono text-sm">
-                          S/ {gastosDetalle.total.toFixed(2)}
-                        </td>
-                        <td colSpan="2" className="border border-slate-900 p-2 text-[10px] text-slate-700">
-                          Efec: S/ {gastosDetalle.efec.toFixed(2)} | Yape/Dig: S/ {(gastosDetalle.yape + gastosDetalle.tarj).toFixed(2)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-
-                  {/* Resumen Detallado de Cuadre y Firmas con desglose de monedas por separado */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs pt-4 border-t-2 border-slate-900">
-                    <div className="space-y-3 font-bold bg-slate-50 p-4 rounded-xl border border-slate-300">
-                      
-                      {/* 1. INGRESOS POR VENTAS DETALLADO */}
-                      <div className="pb-2 border-b border-slate-200">
-                        <div className="flex justify-between text-emerald-800 font-black text-xs uppercase mb-1">
-                          <span>1. INGRESOS POR VENTAS:</span>
-                          <span className="font-mono text-sm">S/ {ventasDetalle.total.toFixed(2)}</span>
-                        </div>
-                        <div className="pl-3 space-y-0.5 text-[11px] text-slate-700 font-normal">
-                          <div className="flex justify-between">
-                            <span>• Efectivo en Ventas:</span>
-                            <span className="font-mono font-bold text-slate-900">S/ {ventasDetalle.efec.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>• Yape / Plin en Ventas:</span>
-                            <span className="font-mono font-bold text-slate-900">S/ {ventasDetalle.yape.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>• Tarjeta / POS en Ventas:</span>
-                            <span className="font-mono font-bold text-slate-900">S/ {ventasDetalle.tarj.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 2. GASTOS Y EGRESOS DETALLADO */}
-                      <div className="pb-2 border-b border-slate-200">
-                        <div className="flex justify-between text-rose-800 font-black text-xs uppercase mb-1">
-                          <span>2. GASTOS Y EGRESOS DEL DÍA:</span>
-                          <span className="font-mono text-sm">S/ {gastosDetalle.total.toFixed(2)}</span>
-                        </div>
-                        <div className="pl-3 space-y-0.5 text-[11px] text-slate-700 font-normal">
-                          <div className="flex justify-between">
-                            <span>• Salidas en Efectivo (Caja):</span>
-                            <span className="font-mono font-bold text-slate-900">S/ {gastosDetalle.efec.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>• Pagos en Yape / Plin:</span>
-                            <span className="font-mono font-bold text-slate-900">S/ {gastosDetalle.yape.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>• Pagos en Tarjeta / Banco:</span>
-                            <span className="font-mono font-bold text-slate-900">S/ {gastosDetalle.tarj.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 3. CUADRE DE EFECTIVO EN CAJA (FÍSICO) */}
-                      <div className="pb-2 border-b border-slate-200 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200">
-                        <div className="flex justify-between text-slate-950 font-black text-xs uppercase">
-                          <span>3. SALDO FINAL EN EFECTIVO (CAJÓN):</span>
-                          <span className="font-mono text-sm text-amber-700 font-black">S/ {cuadreCaja.saldoEfectivoFinal.toFixed(2)}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-600 font-normal mt-1 leading-tight">
-                          (C.I. Efectivo S/ {cuadreCaja.ciEfec.toFixed(2)} + Ventas Efec S/ {ventasDetalle.efec.toFixed(2)} - Gastos Efec S/ {gastosDetalle.efec.toFixed(2)})
-                        </div>
-                      </div>
-
-                      {/* 4. SALDO DIGITAL / BANCARIO */}
-                      <div className="pb-1 text-[11px] text-slate-700">
-                        <div className="flex justify-between">
-                          <span className="font-bold">4. SALDO DIGITAL (YAPE + TARJETA):</span>
-                          <span className="font-mono font-black text-indigo-900">
-                            S/ {(ventasDetalle.yape + ventasDetalle.tarj - gastosDetalle.yape - gastosDetalle.tarj + cuadreCaja.ciYape).toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* 5. UTILIDAD OPERATIVA NETA */}
-                      <div className="flex justify-between text-slate-900 pt-1 text-xs font-black border-t border-slate-300">
-                        <span className="uppercase">UTILIDAD NETA DEL DÍA:</span>
-                        <span className={`font-mono text-sm ${cuadreCaja.utilidadNetaOperativa >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                          S/ {cuadreCaja.utilidadNetaOperativa.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col justify-between items-center py-2">
-                      <div className="w-full bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-[11px] space-y-1 text-slate-700">
-                        <div className="font-black text-slate-900 uppercase tracking-wider text-center pb-1 border-b border-slate-200">
-                          Resumen del Arqueo
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Total Comprobantes Emitidos:</span>
-                          <span className="font-mono font-bold">{ventas.length}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Total Egresos / Compras:</span>
-                          <span className="font-mono font-bold">{compras.length}</span>
-                        </div>
-                        <div className="flex justify-between font-bold text-slate-900 pt-1 border-t border-slate-200">
-                          <span>Balance General:</span>
-                          <span className="text-emerald-600">✓ CONFORME</span>
-                        </div>
-                      </div>
-
-                      <div className="w-52 border-t-2 border-dashed border-slate-800 text-center text-[10px] font-black uppercase tracking-widest text-slate-700 pt-2 mt-6">
-                        FIRMA RESPONSABLE CAJA
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ESTILOS DE IMPRESIÓN LIMPIOS PARA PDF */}
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          #imprimible-control-caja, #imprimible-control-caja * {
-            visibility: visible;
-          }
-          #imprimible-control-caja {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            padding: 0 !important;
-            background: white !important;
-          }
-        }
-      `}</style>
-
-    </section>
+      </section>
   );
 }

@@ -4619,19 +4619,25 @@ app.get('/api/compras', async (req, res) => {
   try {
     const conditions = [];
 
-    // Filtro por fecha contable legal (fechaEmision preferente, fallback a fecha de compra)
+    // Filtro por fecha contable legal (cubre zona horaria Lima UTC-5 y registros guardados en UTC)
     let dateFilter = null;
     if (desde && hasta) {
-      const nextDay = new Date(hasta + 'T00:00:00.000-05:00');
+      const gteDate = new Date(desde.includes('T') ? desde : `${desde}T00:00:00.000Z`);
+      const gteLima = new Date(desde.includes('T') ? desde : `${desde}T00:00:00.000-05:00`);
+      const minGte = gteDate < gteLima ? gteDate : gteLima;
+
+      const nextDay = new Date((hasta.includes('T') ? hasta.split('T')[0] : hasta) + 'T00:00:00.000-05:00');
       nextDay.setDate(nextDay.getDate() + 1);
       const nextDayStr = nextDay.toISOString().split('T')[0];
       dateFilter = {
-        gte: new Date(desde + 'T00:00:00.000-05:00'),
+        gte: minGte,
         lte: new Date(nextDayStr + 'T02:59:59.999-05:00')
       };
     } else if (desde) {
+      const gteDate = new Date(desde.includes('T') ? desde : `${desde}T00:00:00.000Z`);
+      const gteLima = new Date(desde.includes('T') ? desde : `${desde}T00:00:00.000-05:00`);
       dateFilter = {
-        gte: new Date(desde + 'T00:00:00.000-05:00')
+        gte: gteDate < gteLima ? gteDate : gteLima
       };
     } else {
       const ahora = new Date();
@@ -4884,8 +4890,8 @@ app.post('/api/compras', async (req, res) => {
         xmlData: xmlData ? String(xmlData) : null,
         origenCarga: origenCarga ? String(origenCarga) : 'manual',
         categoria: categoria ? String(categoria) : null,
-        fecha: fechaEmision ? new Date(fechaEmision) : new Date(),
-        fechaEmision: fechaEmision ? new Date(fechaEmision) : null,
+        fecha: fechaEmision ? (fechaEmision.includes('T') ? new Date(fechaEmision) : new Date(`${fechaEmision}T12:00:00.000-05:00`)) : new Date(),
+        fechaEmision: fechaEmision ? (fechaEmision.includes('T') ? new Date(fechaEmision) : new Date(`${fechaEmision}T12:00:00.000-05:00`)) : null,
         metodoPago: metodoPago ? String(metodoPago) : 'Efectivo',
       }
     });
@@ -4925,8 +4931,9 @@ app.put('/api/compras/:id', async (req, res) => {
     if (total !== undefined) data.total = parseFloat(total) || 0;
     if (categoria !== undefined) data.categoria = categoria ? String(categoria) : null;
     if (fechaEmision !== undefined) {
-      data.fechaEmision = fechaEmision ? new Date(fechaEmision) : null;
-      if (fechaEmision) data.fecha = new Date(fechaEmision);
+      const parsedDate = fechaEmision ? (fechaEmision.includes('T') ? new Date(fechaEmision) : new Date(`${fechaEmision}T12:00:00.000-05:00`)) : null;
+      data.fechaEmision = parsedDate;
+      if (parsedDate) data.fecha = parsedDate;
     }
     if (metodoPago !== undefined) data.metodoPago = String(metodoPago);
 

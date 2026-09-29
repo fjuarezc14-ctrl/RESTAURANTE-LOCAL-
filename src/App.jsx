@@ -88,7 +88,12 @@ const BotonPantallaCompleta = () => {
 const ProtectedRoute = ({ children, permission, currentUser }) => {
   const userPermissions = currentUser?.permisos || [];
   const isAdmin = currentUser?.rol === 'Administrador';
-  if (!isAdmin && !userPermissions.includes(permission)) {
+  
+  const hasAccess = isAdmin || userPermissions.includes(permission) ||
+    ((permission === 'Carta' || permission === 'Categorias') && userPermissions.includes('Dashboard')) ||
+    (permission === 'Creditos' && userPermissions.includes('Caja'));
+
+  if (!hasAccess) {
     // Si no tiene permisos para esta ruta ni para nada más, o evitar bucle
     const validPermitted = userPermissions.filter(p => p !== 'Usuarios');
     if (validPermitted.length === 0) {
@@ -114,7 +119,11 @@ const ProtectedRoute = ({ children, permission, currentUser }) => {
       firstPermitted === 'Cocina' ? '/cocina' :
       firstPermitted === 'Barra' ? '/barra' :
       firstPermitted === 'Caja' ? '/caja' :
-      firstPermitted === 'Reportes' ? '/reportes' : '/';
+      firstPermitted === 'Creditos' ? '/creditos' :
+      firstPermitted === 'Compras' ? '/compras' :
+      firstPermitted === 'Reportes' ? '/reportes' :
+      firstPermitted === 'Carta' ? '/carta' :
+      firstPermitted === 'Categorias' ? '/categorias' : '/';
     return <Navigate to={pathToRedirect} replace />;
   }
   return children;
@@ -429,17 +438,24 @@ const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
     { path: '/cocina', icon: ChefHat, label: 'Cocina / Pedidos', permission: 'Cocina' },
     { path: '/barra', icon: GlassWater, label: 'Barra / Bebidas', permission: 'Barra' },
     { path: '/caja', icon: Calculator, label: 'Caja / Cobros', permission: 'Caja' },
-    { path: '/creditos', icon: Wallet, label: 'Créditos / Clientes', permission: 'Caja' },
+    { path: '/creditos', icon: Wallet, label: 'Créditos / Clientes', permission: 'Creditos' },
     { path: '/compras', icon: BookOpen, label: 'Compras / Gastos', permission: 'Compras' },
     { path: '/reportes', icon: PieChart, label: 'Reportes (Contador)', permission: 'Reportes' },
-    { path: '/carta', icon: BookOpen, label: 'Carta e Inventario', permission: 'Dashboard' },
-    { path: '/categorias', icon: Tags, label: 'Categorías', permission: 'Dashboard' },
+    { path: '/carta', icon: BookOpen, label: 'Carta e Inventario', permission: 'Carta' },
+    { path: '/categorias', icon: Tags, label: 'Categorías', permission: 'Categorias' },
   ];
 
-  // Filtrar ítems según permisos del usuario activo o si es administrador
+  // Filtrar ítems según permisos del usuario activo o si es administrador (retrocompatible)
   const userPermissions = currentUser?.permisos || [];
   const isAdmin = currentUser?.rol === 'Administrador';
-  const filteredItems = menuItems.filter(item => isAdmin || userPermissions.includes(item.permission));
+  const hasItemPermission = (perm) => {
+    if (isAdmin) return true;
+    if (userPermissions.includes(perm)) return true;
+    if ((perm === 'Carta' || perm === 'Categorias') && userPermissions.includes('Dashboard')) return true;
+    if (perm === 'Creditos' && userPermissions.includes('Caja')) return true;
+    return false;
+  };
+  const filteredItems = menuItems.filter(item => hasItemPermission(item.permission));
 
   return (
     <>
@@ -787,11 +803,11 @@ function App() {
         <Route path="/cocina" element={<Layout title="Monitor de Preparación" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Cocina" currentUser={currentUser}><CocinaPage /></ProtectedRoute></Layout>} />
         <Route path="/barra" element={<Layout title="Monitor de Barra" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Barra" currentUser={currentUser}><BarraPage /></ProtectedRoute></Layout>} />
         <Route path="/caja" element={<Layout title="Punto de Cobro" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Caja" currentUser={currentUser}><CajaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-        <Route path="/creditos" element={<Layout title="Módulo de Créditos" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Caja" currentUser={currentUser}><CreditosPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+        <Route path="/creditos" element={<Layout title="Módulo de Créditos" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Creditos" currentUser={currentUser}><CreditosPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
         <Route path="/compras" element={<Layout title="Registro de Compras" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Compras" currentUser={currentUser}><ComprasPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
         <Route path="/reportes" element={<Layout title="Panel Contable" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Reportes" currentUser={currentUser}><ReportesPage /></ProtectedRoute></Layout>} />
-        <Route path="/carta" element={<Layout title="Carta e Inventario" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><CartaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-        <Route path="/categorias" element={<Layout title="Categorías de la Carta" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><CategoriasPage /></ProtectedRoute></Layout>} />
+        <Route path="/carta" element={<Layout title="Carta e Inventario" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Carta" currentUser={currentUser}><CartaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+        <Route path="/categorias" element={<Layout title="Categorías de la Carta" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Categorias" currentUser={currentUser}><CategoriasPage /></ProtectedRoute></Layout>} />
         <Route path="/usuarios" element={<Layout title="Personal y Accesos" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Usuarios" currentUser={currentUser}><UsuariosPage /></ProtectedRoute></Layout>} />
         <Route path="/configuracion" element={<Layout title="Configuración de Empresa" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><ConfiguracionPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
       </Routes>
