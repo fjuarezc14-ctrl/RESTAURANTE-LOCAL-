@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { UtensilsCrossed, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Tags, Building2, Share2, Copy, Check as CheckIcon, Wifi } from 'lucide-react';
+import { UtensilsCrossed, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Tags, Building2, Share2, Copy, Check as CheckIcon, Wifi, Maximize, Minimize } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import logoUrl from './assets/logo.png';
 import { COMPANY_CONFIG } from './config/company';
@@ -36,6 +36,53 @@ const borrarSesion = () => {
 };
 const leerUltimaActividad = () => Number(sessionStorage.getItem(ACTIVIDAD_KEY)) || 0;
 const aplicaInactividad = (user) => !!user && !ROLES_SIN_CIERRE_POR_INACTIVIDAD.includes(user.rol);
+
+// === PANTALLA COMPLETA (celulares Android de los mozos) ===
+// Se recuerda la preferencia en el dispositivo: si el navegador sale solo de la pantalla
+// completa (gesto de atrás, cambio de app), se vuelve a activar con el siguiente toque.
+// Solo el botón la desactiva de forma definitiva.
+const PANTALLA_COMPLETA_KEY = 'pantallaCompleta';
+const pantallaCompletaSoportada = () => !!document.documentElement.requestFullscreen;
+const quierePantallaCompleta = () => localStorage.getItem(PANTALLA_COMPLETA_KEY) === '1';
+const entrarPantallaCompleta = () => {
+  if (document.fullscreenElement || !pantallaCompletaSoportada()) return Promise.resolve();
+  return document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+};
+
+const BotonPantallaCompleta = () => {
+  const [activa, setActiva] = useState(!!document.fullscreenElement);
+
+  useEffect(() => {
+    const actualizar = () => setActiva(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', actualizar);
+    return () => document.removeEventListener('fullscreenchange', actualizar);
+  }, []);
+
+  if (!pantallaCompletaSoportada()) return null;
+
+  const alternar = () => {
+    if (document.fullscreenElement) {
+      localStorage.removeItem(PANTALLA_COMPLETA_KEY);
+      document.exitFullscreen().catch(() => {});
+    } else {
+      localStorage.setItem(PANTALLA_COMPLETA_KEY, '1');
+      entrarPantallaCompleta();
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={alternar}
+      title={activa ? 'Salir de pantalla completa' : 'Pantalla completa'}
+      className={`p-2 rounded-xl border transition-all active:scale-90 shrink-0 ${
+        activa ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+      }`}
+    >
+      {activa ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+    </button>
+  );
+};
 
 // === PROTECTED ROUTE NAVIGATION GUARD ===
 const ProtectedRoute = ({ children, permission, currentUser }) => {
@@ -503,6 +550,7 @@ const Header = ({ toggleSidebar, title, currentUser }) => (
         <span className="hidden sm:inline">Sync BD Activo</span>
         <span className="sm:hidden">Sync BD</span>
       </div>
+      <BotonPantallaCompleta />
     </div>
   </header>
 );
@@ -527,6 +575,16 @@ function App() {
   const [avisoLogin, setAvisoLogin] = useState('');
   const [segundosParaCierre, setSegundosParaCierre] = useState(null);
   const ultimaEscrituraRef = useRef(0);
+
+  // Reactivar la pantalla completa con el primer toque si el mozo la dejó activada
+  // (el navegador exige un toque del usuario; no se puede activar sola al abrir).
+  useEffect(() => {
+    const reactivar = () => {
+      if (quierePantallaCompleta() && !document.fullscreenElement) entrarPantallaCompleta();
+    };
+    window.addEventListener('click', reactivar, true);
+    return () => window.removeEventListener('click', reactivar, true);
+  }, []);
 
   useEffect(() => {
     const initSession = async () => {
