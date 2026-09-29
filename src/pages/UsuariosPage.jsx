@@ -3,7 +3,10 @@ import { UserPlus, X, Trash2, Edit, Eye, EyeOff, LayoutDashboard, LayoutGrid, Ch
 import { api } from '../api';
 import { safeJsonParse } from '../utils/safeJson';
 
-export default function UsuariosPage() {
+// El Administrador siempre tiene acceso a todos los módulos
+const TODOS_LOS_PERMISOS = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
+
+export default function UsuariosPage({ currentUser: currentUserProp }) {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -12,7 +15,8 @@ export default function UsuariosPage() {
   const [editingUser, setEditingUser] = useState(null); // null si es nuevo
   const [visiblePins, setVisiblePins] = useState({}); // id -> boolean
 
-  const currentUser = safeJsonParse(localStorage.getItem('currentUser'), {});
+  // La sesión vive en sessionStorage (ver App.jsx); se prefiere el usuario que pasa App
+  const currentUser = currentUserProp || safeJsonParse(sessionStorage.getItem('currentUser'), {});
 
   const fetchUsuarios = async () => {
     try {
@@ -29,7 +33,7 @@ export default function UsuariosPage() {
 
   const handleRolChange = (rol) => {
     let permisos = [];
-    if (rol === 'Administrador') permisos = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
+    if (rol === 'Administrador') permisos = [...TODOS_LOS_PERMISOS];
     else if (rol === 'Mozo') permisos = ['Salon', 'Barra'];
     else if (rol === 'Cocinero') permisos = ['Cocina'];
     else if (rol === 'Cajero') permisos = ['Salon', 'Caja', 'Creditos'];
@@ -38,6 +42,7 @@ export default function UsuariosPage() {
   };
 
   const handlePermisoToggle = (permiso) => {
+    if (newUser.rol === 'Administrador') return;
     const current = newUser.permisos;
     setNewUser({ ...newUser, permisos: current.includes(permiso) ? current.filter(p => p !== permiso) : [...current, permiso] });
   };
@@ -50,7 +55,7 @@ export default function UsuariosPage() {
 
   const abrirModalEditar = (u) => {
     setEditingUser(u);
-    setNewUser({ nombre: u.nombre, rol: u.rol, pin: u.pin || '', permisos: u.permisos || [] });
+    setNewUser({ nombre: u.nombre, rol: u.rol, pin: u.pin || '', permisos: u.rol === 'Administrador' ? [...TODOS_LOS_PERMISOS] : (u.permisos || []) });
     setModalOpen(true);
   };
 
@@ -63,15 +68,20 @@ export default function UsuariosPage() {
       alert('Completa todos los campos y asigna al menos un permiso.');
       return;
     }
+    if (editingUser && editingUser.id === currentUser?.id && newUser.rol !== editingUser.rol) {
+      alert('⚠️ No puedes cambiar tu propio rol.');
+      return;
+    }
+    const datos = newUser.rol === 'Administrador' ? { ...newUser, permisos: [...TODOS_LOS_PERMISOS] } : newUser;
     setGuardando(true);
     try {
       if (editingUser) {
         // Modo Edición
-        const res = await api.editarUsuario(editingUser.id, newUser);
+        const res = await api.editarUsuario(editingUser.id, datos);
         if (res.error) throw new Error(res.error);
       } else {
         // Modo Creación
-        const res = await api.crearUsuario(newUser);
+        const res = await api.crearUsuario(datos);
         if (res.error) throw new Error(res.error);
       }
       await fetchUsuarios();
@@ -108,7 +118,7 @@ export default function UsuariosPage() {
     { id: 'Caja', icon: Calculator, label: 'Caja / Cobros' },
     { id: 'Creditos', icon: Wallet, label: 'Créditos / Clientes' },
     { id: 'Compras', icon: BookOpen, label: 'Compras / Gastos' },
-    { id: 'Reportes', icon: PieChart, label: 'Reportes (Contador)' },
+    { id: 'Reportes', icon: PieChart, label: 'Reportes' },
     { id: 'Carta', icon: BookOpen, label: 'Carta e Inventario' },
     { id: 'Categorias', icon: Tags, label: 'Categorías' },
     { id: 'Usuarios', icon: UsersRound, label: 'Personal y Roles' },
@@ -230,6 +240,7 @@ export default function UsuariosPage() {
               <div className="grid grid-cols-2 gap-4">
                 {(() => {
                   const isEditingInmutable = Boolean(editingUser && editingUser.id === 1 && editingUser.nombre.toLowerCase().trim() === 'admin principal');
+                  const editandoMiUsuario = Boolean(editingUser && editingUser.id === currentUser?.id);
                   return (
                     <>
                       <div className="col-span-2 sm:col-span-1">
@@ -248,7 +259,8 @@ export default function UsuariosPage() {
                         <select 
                           value={newUser.rol} 
                           onChange={e => handleRolChange(e.target.value)} 
-                          disabled={isEditingInmutable}
+                          disabled={isEditingInmutable || editandoMiUsuario}
+                          title={editandoMiUsuario ? 'No puedes cambiar tu propio rol' : undefined}
                           className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 bg-white disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
                         >
                           <option value="">Selecciona un rol...</option>
@@ -281,20 +293,24 @@ export default function UsuariosPage() {
                 />
               </div>
               <div className="border-t border-slate-100 pt-4">
-                <label className="block text-xs font-black text-slate-800 uppercase tracking-wide mb-4">Permisos de Acceso</label>
+                <label className="block text-xs font-black text-slate-800 uppercase tracking-wide mb-1">Permisos de Acceso</label>
+                <p className="text-xs text-slate-500 mb-4">
+                  {newUser.rol === 'Administrador' ? 'El Administrador siempre tiene acceso a todos los módulos.' : 'Marca los módulos que podrá usar.'}
+                </p>
                 <div className="grid grid-cols-2 gap-3">
                   {(() => {
                     const nombresInmutables = ['admin principal', 'eusebio diaz', 'bruno diaz'];
                     const isEditingInmutable = editingUser && nombresInmutables.includes(editingUser.nombre.toLowerCase().trim());
+                    const esAdministrador = newUser.rol === 'Administrador';
                     return permisosDisponibles.map(p => {
                       const Icon = p.icon;
                       return (
                         <label key={p.id} className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all">
                           <input 
                             type="checkbox" 
-                            checked={newUser.permisos.includes(p.id)} 
+                            checked={esAdministrador || newUser.permisos.includes(p.id)} 
                             onChange={() => handlePermisoToggle(p.id)} 
-                            disabled={isEditingInmutable}
+                            disabled={isEditingInmutable || esAdministrador}
                             className="w-4 h-4 text-amber-500 rounded focus:ring-amber-500 cursor-pointer animate-pulse disabled:opacity-50 disabled:cursor-not-allowed" 
                           />
                           <span className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Icon className="w-4 h-4 text-slate-400" /> {p.label}</span>

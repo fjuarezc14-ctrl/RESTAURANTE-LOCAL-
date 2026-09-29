@@ -588,7 +588,7 @@ export default function ReportesPage() {
           <div className="space-y-5">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {kpi({ label: 'Ventas del periodo', valor: soles(resumen.ventasTotal), hint: `Base ${soles(resumen.ventasBase)} · IGV ${soles(resumen.ventasIGV)}`, Icon: TrendingUp, color: 'bg-sky-50 text-sky-600', borde: 'border-t-sky-500' })}
-              {kpi({ label: 'Retiros de caja', valor: soles(retirosCaja.reduce((s, m) => s + (Number(m.monto) || 0), 0)), hint: `${retirosCaja.length} salida${retirosCaja.length !== 1 ? 's' : ''} · sin devoluciones de ventas`, Icon: TrendingDown, color: 'bg-rose-50 text-rose-600', borde: 'border-t-rose-500' })}
+              {kpi({ label: 'Retiros de caja', valor: soles(retirosCaja.reduce((s, m) => s + (Number(m.monto) || 0), 0)), valorClase: 'text-rose-600', hint: `${retirosCaja.length} salida${retirosCaja.length !== 1 ? 's' : ''} · sin devoluciones de ventas`, Icon: TrendingDown, color: 'bg-rose-50 text-rose-600', borde: 'border-t-rose-500' })}
               {kpi({ label: 'Margen operativo', valor: soles(margen), valorClase: margen >= 0 ? 'text-emerald-600' : 'text-rose-600', hint: `Rentabilidad ${resumen.ventasTotal > 0 ? ((margen / resumen.ventasTotal) * 100).toFixed(1) : '0.0'}%`, Icon: DollarSign, color: 'bg-emerald-50 text-emerald-600', borde: 'border-t-emerald-500' })}
               {kpi({ label: 'Ticket promedio', valor: soles(ventas.length > 0 ? resumen.ventasTotal / ventas.length : 0), hint: `${ventas.length} comandas cobradas`, Icon: Receipt, color: 'bg-amber-50 text-amber-600', borde: 'border-t-amber-500' })}
             </div>

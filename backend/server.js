@@ -3043,6 +3043,9 @@ app.get('/api/usuarios', async (req, res) => {
   }
 });
 
+// El rol Administrador siempre tiene acceso a todos los módulos
+const PERMISOS_ADMINISTRADOR = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
+
 app.post('/api/usuarios', async (req, res) => {
   try {
     // Validar PIN único
@@ -3059,7 +3062,7 @@ app.post('/api/usuarios', async (req, res) => {
         nombre: String(nombre),
         rol: String(rol),
         pin: String(pin),
-        permisos: Array.isArray(permisos) ? permisos.map(String) : [],
+        permisos: String(rol) === 'Administrador' ? PERMISOS_ADMINISTRADOR : (Array.isArray(permisos) ? permisos.map(String) : []),
       }
     });
     const { pin: userPin, ...seguro } = user;
@@ -3095,6 +3098,7 @@ app.put('/api/usuarios/:id', async (req, res) => {
     if (req.body.pin !== undefined) data.pin = String(req.body.pin);
     if (req.body.permisos !== undefined) data.permisos = Array.isArray(req.body.permisos) ? req.body.permisos.map(String) : [];
     if (req.body.activo !== undefined) data.activo = Boolean(req.body.activo);
+    if ((data.rol ?? target.rol) === 'Administrador') data.permisos = PERMISOS_ADMINISTRADOR;
 
     if (isInmutableOriginal) {
       if (req.body.rol !== undefined && req.body.rol !== 'Administrador') {
@@ -3109,7 +3113,7 @@ app.put('/api/usuarios/:id', async (req, res) => {
       // Forzar valores correctos para asegurar la inmutabilidad y permisos de administración completos
       data.rol = 'Administrador';
       data.activo = true;
-      data.permisos = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Reportes', 'Usuarios', 'Ensaladas'];
+      data.permisos = PERMISOS_ADMINISTRADOR;
     }
 
     const user = await prisma.usuario.update({

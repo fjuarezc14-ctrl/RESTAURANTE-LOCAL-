@@ -440,7 +440,7 @@ const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
     { path: '/caja', icon: Calculator, label: 'Caja / Cobros', permission: 'Caja' },
     { path: '/creditos', icon: Wallet, label: 'Créditos / Clientes', permission: 'Creditos' },
     { path: '/compras', icon: BookOpen, label: 'Compras / Gastos', permission: 'Compras' },
-    { path: '/reportes', icon: PieChart, label: 'Reportes (Contador)', permission: 'Reportes' },
+    { path: '/reportes', icon: PieChart, label: 'Reportes', permission: 'Reportes' },
     { path: '/carta', icon: BookOpen, label: 'Carta e Inventario', permission: 'Carta' },
     { path: '/categorias', icon: Tags, label: 'Categorías', permission: 'Categorias' },
   ];
@@ -808,7 +808,7 @@ function App() {
         <Route path="/reportes" element={<Layout title="Panel Contable" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Reportes" currentUser={currentUser}><ReportesPage /></ProtectedRoute></Layout>} />
         <Route path="/carta" element={<Layout title="Carta e Inventario" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Carta" currentUser={currentUser}><CartaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
         <Route path="/categorias" element={<Layout title="Categorías de la Carta" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Categorias" currentUser={currentUser}><CategoriasPage /></ProtectedRoute></Layout>} />
-        <Route path="/usuarios" element={<Layout title="Personal y Accesos" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Usuarios" currentUser={currentUser}><UsuariosPage /></ProtectedRoute></Layout>} />
+        <Route path="/usuarios" element={<Layout title="Personal y Accesos" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Usuarios" currentUser={currentUser}><UsuariosPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
         <Route path="/configuracion" element={<Layout title="Configuración de Empresa" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><ConfiguracionPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
       </Routes>
     </BrowserRouter>
