@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Receipt, X, Banknote, Search, CheckCircle, Clock, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, Flame, FileText, History, ExternalLink, ChevronDown, ChevronRight, ShoppingCart, Coins, RotateCcw, Pencil, ShoppingBag, UtensilsCrossed, Phone, MapPin, Smartphone, Eye, EyeOff, Bike, Unlock, ArrowUpRight } from 'lucide-react';
+import { Receipt, X, Banknote, Search, CheckCircle, Clock, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, Flame, FileText, History, ExternalLink, ChevronDown, ChevronRight, ShoppingCart, Coins, RotateCcw, Pencil, ShoppingBag, UtensilsCrossed, Phone, MapPin, Smartphone, Eye, EyeOff, Bike, Unlock, ArrowUpRight, ArrowDownLeft, ArrowLeftRight } from 'lucide-react';
 
 import { api } from '../api';
 import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
@@ -508,6 +508,7 @@ export default function CajaPage({ currentUser }) {
   const [motivoSalidaCaja, setMotivoSalidaCaja] = useState('');
   const [guardandoSalidaCaja, setGuardandoSalidaCaja] = useState(false);
   const [errorSalidaCaja, setErrorSalidaCaja] = useState('');
+  const [tipoMovimientoCaja, setTipoMovimientoCaja] = useState('RETIRO'); // 'RETIRO' | 'INGRESO'
 
   const [ultimoCierre, setUltimoCierre] = useState(() => {
     const stored = localStorage.getItem('ultimoCierre');
@@ -811,8 +812,9 @@ export default function CajaPage({ currentUser }) {
       setErrorSalidaCaja('Ingresa un monto válido mayor a S/ 0.00');
       return;
     }
+    const esIngreso = tipoMovimientoCaja === 'INGRESO';
     if (!motivoSalidaCaja.trim()) {
-      setErrorSalidaCaja('Ingresa el motivo del retiro o salida de dinero.');
+      setErrorSalidaCaja(esIngreso ? 'Ingresa el motivo del ingreso de dinero.' : 'Ingresa el motivo del retiro o salida de dinero.');
       return;
     }
 
@@ -821,7 +823,7 @@ export default function CajaPage({ currentUser }) {
       const res = await api.registrarMovimientoCaja({
         monto,
         motivo: motivoSalidaCaja.trim(),
-        tipo: 'RETIRO',
+        tipo: esIngreso ? 'INGRESO' : 'RETIRO',
         cajeroNombre: usuarioOperador
       });
       if (res.error) {
@@ -832,9 +834,11 @@ export default function CajaPage({ currentUser }) {
       setMontoSalidaCaja('');
       setMotivoSalidaCaja('');
       await fetchCajaData();
-      addToast(`💸 Salida de S/ ${monto.toFixed(2)} registrada correctamente de caja`, 'success');
+      addToast(esIngreso
+        ? `💵 Ingreso de S/ ${monto.toFixed(2)} registrado en caja`
+        : `💸 Salida de S/ ${monto.toFixed(2)} registrada correctamente de caja`, 'success');
     } catch (err) {
-      setErrorSalidaCaja('Error al registrar salida: ' + err.message);
+      setErrorSalidaCaja('Error al registrar el movimiento: ' + err.message);
     } finally {
       setGuardandoSalidaCaja(false);
     }
@@ -2663,13 +2667,14 @@ export default function CajaPage({ currentUser }) {
                   setMontoSalidaCaja('');
                   setMotivoSalidaCaja('');
                   setErrorSalidaCaja('');
+                  setTipoMovimientoCaja('RETIRO');
                   setModalSalidaCajaOpen(true);
                 }}
-                className="h-10 px-3.5 inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 text-sm font-bold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition-colors shadow-2xs active:scale-[0.98] shrink-0 whitespace-nowrap"
-                title="Registrar salida o retiro de dinero de la gaveta física"
+                className="h-10 px-3.5 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs active:scale-[0.98] shrink-0 whitespace-nowrap"
+                title="Retirar o ingresar dinero en la gaveta física"
               >
-                <ArrowUpRight className="w-4 h-4 text-rose-600" />
-                <span>Retirar de caja</span>
+                <ArrowLeftRight className="w-4 h-4 text-slate-500" />
+                <span>Movimiento de caja</span>
               </button>
             )}
             {cajaEstado.abierto ? (
@@ -5151,9 +5156,11 @@ export default function CajaPage({ currentUser }) {
         // Salidas / retiros de efectivo de caja en turno (compras de almacén no restan de la gaveta diaria)
         const retirosCaja = Math.max(0, Number(cajaEstado.resumenEnVivo?.retirosCaja || 0));
         const egresosEfectivo = retirosCaja;
+        // Ingresos de dinero a la gaveta (sencillo extra, reposición) registrados en el turno
+        const ingresosCaja = Math.max(0, Number(cajaEstado.resumenEnVivo?.ingresosExtra || 0));
 
-        // Total Efectivo Esperado en Gaveta = Fondo Inicial + (Ventas Efec + Abonos Efec) - Salidas de Caja (no puede ser negativo)
-        const totalEfectivoEsperado = Math.max(0, Math.round((fondoInicialTurno + totalEfectivo - egresosEfectivo) * 100) / 100);
+        // Total Efectivo Esperado en Gaveta = Fondo Inicial + (Ventas Efec + Abonos Efec) + Ingresos - Salidas de Caja (no puede ser negativo)
+        const totalEfectivoEsperado = Math.max(0, Math.round((fondoInicialTurno + totalEfectivo + ingresosCaja - egresosEfectivo) * 100) / 100);
 
         // Total Caja = ingresos reales cobrados en caja (efectivo neto + tarjeta + yape)
         const totalCalculado = Math.max(0, totalEfectivoEsperado + Math.max(0, totalTarjeta) + Math.max(0, totalYape));
@@ -5239,9 +5246,15 @@ export default function CajaPage({ currentUser }) {
                     <span>💵 EFECTIVO VENTAS:</span>
                     <span className="font-black text-slate-900">S/ {totalEfectivo.toFixed(2)}</span>
                   </div>
+                  {ingresosCaja > 0 && (
+                    <div className="flex justify-between font-bold text-emerald-700">
+                      <span>📈 INGRESOS A CAJA:</span>
+                      <span className="font-black text-emerald-700">+ S/ {ingresosCaja.toFixed(2)}</span>
+                    </div>
+                  )}
                   {egresosEfectivo > 0 && (
                     <div className="flex justify-between font-bold text-rose-600">
-                      <span>📉 SALIDAS DE CAJA (EMERGENCIAS):</span>
+                      <span>📉 SALIDAS DE CAJA:</span>
                       <span className="font-black text-rose-600">- S/ {egresosEfectivo.toFixed(2)}</span>
                     </div>
                   )}
@@ -5692,17 +5705,22 @@ export default function CajaPage({ currentUser }) {
       )}
 
       {/* MODAL DE SALIDA / RETIRO DE EFECTIVO DE CAJA */}
-      {modalSalidaCajaOpen && (
+      {modalSalidaCajaOpen && (() => {
+        const esIngreso = tipoMovimientoCaja === 'INGRESO';
+        const acento = esIngreso
+          ? { icono: 'bg-emerald-500', foco: 'focus:border-emerald-500', chip: 'bg-emerald-600 text-white border-emerald-600', boton: 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20', nota: 'text-emerald-600' }
+          : { icono: 'bg-rose-500', foco: 'focus:border-rose-500', chip: 'bg-rose-500 text-white border-rose-600', boton: 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20', nota: 'text-rose-500' };
+        return (
         <div className="fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col animate-slide-up border border-slate-100">
             <div className="flex justify-between items-center mb-5 pb-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center font-black shadow-sm">
-                  <ArrowUpRight className="w-5 h-5" />
+                <div className={`w-10 h-10 rounded-2xl text-white flex items-center justify-center font-black shadow-sm ${acento.icono}`}>
+                  {esIngreso ? <ArrowDownLeft className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight leading-none">Salida de Caja</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Retiro de efectivo para compras de emergencia</p>
+                  <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight leading-none">Movimiento de Caja</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{esIngreso ? 'Entrada de dinero a la gaveta' : 'Salida de dinero de la gaveta'}</p>
                 </div>
               </div>
               <button
@@ -5712,6 +5730,23 @@ export default function CajaPage({ currentUser }) {
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Tipo de movimiento */}
+            <div className="grid grid-cols-2 p-1 rounded-xl bg-slate-100 mb-4">
+              {[
+                ['RETIRO', 'Retirar', ArrowUpRight, 'bg-rose-500 text-white shadow-sm'],
+                ['INGRESO', 'Ingresar', ArrowDownLeft, 'bg-emerald-600 text-white shadow-sm'],
+              ].map(([id, label, Icono, activo]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => { setTipoMovimientoCaja(id); setErrorSalidaCaja(''); }}
+                  className={`h-10 rounded-lg text-sm font-bold inline-flex items-center justify-center gap-1.5 transition-all ${tipoMovimientoCaja === id ? activo : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  <Icono className="w-4 h-4" /> {label}
+                </button>
+              ))}
             </div>
 
             {errorSalidaCaja && (
@@ -5724,8 +5759,8 @@ export default function CajaPage({ currentUser }) {
             <form onSubmit={handleRegistrarSalidaCaja} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5 flex justify-between">
-                  <span>Monto a Retirar de Gaveta:</span>
-                  <span className="text-rose-500 font-bold">Resta al arqueo</span>
+                  <span>{esIngreso ? 'Monto a ingresar a la gaveta:' : 'Monto a retirar de la gaveta:'}</span>
+                  <span className={`font-bold ${acento.nota}`}>{esIngreso ? 'Suma al arqueo' : 'Resta al arqueo'}</span>
                 </label>
                 <div className="relative mb-2">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-slate-400 text-base">S/</span>
@@ -5735,10 +5770,11 @@ export default function CajaPage({ currentUser }) {
                     min="0.01"
                     required
                     autoFocus
+                    inputMode="decimal"
                     placeholder="0.00"
                     value={montoSalidaCaja}
                     onChange={(e) => setMontoSalidaCaja(e.target.value)}
-                    className="w-full bg-white border-2 border-slate-200 focus:border-rose-500 rounded-xl pl-9 pr-3.5 py-2.5 text-lg font-black text-slate-900 focus:outline-none shadow-inner"
+                    className={`w-full bg-white border-2 border-slate-200 rounded-xl pl-9 pr-3.5 py-2.5 text-lg font-black text-slate-900 focus:outline-none shadow-inner ${acento.foco}`}
                   />
                 </div>
                 <div className="grid grid-cols-4 gap-1.5">
@@ -5749,7 +5785,7 @@ export default function CajaPage({ currentUser }) {
                       onClick={() => setMontoSalidaCaja(String(val))}
                       className={`py-1.5 rounded-lg text-xs font-black transition-all border ${
                         montoSalidaCaja === String(val)
-                          ? 'bg-rose-500 text-white border-rose-600 shadow-sm'
+                          ? `${acento.chip} shadow-sm`
                           : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
                       }`}
                     >
@@ -5761,15 +5797,15 @@ export default function CajaPage({ currentUser }) {
 
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5">
-                  Motivo / Concepto del Retiro:
+                  {esIngreso ? 'Motivo / Concepto del ingreso:' : 'Motivo / Concepto del retiro:'}
                 </label>
                 <input
                   type="text"
                   required
                   value={motivoSalidaCaja}
                   onChange={(e) => setMotivoSalidaCaja(e.target.value)}
-                  placeholder="Ej. Compra de hielo, pasaje delivery, gas urgente..."
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:outline-none"
+                  placeholder={esIngreso ? 'Ej. Sencillo adicional, reposición de caja…' : 'Ej. Compra de hielo, pasaje delivery, gas urgente…'}
+                  className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:outline-none ${acento.foco}`}
                 />
               </div>
 
@@ -5784,15 +5820,16 @@ export default function CajaPage({ currentUser }) {
                 <button
                   type="submit"
                   disabled={guardandoSalidaCaja}
-                  className="w-2/3 py-3 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-black rounded-xl text-xs uppercase tracking-widest shadow-lg shadow-rose-500/20 active:scale-95 transition-all disabled:opacity-50"
+                  className={`w-2/3 py-3 text-white font-black rounded-xl text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all disabled:opacity-50 ${acento.boton}`}
                 >
-                  {guardandoSalidaCaja ? 'Registrando...' : 'Confirmar Salida'}
+                  {guardandoSalidaCaja ? 'Registrando...' : (esIngreso ? 'Confirmar ingreso' : 'Confirmar retiro')}
                 </button>
               </div>
             </form>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* MODAL DE HISTORIAL DE CIERRES DE CAJA (POSTGRESQL) */}
       {historialCierresModalOpen && (

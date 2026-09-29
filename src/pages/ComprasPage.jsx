@@ -94,9 +94,16 @@ export function parsearGastoMetodos(metodoPagoStr, totalMonto = 0) {
   return { efec: totalMonto, yape: 0, tarj: 0, esMixto: false };
 }
 
-const fechaDeCompra = (c) => c.fechaEmision || c.fecha || c.creadoEn;
-const formatearFecha = (iso) => iso
-  ? new Date(iso).toLocaleDateString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: 'short' })
+// Día del gasto en formato YYYY-MM-DD. fechaEmision es un día de calendario: se guarda a las
+// 12:00 de Lima (y los registros antiguos a las 00:00 UTC), así que su día UTC es el correcto.
+// Sin fechaEmision solo queda la hora real de registro, que se lee en hora de Lima.
+const diaDeCompra = (c) => {
+  if (c.fechaEmision) return String(c.fechaEmision).slice(0, 10);
+  const f = c.fecha || c.creadoEn;
+  return f ? getFechaPeru(new Date(f)) : null;
+};
+const formatearDia = (dia, opciones = { day: '2-digit', month: 'short' }) => dia
+  ? new Date(`${dia}T12:00:00.000Z`).toLocaleDateString('es-PE', { timeZone: 'UTC', ...opciones })
   : '—';
 
 const formVacio = (fecha) => ({
@@ -205,7 +212,6 @@ export default function ComprasPage() {
 
   const abrirEditar = (compra) => {
     const parsed = parsearGastoMetodos(compra.metodoPago, compra.total);
-    const fechaIso = fechaDeCompra(compra);
     setEditandoId(compra.id);
     setForm({
       proveedor: compra.proveedor || '',
@@ -214,7 +220,7 @@ export default function ComprasPage() {
       serieNumero: compra.serieNumero || '',
       total: String(compra.total || ''),
       categoria: compra.categoria || 'Otros',
-      fechaEmision: fechaIso ? getFechaPeru(new Date(fechaIso)) : hoyStr,
+      fechaEmision: diaDeCompra(compra) || hoyStr,
       metodoPago: parsed.esMixto ? 'Mixto' : (compra.metodoPago || 'Efectivo'),
       montoEfectivoMixto: parsed.esMixto ? String(parsed.efec) : '',
       montoYapeMixto: parsed.esMixto ? String(parsed.yape) : '',
@@ -347,8 +353,7 @@ export default function ComprasPage() {
     compras.forEach((c, idx) => {
       const comprobante = c.serieNumero ? `${c.tipoDocumento} ${c.serieNumero}` : (c.tipoDocumento || 'Recibo Interno');
       const bg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-      const f = fechaDeCompra(c);
-      const fechaFormat = f ? new Date(f).toLocaleDateString('es-PE', { timeZone: 'America/Lima' }) : '';
+      const fechaFormat = formatearDia(diaDeCompra(c), { day: '2-digit', month: '2-digit', year: 'numeric' });
       tableRows += `
         <tr style="background-color: ${bg};">
           <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${idx + 1}</td>
@@ -456,7 +461,7 @@ export default function ComprasPage() {
 
   const compraDetalle = detalleId != null ? compras.find(c => c.id === detalleId) : null;
   const categoriaMayor = gastosDetalle.categorias[0];
-  const rangoTexto = fechaDesde === fechaHasta ? formatearFecha(`${fechaDesde}T12:00:00-05:00`) : `${formatearFecha(`${fechaDesde}T12:00:00-05:00`)} – ${formatearFecha(`${fechaHasta}T12:00:00-05:00`)}`;
+  const rangoTexto = fechaDesde === fechaHasta ? formatearDia(fechaDesde) : `${formatearDia(fechaDesde)} – ${formatearDia(fechaHasta)}`;
   const hayFiltros = filtroCategoria !== 'Todas' || filtroMetodoPago !== 'Todos' || busquedaTexto.trim();
 
   return (
@@ -628,7 +633,7 @@ export default function ComprasPage() {
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium truncate text-slate-900">{c.proveedor}</p>
                           <p className="text-xs text-slate-500 truncate flex items-center gap-1.5">
-                            <span>{formatearFecha(fechaDeCompra(c))}</span>
+                            <span>{formatearDia(diaDeCompra(c))}</span>
                             <span className="text-slate-300">·</span>
                             <span className={`inline-flex px-1.5 rounded-md border text-[10px] font-medium ${colores.chip}`}>{c.categoria || 'Sin categoría'}</span>
                             {c.serieNumero && <><span className="text-slate-300">·</span><span className="font-mono">{c.tipoDocumento} {c.serieNumero}</span></>}
@@ -735,7 +740,7 @@ export default function ComprasPage() {
           () => setDetalleId(null),
           <>
             <p className="text-lg font-semibold text-slate-900 break-words">{c.proveedor}</p>
-            <p className="text-sm text-slate-500">{formatearFecha(fechaDeCompra(c))} · Registro #{c.id}</p>
+            <p className="text-sm text-slate-500">{formatearDia(diaDeCompra(c))} · Registro #{c.id}</p>
           </>,
           <>
             <div className="flex items-end justify-between gap-3">

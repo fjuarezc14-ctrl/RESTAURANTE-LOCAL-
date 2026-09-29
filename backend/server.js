@@ -4661,36 +4661,34 @@ app.get('/api/compras', async (req, res) => {
   try {
     const conditions = [];
 
-    // Filtro por fecha contable legal (cubre zona horaria Lima UTC-5 y registros guardados en UTC)
-    let dateFilter = null;
-    if (desde && hasta) {
-      const gteDate = new Date(desde.includes('T') ? desde : `${desde}T00:00:00.000Z`);
-      const gteLima = new Date(desde.includes('T') ? desde : `${desde}T00:00:00.000-05:00`);
-      const minGte = gteDate < gteLima ? gteDate : gteLima;
-
-      const nextDay = new Date((hasta.includes('T') ? hasta.split('T')[0] : hasta) + 'T00:00:00.000-05:00');
-      nextDay.setDate(nextDay.getDate() + 1);
-      const nextDayStr = nextDay.toISOString().split('T')[0];
-      dateFilter = {
-        gte: minGte,
-        lte: new Date(nextDayStr + 'T02:59:59.999-05:00')
-      };
-    } else if (desde) {
-      const gteDate = new Date(desde.includes('T') ? desde : `${desde}T00:00:00.000Z`);
-      const gteLima = new Date(desde.includes('T') ? desde : `${desde}T00:00:00.000-05:00`);
-      dateFilter = {
-        gte: gteDate < gteLima ? gteDate : gteLima
-      };
+    // La fecha de un gasto es un día de calendario. fechaEmision se guarda como
+    // "YYYY-MM-DD 12:00 Lima" (17:00 UTC) y los registros antiguos como "YYYY-MM-DD 00:00 UTC":
+    // ambos caen en el mismo día UTC, así que se filtra por día UTC. Los registros sin
+    // fechaEmision solo tienen la hora real de registro (fecha) y se filtran por día de Lima.
+    const soloDia = (v) => String(v).split('T')[0];
+    const diaSiguiente = (dia) => {
+      const d = new Date(`${dia}T00:00:00.000Z`);
+      d.setUTCDate(d.getUTCDate() + 1);
+      return d.toISOString().split('T')[0];
+    };
+    let filtroEmision;
+    let filtroRegistro;
+    if (desde) {
+      const d = soloDia(desde);
+      const h = hasta ? diaSiguiente(soloDia(hasta)) : null;
+      filtroEmision = { gte: new Date(`${d}T00:00:00.000Z`), ...(h ? { lt: new Date(`${h}T00:00:00.000Z`) } : {}) };
+      filtroRegistro = { gte: new Date(`${d}T00:00:00.000-05:00`), ...(h ? { lt: new Date(`${h}T00:00:00.000-05:00`) } : {}) };
     } else {
       const ahora = new Date();
       const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
-      dateFilter = { gte: inicioMes };
+      filtroEmision = { gte: inicioMes };
+      filtroRegistro = { gte: inicioMes };
     }
 
     conditions.push({
       OR: [
-        { fechaEmision: dateFilter },
-        { fechaEmision: null, fecha: dateFilter },
+        { fechaEmision: filtroEmision },
+        { fechaEmision: null, fecha: filtroRegistro },
       ]
     });
 
