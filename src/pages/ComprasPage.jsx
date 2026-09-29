@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  FileText, X, Save, RefreshCw, Download, Tag, ExternalLink,
-  AlertCircle, CheckCircle, ChevronDown, Trash2, Edit3, Printer,
-  Search, Calendar, Filter, PlusCircle, DollarSign, Wallet,
-  CreditCard, Smartphone, Check, HelpCircle, ArrowDownRight, ArrowUpRight, Scale
+  X, Save, Download, AlertCircle, CheckCircle, Trash2, Pencil, Search, Plus,
+  Banknote, CreditCard, Smartphone, Layers, ArrowUpRight, ChevronDown, Receipt,
+  FileText, PieChart, Tag, Calendar
 } from 'lucide-react';
 import { api } from '../api';
 import { COMPANY_CONFIG } from '../config/company';
@@ -18,21 +17,15 @@ const CATEGORIAS = [
 ];
 
 const COLORES_CATEGORIA = {
-  'Insumos y Alimentos': { bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-200', bar: 'bg-amber-500' },
-  'Bebidas':             { bg: 'bg-blue-100',   text: 'text-blue-800',   border: 'border-blue-200',   bar: 'bg-blue-500' },
-  'Gas y Carbón':        { bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-200', bar: 'bg-orange-500' },
-  'Limpieza e Higiene':  { bg: 'bg-emerald-100',text: 'text-emerald-800',border: 'border-emerald-200',bar: 'bg-emerald-500' },
-  'Personal':            { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200', bar: 'bg-purple-500' },
-  'Otros':               { bg: 'bg-slate-100',  text: 'text-slate-600',  border: 'border-slate-200',  bar: 'bg-slate-400' },
-  'Sin Categoría':       { bg: 'bg-slate-100',  text: 'text-slate-400',  border: 'border-slate-200',  bar: 'bg-slate-300' },
+  'Insumos y Alimentos': { chip: 'bg-amber-50 text-amber-700 border-amber-200', activo: 'bg-amber-500 text-white border-amber-500', bar: 'bg-amber-500' },
+  'Bebidas':             { chip: 'bg-sky-50 text-sky-700 border-sky-200',       activo: 'bg-sky-600 text-white border-sky-600',     bar: 'bg-sky-500' },
+  'Gas y Carbón':        { chip: 'bg-orange-50 text-orange-700 border-orange-200', activo: 'bg-orange-500 text-white border-orange-500', bar: 'bg-orange-500' },
+  'Limpieza e Higiene':  { chip: 'bg-emerald-50 text-emerald-700 border-emerald-200', activo: 'bg-emerald-600 text-white border-emerald-600', bar: 'bg-emerald-500' },
+  'Personal':            { chip: 'bg-violet-50 text-violet-700 border-violet-200', activo: 'bg-violet-600 text-white border-violet-600', bar: 'bg-violet-500' },
+  'Otros':               { chip: 'bg-slate-100 text-slate-600 border-slate-200', activo: 'bg-slate-700 text-white border-slate-700', bar: 'bg-slate-400' },
+  'Sin Categoría':       { chip: 'bg-slate-50 text-slate-400 border-slate-200', activo: 'bg-slate-400 text-white border-slate-400', bar: 'bg-slate-300' },
 };
-
-const ORIGEN_BADGE = {
-  sunat:  { label: 'SUNAT', cls: 'bg-blue-50 border-blue-200 text-blue-700' },
-  demo:   { label: 'DEMO',  cls: 'bg-amber-50 border-amber-200 text-amber-700' },
-  manual: { label: 'Manual',cls: 'bg-slate-100 border-slate-200 text-slate-600' },
-  xml:    { label: 'XML',   cls: 'bg-violet-50 border-violet-200 text-violet-700' },
-};
+const coloresDe = (cat) => COLORES_CATEGORIA[cat] || COLORES_CATEGORIA['Sin Categoría'];
 
 // Conceptos rápidos inspirados en el cuaderno de Control Caja
 const CONCEPTOS_RAPIDOS = [
@@ -47,6 +40,21 @@ const CONCEPTOS_RAPIDOS = [
   { label: '🛍️ Compras Mercado', nombre: 'Mercado General', cat: 'Insumos y Alimentos' },
   { label: '🛠️ Mantenimiento / Luz', nombre: 'Mantenimiento / Fluorescentes', cat: 'Otros' },
 ];
+
+const METODOS_PAGO = [
+  { id: 'Efectivo', label: 'Efectivo', Icon: Banknote, activo: 'bg-emerald-600 border-emerald-600 text-white', icono: 'text-emerald-600', chip: 'bg-emerald-50 text-emerald-600', text: 'text-emerald-700' },
+  { id: 'Yape', label: 'Yape / Plin', Icon: Smartphone, activo: 'bg-violet-600 border-violet-600 text-white', icono: 'text-violet-600', chip: 'bg-violet-50 text-violet-600', text: 'text-violet-700' },
+  { id: 'Tarjeta', label: 'Tarjeta', Icon: CreditCard, activo: 'bg-sky-600 border-sky-600 text-white', icono: 'text-sky-600', chip: 'bg-sky-50 text-sky-600', text: 'text-sky-700' },
+  { id: 'Mixto', label: 'Mixto', Icon: Layers, activo: 'bg-slate-800 border-slate-800 text-white', icono: 'text-slate-600', chip: 'bg-slate-100 text-slate-600', text: 'text-slate-600' },
+];
+const estiloMetodo = (metodoPago) => {
+  const id = String(metodoPago || 'Efectivo').startsWith('Mixto') ? 'Mixto' : metodoPago;
+  return METODOS_PAGO.find(m => m.id === id) || METODOS_PAGO[0];
+};
+
+const TIPOS_DOCUMENTO = ['Recibo Interno', 'Boleta', 'Factura', 'Ticket'];
+
+const soles = (n) => `S/ ${Number(n || 0).toFixed(2)}`;
 
 // Helper para obtener fecha local de Perú en formato YYYY-MM-DD (America/Lima)
 export const getFechaPeru = (dateObj = new Date()) => {
@@ -86,42 +94,40 @@ export function parsearGastoMetodos(metodoPagoStr, totalMonto = 0) {
   return { efec: totalMonto, yape: 0, tarj: 0, esMixto: false };
 }
 
+const fechaDeCompra = (c) => c.fechaEmision || c.fecha || c.creadoEn;
+const formatearFecha = (iso) => iso
+  ? new Date(iso).toLocaleDateString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: 'short' })
+  : '—';
+
+const formVacio = (fecha) => ({
+  proveedor: '', ruc: '', tipoDocumento: 'Recibo Interno', serieNumero: '',
+  total: '', categoria: 'Insumos y Alimentos', fechaEmision: fecha,
+  metodoPago: 'Efectivo', montoEfectivoMixto: '', montoTarjetaMixto: '', montoYapeMixto: '',
+});
+
 export default function ComprasPage() {
   const [compras, setCompras] = useState([]);
   const [stats, setStats] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [toastMsg, setToastMsg] = useState(null);
-  
+
   // Modales
-  const [modalManual, setModalManual] = useState(false);
-  const [modalEditar, setModalEditar] = useState(false);
-  const [compraEditando, setCompraEditando] = useState(null);
+  const [formAbierto, setFormAbierto] = useState(false);
+  const [editandoId, setEditandoId] = useState(null); // null = nuevo gasto
+  const [form, setForm] = useState(null);
+  const [detalleId, setDetalleId] = useState(null);
   const [compraEliminando, setCompraEliminando] = useState(null);
   const [guardando, setGuardando] = useState(false);
-  const [editCatId, setEditCatId] = useState(null);
+  const [desgloseAbierto, setDesgloseAbierto] = useState(false);
 
   // Filtros en hora de Lima
   const hoyStr = useMemo(() => getFechaPeru(), []);
   const [fechaDesde, setFechaDesde] = useState(hoyStr);
   const [fechaHasta, setFechaHasta] = useState(hoyStr);
+  const [rangoActivo, setRangoActivo] = useState('hoy');
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
   const [filtroMetodoPago, setFiltroMetodoPago] = useState('Todos');
   const [busquedaTexto, setBusquedaTexto] = useState('');
-
-  const hoy = new Date();
-  const [periodoMes, setPeriodoMes] = useState(
-    `${hoy.getFullYear()}${String(hoy.getMonth() + 1).padStart(2, '0')}`
-  );
-
-  const [formCompra, setFormCompra] = useState({
-    proveedor: '', ruc: '', tipoDocumento: 'Recibo Interno', serieNumero: '',
-    baseImponible: '', igv: '', total: '', categoria: 'Insumos y Alimentos',
-    fechaEmision: hoyStr,
-    metodoPago: 'Efectivo',
-    montoEfectivoMixto: '', montoTarjetaMixto: '', montoYapeMixto: '',
-  });
-
-  const [apiStatus, setApiStatus] = useState({ modoDemo: true, apisunatActivo: false });
 
   const showToast = (msg, tipo = 'ok') => {
     setToastMsg({ msg, tipo });
@@ -131,20 +137,16 @@ export default function ComprasPage() {
   const fetchTodo = useCallback(async () => {
     setCargando(true);
     try {
-      const [cs, st, stApi] = await Promise.all([
+      const [cs, st] = await Promise.all([
         api.getCompras(fechaDesde, fechaHasta, {
           categoria: filtroCategoria !== 'Todas' ? filtroCategoria : undefined,
           metodoPago: filtroMetodoPago !== 'Todos' ? filtroMetodoPago : undefined,
           busqueda: busquedaTexto || undefined,
         }),
-        api.getComprasStats(),
-        api.getStatus().catch(() => null),
+        api.getComprasStats().catch(() => null),
       ]);
       setCompras(cs || []);
       setStats(st);
-      if (stApi && stApi.ok) {
-        setApiStatus({ modoDemo: stApi.modoDemo, apisunatActivo: stApi.apisunatActivo });
-      }
     } catch (e) {
       console.error(e);
       showToast('Error cargando datos: ' + e.message, 'error');
@@ -157,8 +159,20 @@ export default function ComprasPage() {
     fetchTodo();
   }, [fetchTodo]);
 
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      setDetalleId(null);
+      setFormAbierto(false);
+      setCompraEliminando(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Accesos rápidos de fechas (en hora local de Lima America/Lima)
   const setRangoPreset = (preset) => {
+    setRangoActivo(preset);
     if (preset === 'hoy') {
       const hoy = getFechaPeru();
       setFechaDesde(hoy);
@@ -173,162 +187,105 @@ export default function ComprasPage() {
       const d = new Date();
       const day = d.getDay() || 7;
       d.setDate(d.getDate() - day + 1);
-      const sDesde = getFechaPeru(d);
-      const sHasta = getFechaPeru(new Date());
-      setFechaDesde(sDesde);
-      setFechaHasta(sHasta);
+      setFechaDesde(getFechaPeru(d));
+      setFechaHasta(getFechaPeru(new Date()));
     } else if (preset === 'mes') {
       const d = new Date();
-      const sDesde = getFechaPeru(new Date(d.getFullYear(), d.getMonth(), 1));
-      const sHasta = getFechaPeru(new Date(d.getFullYear(), d.getMonth() + 1, 0));
-      setFechaDesde(sDesde);
-      setFechaHasta(sHasta);
+      setFechaDesde(getFechaPeru(new Date(d.getFullYear(), d.getMonth(), 1)));
+      setFechaHasta(getFechaPeru(new Date(d.getFullYear(), d.getMonth() + 1, 0)));
     }
   };
 
-  // ── AUTOCOMPLETAR CONCEPTO RÁPIDO ───────────────────────────────────────
+  // ── ABRIR FORMULARIO (NUEVO / EDITAR) ────────────────────────────────────
+  const abrirNuevo = () => {
+    setEditandoId(null);
+    setForm(formVacio(hoyStr));
+    setFormAbierto(true);
+  };
+
+  const abrirEditar = (compra) => {
+    const parsed = parsearGastoMetodos(compra.metodoPago, compra.total);
+    const fechaIso = fechaDeCompra(compra);
+    setEditandoId(compra.id);
+    setForm({
+      proveedor: compra.proveedor || '',
+      ruc: compra.ruc || '',
+      tipoDocumento: compra.tipoDocumento || 'Recibo Interno',
+      serieNumero: compra.serieNumero || '',
+      total: String(compra.total || ''),
+      categoria: compra.categoria || 'Otros',
+      fechaEmision: fechaIso ? getFechaPeru(new Date(fechaIso)) : hoyStr,
+      metodoPago: parsed.esMixto ? 'Mixto' : (compra.metodoPago || 'Efectivo'),
+      montoEfectivoMixto: parsed.esMixto ? String(parsed.efec) : '',
+      montoYapeMixto: parsed.esMixto ? String(parsed.yape) : '',
+      montoTarjetaMixto: parsed.esMixto ? String(parsed.tarj) : '',
+    });
+    setDetalleId(null);
+    setFormAbierto(true);
+  };
+
   const aplicarConceptoRapido = (concepto) => {
-    setFormCompra(prev => ({
+    setForm(prev => ({
       ...prev,
       proveedor: prev.proveedor ? prev.proveedor : concepto.nombre,
       categoria: concepto.cat,
     }));
   };
 
-  // ── GUARDAR NUEVO GASTO / COMPRA ─────────────────────────────────────────
-  const guardarCompraManual = async () => {
-    if (!formCompra.proveedor || !formCompra.total || parseFloat(formCompra.total) <= 0) {
-      showToast('Ingresa el nombre/descripción del gasto y un monto válido.', 'error');
+  // Base imponible e IGV: solo una factura desglosa IGV (18%)
+  const calcularBaseIgv = (tot, tipoDocumento) => {
+    if (tipoDocumento !== 'Factura') return { base: tot, igv: 0 };
+    const base = parseFloat((tot / 1.18).toFixed(2));
+    return { base, igv: parseFloat((tot - base).toFixed(2)) };
+  };
+
+  // ── GUARDAR GASTO (NUEVO O EDICIÓN) ──────────────────────────────────────
+  const guardarGasto = async () => {
+    const tot = parseFloat(form.total);
+    if (!form.proveedor.trim() || !tot || tot <= 0) {
+      showToast('Ingresa la descripción del gasto y un monto válido.', 'error');
       return;
     }
 
-    const tot = parseFloat(formCompra.total);
-    let finalMetodoPago = formCompra.metodoPago;
-
-    if (formCompra.metodoPago === 'Mixto') {
-      const efec = parseFloat(formCompra.montoEfectivoMixto) || 0;
-      const yape = parseFloat(formCompra.montoYapeMixto) || 0;
-      const tarj = parseFloat(formCompra.montoTarjetaMixto) || 0;
+    let finalMetodoPago = form.metodoPago;
+    if (form.metodoPago === 'Mixto') {
+      const efec = parseFloat(form.montoEfectivoMixto) || 0;
+      const yape = parseFloat(form.montoYapeMixto) || 0;
+      const tarj = parseFloat(form.montoTarjetaMixto) || 0;
       const suma = efec + yape + tarj;
-
       if (Math.abs(suma - tot) > 0.01) {
-        showToast(`⚠️ La suma del pago mixto (S/ ${suma.toFixed(2)}) no coincide con el total de S/ ${tot.toFixed(2)}.`, 'error');
+        showToast(`La suma del pago mixto (${soles(suma)}) no coincide con el total de ${soles(tot)}.`, 'error');
         return;
       }
       finalMetodoPago = `Mixto (Efec: S/ ${efec.toFixed(2)}, Yape: S/ ${yape.toFixed(2)}${tarj > 0 ? `, Tarj: S/ ${tarj.toFixed(2)}` : ''})`;
     }
 
-    setGuardando(true);
-    try {
-      let base = parseFloat(formCompra.baseImponible) || tot;
-      let igv = parseFloat(formCompra.igv) || 0;
-      
-      if (formCompra.tipoDocumento === 'Factura' && base === tot) {
-        base = parseFloat((tot / 1.18).toFixed(2));
-        igv = parseFloat((tot - base).toFixed(2));
-      }
-
-      await api.crearCompra({
-        proveedor: formCompra.proveedor,
-        ruc: formCompra.ruc || null,
-        tipoDocumento: formCompra.tipoDocumento || 'Recibo Interno',
-        serieNumero: formCompra.serieNumero || null,
-        baseImponible: base,
-        igv: igv,
-        total: tot,
-        origenCarga: 'manual',
-        categoria: formCompra.categoria || 'Otros',
-        fechaEmision: formCompra.fechaEmision || null,
-        metodoPago: finalMetodoPago,
-      });
-      await fetchTodo();
-      setModalManual(false);
-      setFormCompra({
-        proveedor: '', ruc: '', tipoDocumento: 'Recibo Interno', serieNumero: '',
-        baseImponible: '', igv: '', total: '', categoria: 'Insumos y Alimentos',
-        fechaEmision: hoyStr, metodoPago: 'Efectivo',
-        montoEfectivoMixto: '', montoTarjetaMixto: '', montoYapeMixto: ''
-      });
-      showToast('✅ Gasto registrado correctamente.');
-    } catch (err) {
-      showToast('❌ Error al guardar: ' + err.message, 'error');
-    } finally {
-      setGuardando(false);
-    }
-  };
-
-  // ── EDITAR COMPRA EXISTENTE ─────────────────────────────────────────────
-  const abrirModalEditar = (compra) => {
-    const parsed = parsearGastoMetodos(compra.metodoPago, compra.total);
-    setCompraEditando({
-      id: compra.id,
-      proveedor: compra.proveedor || '',
-      ruc: compra.ruc || '',
-      tipoDocumento: compra.tipoDocumento || 'Recibo Interno',
-      serieNumero: compra.serieNumero || '',
-      baseImponible: compra.baseImponible || 0,
-      igv: compra.igv || 0,
-      total: compra.total || 0,
-      categoria: compra.categoria || 'Otros',
-      fechaEmision: compra.fechaEmision ? compra.fechaEmision.split('T')[0] : (compra.creadoEn ? compra.creadoEn.split('T')[0] : hoyStr),
-      metodoPago: parsed.esMixto ? 'Mixto' : (compra.metodoPago || 'Efectivo'),
-      montoEfectivoMixto: parsed.esMixto ? String(parsed.efec) : '',
-      montoYapeMixto: parsed.esMixto ? String(parsed.yape) : '',
-      montoTarjetaMixto: parsed.esMixto ? String(parsed.tarj) : '',
-    });
-    setModalEditar(true);
-  };
-
-  const guardarEdicionCompra = async () => {
-    if (!compraEditando || !compraEditando.proveedor || !compraEditando.total) {
-      showToast('Ingresa la descripción y el monto total.', 'error');
-      return;
-    }
-
-    const tot = parseFloat(compraEditando.total);
-    let finalMetodoPago = compraEditando.metodoPago;
-
-    if (compraEditando.metodoPago === 'Mixto') {
-      const efec = parseFloat(compraEditando.montoEfectivoMixto) || 0;
-      const yape = parseFloat(compraEditando.montoYapeMixto) || 0;
-      const tarj = parseFloat(compraEditando.montoTarjetaMixto) || 0;
-      const suma = efec + yape + tarj;
-
-      if (Math.abs(suma - tot) > 0.01) {
-        showToast(`⚠️ La suma del pago mixto (S/ ${suma.toFixed(2)}) no coincide con el total de S/ ${tot.toFixed(2)}.`, 'error');
-        return;
-      }
-      finalMetodoPago = `Mixto (Efec: S/ ${efec.toFixed(2)}, Yape: S/ ${yape.toFixed(2)}${tarj > 0 ? `, Tarj: S/ ${tarj.toFixed(2)}` : ''})`;
-    }
+    const { base, igv } = calcularBaseIgv(tot, form.tipoDocumento);
+    const payload = {
+      proveedor: form.proveedor.trim(),
+      ruc: form.ruc || null,
+      tipoDocumento: form.tipoDocumento || 'Recibo Interno',
+      serieNumero: form.serieNumero || null,
+      baseImponible: base,
+      igv,
+      total: tot,
+      categoria: form.categoria || 'Otros',
+      fechaEmision: form.fechaEmision || null,
+      metodoPago: finalMetodoPago,
+    };
 
     setGuardando(true);
     try {
-      let base = parseFloat(compraEditando.baseImponible) || tot;
-      let igv = parseFloat(compraEditando.igv) || 0;
-
-      if (compraEditando.tipoDocumento === 'Factura' && base === tot) {
-        base = parseFloat((tot / 1.18).toFixed(2));
-        igv = parseFloat((tot - base).toFixed(2));
+      if (editandoId) {
+        await api.editarCompra(editandoId, payload);
+      } else {
+        await api.crearCompra({ ...payload, origenCarga: 'manual' });
       }
-
-      await api.editarCompra(compraEditando.id, {
-        proveedor: compraEditando.proveedor,
-        ruc: compraEditando.ruc || null,
-        tipoDocumento: compraEditando.tipoDocumento,
-        serieNumero: compraEditando.serieNumero || null,
-        baseImponible: base,
-        igv: igv,
-        total: tot,
-        categoria: compraEditando.categoria || null,
-        fechaEmision: compraEditando.fechaEmision || null,
-        metodoPago: finalMetodoPago,
-      });
       await fetchTodo();
-      setModalEditar(false);
-      setCompraEditando(null);
-      showToast('✅ Gasto actualizado correctamente.');
+      setFormAbierto(false);
+      showToast(editandoId ? 'Gasto actualizado correctamente.' : 'Gasto registrado correctamente.');
     } catch (err) {
-      showToast('❌ Error al actualizar: ' + err.message, 'error');
+      showToast('Error al guardar: ' + err.message, 'error');
     } finally {
       setGuardando(false);
     }
@@ -341,68 +298,45 @@ export default function ComprasPage() {
       await api.eliminarCompra(compraEliminando.id);
       await fetchTodo();
       setCompraEliminando(null);
-      showToast('✅ Registro eliminado correctamente.');
+      setDetalleId(null);
+      showToast('Registro eliminado correctamente.');
     } catch (err) {
-      showToast('❌ Error al eliminar: ' + err.message, 'error');
+      showToast('Error al eliminar: ' + err.message, 'error');
     }
   };
 
-  // ── CALCULAR BASE / IGV ──────────────────────────────────────────────────
-  const calcularPorTotal = (valTotal, isEditing = false) => {
-    const total = parseFloat(valTotal);
-    if (isNaN(total)) return;
-    const base = parseFloat((total / 1.18).toFixed(2));
-    const igv = parseFloat((total - base).toFixed(2));
-    if (isEditing) {
-      setCompraEditando(f => ({ ...f, total: String(total), baseImponible: String(base), igv: String(igv) }));
-    } else {
-      setFormCompra(f => ({ ...f, total: String(total), baseImponible: String(base), igv: String(igv) }));
-    }
-  };
-
-  // ── ACTUALIZAR CATEGORÍA INLINE ─────────────────────────────────────────
+  // ── CAMBIO RÁPIDO DE CATEGORÍA ───────────────────────────────────────────
   const actualizarCategoria = async (id, categoria) => {
     try {
       await api.actualizarCategoriaCompra(id, categoria);
       setCompras(prev => prev.map(c => c.id === id ? { ...c, categoria } : c));
-      const st = await api.getComprasStats();
-      setStats(st);
-      setEditCatId(null);
-    } catch (err) {
+      api.getComprasStats().then(setStats).catch(() => {});
+    } catch {
       showToast('Error al actualizar categoría', 'error');
     }
   };
 
-  // ── SINCRONIZAR CON SUNAT ───────────────────────────────────────────────
-  const sincronizarConSunat = async () => {
-    setSincronizando(true);
-    try {
-      const result = await api.sincronizarSunat({ periodo: periodoMes });
-      setUltimaSync(new Date());
-      await fetchTodo();
-      showToast(result.mensaje || '✅ Sincronización completada', result.modoDemo ? 'demo' : 'ok');
-    } catch (err) {
-      showToast('❌ Error al sincronizar: ' + err.message, 'error');
-    } finally {
-      setSincronizando(false);
-    }
-  };
-
-  // ── CÁLCULO DETALLADO DE EGRESOS POR GASTOS DEL PERIODO ───────────────────
+  // ── TOTALES DEL PERIODO ──────────────────────────────────────────────────
   const gastosDetalle = useMemo(() => {
-    let efec = 0, tarj = 0, yape = 0, total = 0;
+    let efec = 0, tarj = 0, yape = 0, total = 0, igv = 0, conComprobante = 0;
+    const porCategoria = {};
     (compras || []).forEach(c => {
       const tot = parseFloat(c.total) || 0;
       total += tot;
+      igv += parseFloat(c.igv) || 0;
+      if (c.tipoDocumento === 'Factura' || c.tipoDocumento === 'Boleta') conComprobante += 1;
       const p = parsearGastoMetodos(c.metodoPago, tot);
       efec += p.efec;
       tarj += p.tarj;
       yape += p.yape;
+      const cat = c.categoria || 'Sin Categoría';
+      porCategoria[cat] = (porCategoria[cat] || 0) + tot;
     });
-    return { total, efec, tarj, yape };
+    const categorias = Object.entries(porCategoria).sort((a, b) => b[1] - a[1]);
+    return { total, efec, tarj, yape, igv, conComprobante, categorias };
   }, [compras]);
 
-  // ── EXPORTAR GASTOS Y COMPRAS A EXCEL (.XLS) ──────────────────────
+  // ── EXPORTAR GASTOS Y COMPRAS A EXCEL (.XLS) ─────────────────────────────
   const exportarGastosExcel = () => {
     if (compras.length === 0) {
       showToast('No hay gastos registrados en el periodo seleccionado.', 'error');
@@ -413,7 +347,8 @@ export default function ComprasPage() {
     compras.forEach((c, idx) => {
       const comprobante = c.serieNumero ? `${c.tipoDocumento} ${c.serieNumero}` : (c.tipoDocumento || 'Recibo Interno');
       const bg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-      const fechaFormat = c.fechaEmision ? new Date(c.fechaEmision).toLocaleDateString('es-PE') : (c.fecha ? new Date(c.fecha).toLocaleDateString('es-PE') : '');
+      const f = fechaDeCompra(c);
+      const fechaFormat = f ? new Date(f).toLocaleDateString('es-PE', { timeZone: 'America/Lima' }) : '';
       tableRows += `
         <tr style="background-color: ${bg};">
           <td style="border: 1px solid #CBD5E1; padding: 6px; text-align: center;">${idx + 1}</td>
@@ -436,7 +371,6 @@ export default function ComprasPage() {
           .header-title { font-size: 16px; font-weight: 900; text-align: center; color: #0F172A; }
           .sub-header { font-size: 11px; font-weight: 800; color: #475569; text-align: center; }
           .table-header { background-color: #0F172A; color: #FFFFFF; font-weight: 800; text-align: center; border: 1px solid #0F172A; padding: 6px; }
-          .total-row { background-color: #FEF3C7; font-weight: 900; font-size: 12px; }
           .egreso-row { background-color: #FFF1F2; font-weight: 800; }
         </style>
       </head>
@@ -489,893 +423,620 @@ export default function ComprasPage() {
     a.download = `Reporte_Gastos_${fechaDesde}_${fechaHasta}_${marca}.xls`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('✅ Archivo Excel descargado con éxito.');
+    showToast('Archivo Excel descargado.');
   };
-  const exportarControlCajaExcel = exportarGastosExcel;
 
-  // ── EXPORTAR CSV SIRE (ORIGINAL) ────────────────────────────────────────
-  const exportarCSV = () => {
-    if (compras.length === 0) { showToast('No hay compras para exportar.', 'error'); return; }
-    const encabezado = ['Periodo', 'Nro Correlativo', 'Fecha Emisión', 'Tipo Comprobante', 'Serie-Número', 'RUC Proveedor', 'Razón Social', 'Moneda', 'Base Imponible', 'IGV (10.5%)', 'Total', 'Categoría Interna', 'Origen'];
-    const filas = compras.map((c, i) => {
-      const fechaEm = c.fechaEmision ? new Date(c.fechaEmision).toLocaleDateString('es-PE') : new Date(c.creadoEn).toLocaleDateString('es-PE');
-      return [
-        periodoMes,
-        String(i + 1).padStart(4, '0'),
-        fechaEm,
-        c.tipoDocumento,
-        c.serieNumero || 'S/N',
-        c.ruc || '',
-        `"${c.proveedor}"`,
-        'PEN',
-        c.baseImponible.toFixed(2),
-        c.igv.toFixed(2),
-        c.total.toFixed(2),
-        c.categoria || 'Sin Categoría',
-        c.origenCarga,
-      ].join(',');
-    });
-    const csv = '\uFEFF' + [encabezado.join(','), ...filas].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const marca = (COMPANY_CONFIG.brandShort || 'EMPRESA').replace(/\s+/g, '_');
-    a.download = `RCE_Compras_${periodoMes}_${marca}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('✅ CSV exportado para SIRE / Siscont.');
-  };
+  // ── ESTILOS COMPARTIDOS (mismo lenguaje visual que Caja) ─────────────────
+  const lbl = 'block text-xs font-medium text-slate-500 mb-1.5';
+  const inp = 'w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5 transition';
+  const selectFiltro = 'h-9 px-2.5 rounded-lg bg-slate-100/80 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10';
+
+  const modalBase = (onClose, header, body, footer, ancho = 'sm:max-w-lg') => (
+    <div
+      className="fixed inset-0 z-[105] bg-slate-900/50 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className={`bg-white w-full ${ancho} max-h-[92dvh] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up`}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-slate-100">
+          <div className="min-w-0">{header}</div>
+          <button type="button" onClick={onClose} className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-5">{body}</div>
+        {footer && <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/70">{footer}</div>}
+      </div>
+    </div>
+  );
+
+  const compraDetalle = detalleId != null ? compras.find(c => c.id === detalleId) : null;
+  const categoriaMayor = gastosDetalle.categorias[0];
+  const rangoTexto = fechaDesde === fechaHasta ? formatearFecha(`${fechaDesde}T12:00:00-05:00`) : `${formatearFecha(`${fechaDesde}T12:00:00-05:00`)} – ${formatearFecha(`${fechaHasta}T12:00:00-05:00`)}`;
+  const hayFiltros = filtroCategoria !== 'Todas' || filtroMetodoPago !== 'Todos' || busquedaTexto.trim();
 
   return (
-    <section className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar bg-slate-50 relative">
+    <section className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50">
+      <div className="max-w-[1600px] mx-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-7 space-y-5">
 
-      {/* TOAST NOTIFICACIÓN */}
-      {toastMsg && (
-        <div className={`fixed top-6 right-6 z-[300] flex items-start gap-3 px-5 py-4 rounded-2xl shadow-2xl max-w-sm animate-slide-up border ${
-          toastMsg.tipo === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
-          toastMsg.tipo === 'demo'  ? 'bg-amber-50 border-amber-200 text-amber-900' :
-          'bg-emerald-50 border-emerald-200 text-emerald-900'
-        }`}>
-          {toastMsg.tipo === 'error'
-            ? <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-red-500" />
-            : <CheckCircle className="w-5 h-5 shrink-0 mt-0.5 text-emerald-500" />}
-          <p className="text-sm font-semibold leading-snug">{toastMsg.msg}</p>
-          <button onClick={() => setToastMsg(null)} className="ml-2 shrink-0 opacity-50 hover:opacity-100 cursor-pointer"><X className="w-4 h-4" /></button>
-        </div>
-      )}
-
-      {/* HEADER */}
-      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2.5">
-            <Wallet className="w-7 h-7 text-amber-500" /> Control de Gastos y Compras
-          </h1>
-          <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Registro y control contable de compras, egresos operativos y facturas de proveedores.
-          </p>
-        </div>
-
-        {/* BOTONES PRINCIPALES */}
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <button
-            onClick={() => setModalManual(true)}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
-          >
-            <PlusCircle className="w-4 h-4" /> + Registrar Gasto
-          </button>
-          <button
-            onClick={exportarGastosExcel}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-md transition-all cursor-pointer"
-            title="Descargar reporte detallado en Excel"
-          >
-            <Download className="w-4 h-4" /> Exportar a Excel
-          </button>
-        </div>
-      </div>
-
-      {/* BARRA DE FILTROS AVANZADOS */}
-      <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm p-4 md:p-5 mb-6 space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          
-          {/* Rangos rápidos de fecha */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Rango:</span>
-            {[
-              { id: 'hoy', label: 'Hoy' },
-              { id: 'ayer', label: 'Ayer' },
-              { id: 'semana', label: 'Esta Semana' },
-              { id: 'mes', label: 'Este Mes' },
-            ].map(p => (
-              <button
-                key={p.id}
-                onClick={() => setRangoPreset(p.id)}
-                className="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider bg-slate-100 hover:bg-amber-100 hover:text-amber-900 text-slate-600 transition-all cursor-pointer active:scale-95"
-              >
-                {p.label}
-              </button>
-            ))}
+        {/* ENCABEZADO */}
+        <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Compras y gastos</h1>
+            <p className="mt-1 text-sm text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className="inline-flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {rangoTexto}</span>
+              <span className="text-slate-300">·</span>
+              <span>{compras.length} registro{compras.length !== 1 ? 's' : ''}</span>
+            </p>
           </div>
-
-          {/* Selector personalizado Desde - Hasta */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-[10px] font-black text-slate-400 uppercase">Desde:</span>
-              <input
-                type="date"
-                value={fechaDesde}
-                onChange={e => setFechaDesde(e.target.value)}
-                className="text-xs font-bold text-slate-700 bg-transparent focus:outline-none font-mono"
-              />
-            </div>
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-[10px] font-black text-slate-400 uppercase">Hasta:</span>
-              <input
-                type="date"
-                value={fechaHasta}
-                onChange={e => setFechaHasta(e.target.value)}
-                className="text-xs font-bold text-slate-700 bg-transparent focus:outline-none font-mono"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Buscador y Dropdowns */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
-          
-          {/* Buscador */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={busquedaTexto}
-              onChange={e => setBusquedaTexto(e.target.value)}
-              placeholder="Buscar gasto, proveedor, RUC..."
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 bg-slate-50 focus:bg-white focus:outline-none focus:border-blue-400"
-            />
-          </div>
-
-          {/* Categoría */}
-          <div>
-            <select
-              value={filtroCategoria}
-              onChange={e => setFiltroCategoria(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 bg-slate-50 focus:bg-white focus:outline-none focus:border-blue-400"
-            >
-              <option value="Todas">📂 Todas las categorías</option>
-              {CATEGORIAS.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Método de Pago */}
-          <div>
-            <select
-              value={filtroMetodoPago}
-              onChange={e => setFiltroMetodoPago(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 bg-slate-50 focus:bg-white focus:outline-none focus:border-blue-400"
-            >
-              <option value="Todos">💳 Todos los medios de pago</option>
-              <option value="Efectivo">💵 Efectivo</option>
-              <option value="Yape">📱 Yape / Plin</option>
-              <option value="Tarjeta">💳 Tarjeta</option>
-              <option value="Mixto">🔄 Mixto</option>
-            </select>
-          </div>
-
-          {/* Botón Exportar SIRE */}
-          <div>
+          <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={exportarCSV}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl font-bold text-xs transition-all cursor-pointer"
-              title="Exportar CSV formato SIRE"
+              type="button"
+              onClick={exportarGastosExcel}
+              className="h-10 px-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors whitespace-nowrap"
+              title="Descargar el reporte del periodo en Excel"
             >
-              <Download className="w-3.5 h-3.5" /> Exportar SIRE (CSV)
+              <Download className="w-4 h-4" /> <span className="hidden sm:inline">Excel</span>
+            </button>
+            <button
+              type="button"
+              onClick={abrirNuevo}
+              className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-sm font-semibold text-white shadow-sm shadow-rose-600/25 transition-colors active:scale-[0.98] whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" /> Registrar gasto
             </button>
           </div>
-        </div>
-      </div>
+        </header>
 
-      {/* ═══════════════════════════════════════════════════
-          PANEL DE RESUMEN DE GASTOS Y COMPRAS
-      ═══════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        
-        {/* TARJETA 1: TOTAL GASTOS Y COMPRAS */}
-        <div className="bg-white rounded-3xl border border-rose-100 shadow-sm p-5 relative overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1">
-              <ArrowUpRight className="w-3.5 h-3.5 text-rose-500" /> Total Gastos del Periodo
-            </span>
-            <span className="text-[10px] font-bold text-slate-400">{compras.length} registros</span>
-          </div>
-          <p className="text-3xl font-black font-mono text-rose-600">
-            S/ {gastosDetalle.total.toFixed(2)}
-          </p>
-          <p className="text-[10px] text-slate-400 mt-2">
-            Monto acumulado en facturas, recibos y egresos operativos
-          </p>
-        </div>
-
-        {/* TARJETA 2: DESGLOSE POR FORMA DE PAGO */}
-        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-5 relative overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
-              <DollarSign className="w-3.5 h-3.5 text-slate-500" /> Formas de Pago
-            </span>
-            <span className="text-[10px] font-bold text-slate-400 font-mono">100% Egresos</span>
-          </div>
-          <div className="space-y-1.5 text-xs text-slate-700 font-bold">
-            <div className="flex justify-between items-center py-0.5 border-b border-slate-50">
-              <span className="flex items-center gap-1">💵 Efectivo:</span>
-              <span className="font-mono font-black text-slate-900">S/ {gastosDetalle.efec.toFixed(2)}</span>
+        {/* RESUMEN DEL PERIODO */}
+        <div className={`grid grid-cols-2 lg:grid-cols-5 gap-3 ${desgloseAbierto ? 'items-start' : ''}`}>
+          <div className="col-span-2 rounded-2xl bg-gradient-to-br from-rose-600 to-orange-500 text-white p-4 sm:p-5 shadow-sm shadow-rose-600/20">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-rose-50/90">Gastos del periodo</p>
+              <span className="w-8 h-8 rounded-lg bg-white/15 grid place-items-center"><ArrowUpRight className="w-4 h-4" /></span>
             </div>
-            <div className="flex justify-between items-center py-0.5 border-b border-slate-50">
-              <span className="flex items-center gap-1">📱 Yape / Plin:</span>
-              <span className="font-mono font-black text-slate-900">S/ {gastosDetalle.yape.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between items-center py-0.5">
-              <span className="flex items-center gap-1">💳 Tarjeta / Banco:</span>
-              <span className="font-mono font-black text-slate-900">S/ {gastosDetalle.tarj.toFixed(2)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* TARJETA 3: PROMEDIO Y PERIODO */}
-        <div className="bg-slate-900 rounded-3xl shadow-lg p-5 text-white flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1">
-                <Tag className="w-3.5 h-3.5 text-amber-400" /> Promedio por Comprobante
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono">{compras.length} gastos</span>
-            </div>
-            <p className="text-3xl font-black font-mono text-amber-400">
-              S/ {compras.length > 0 ? (gastosDetalle.total / compras.length).toFixed(2) : '0.00'}
-            </p>
-            <p className="text-[10px] text-slate-400 mt-0.5">
-              Promedio por factura o recibo en este rango
-            </p>
-          </div>
-          <div className="mt-3 pt-2.5 border-t border-slate-800 flex justify-between items-center text-xs font-bold">
-            <span className="text-slate-400">Rango seleccionado:</span>
-            <span className="font-mono text-slate-300 font-black">
-              {fechaDesde} al {fechaHasta}
-            </span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* TABLA PRINCIPAL DE GASTOS Y COMPRAS */}
-      <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden mb-8">
-        <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50/80 flex justify-between items-center flex-wrap gap-2">
-          <h2 className="font-black text-slate-800 uppercase text-xs tracking-wider flex items-center gap-2">
-            <FileText className="w-4 h-4 text-amber-500" /> Registro Detallado de Gastos y Facturas
-          </h2>
-          <div className="flex items-center gap-2">
-            <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider">
-              {compras.length} Registro{compras.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-        </div>
-
-        {cargando ? (
-          <div className="py-16 flex items-center justify-center">
-            <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (
-          <div className="overflow-x-auto table-scroll">
-            <table className="w-full text-left min-w-[850px]">
-              <thead className="bg-white text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                <tr>
-                  <th className="px-5 py-4 w-12 text-center">Nº</th>
-                  <th className="px-5 py-4">Fecha</th>
-                  <th className="px-5 py-4">Descripción / Proveedor</th>
-                  <th className="px-5 py-4">Categoría</th>
-                  <th className="px-5 py-4">Comprobante</th>
-                  <th className="px-5 py-4 text-right">Monto (S/)</th>
-                  <th className="px-5 py-4 text-center">Medio Pago</th>
-                  <th className="px-5 py-4 text-center">Origen</th>
-                  <th className="px-5 py-4 text-center w-28">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50 text-sm bg-white">
-                {compras.length > 0 ? compras.map((c, idx) => {
-                  const fechaEm = c.fechaEmision
-                    ? new Date(c.fechaEmision).toLocaleDateString('es-PE')
-                    : new Date(c.creadoEn).toLocaleDateString('es-PE');
-                  const origen = ORIGEN_BADGE[c.origenCarga] || ORIGEN_BADGE['manual'];
-                  const colores = COLORES_CATEGORIA[c.categoria] || COLORES_CATEGORIA['Sin Categoría'];
-
-                  return (
-                    <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-5 py-3.5 text-center font-mono text-xs text-slate-400 font-bold">{idx + 1}</td>
-                      <td className="px-5 py-3.5 font-mono text-slate-600 text-xs">{fechaEm}</td>
-                      <td className="px-5 py-3.5">
-                        <div className="font-black text-slate-900 text-xs leading-tight">{c.proveedor}</div>
-                        {c.ruc && c.ruc !== '00000000000' && (
-                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">RUC: {c.ruc}</div>
-                        )}
-                      </td>
-
-                      {/* CATEGORÍA INLINE */}
-                      <td className="px-5 py-3.5">
-                        {editCatId === c.id ? (
-                          <div className="relative">
-                            <select
-                              autoFocus
-                              defaultValue={c.categoria || ''}
-                              onBlur={e => {
-                                if (e.target.value !== c.categoria) {
-                                  actualizarCategoria(c.id, e.target.value || null);
-                                } else {
-                                  setEditCatId(null);
-                                }
-                              }}
-                              onChange={e => actualizarCategoria(c.id, e.target.value || null)}
-                              className="border border-amber-400 rounded-lg px-2 py-1 text-xs font-bold bg-white focus:outline-none focus:border-amber-500 w-full"
-                            >
-                              <option value="">Sin categoría</option>
-                              {CATEGORIAS.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                              ))}
-                            </select>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setEditCatId(c.id)}
-                            title="Click para editar categoría"
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black border transition-all hover:opacity-80 cursor-pointer ${colores.bg} ${colores.text} ${colores.border}`}
-                          >
-                            {c.categoria || 'Sin categoría'}
-                            <ChevronDown className="w-3 h-3 opacity-50" />
-                          </button>
-                        )}
-                      </td>
-
-                      <td className="px-5 py-3.5">
-                        <div className="font-bold text-slate-600 text-xs">{c.tipoDocumento || 'Recibo'}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">{c.serieNumero || 'S/N'}</div>
-                      </td>
-
-                      <td className="px-5 py-3.5 text-right font-mono font-black text-slate-950 text-sm">
-                        S/ {parseFloat(c.total || 0).toFixed(2)}
-                      </td>
-
-                      <td className="px-5 py-3.5 text-center">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                          c.metodoPago === 'Efectivo' ? 'bg-amber-100 text-amber-800' :
-                          c.metodoPago === 'Yape' ? 'bg-purple-100 text-purple-800' :
-                          c.metodoPago?.startsWith('Mixto') ? 'bg-indigo-100 text-indigo-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`} title={c.metodoPago}>
-                          {c.metodoPago || 'Efectivo'}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-3.5 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${origen.cls}`}>
-                          {origen.label}
-                        </span>
-                      </td>
-
-                      {/* ACCIONES: EDITAR Y ELIMINAR */}
-                      <td className="px-5 py-3.5 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => abrirModalEditar(c)}
-                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all active:scale-90 cursor-pointer"
-                            title="Editar este gasto"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setCompraEliminando(c)}
-                            className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-all active:scale-90 cursor-pointer"
-                            title="Eliminar este gasto"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                }) : (
-                  <tr>
-                    <td colSpan="9" className="text-center py-16 text-slate-400">
-                      <RefreshCw className="w-10 h-10 mx-auto mb-3 text-slate-200" />
-                      <p className="font-black uppercase text-xs tracking-wider mb-1">No hay gastos en este rango</p>
-                      <p className="text-xs">Registra un nuevo gasto manual o amplía las fechas de búsqueda.</p>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ═══════════════════════════════════════════════════
-          MODAL DE REGISTRO MANUAL DE GASTO (ÁGIL + MIXTO)
-      ═══════════════════════════════════════════════════ */}
-      {modalManual && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-scale-in">
-            <div className="bg-slate-900 p-5 flex justify-between items-center text-white">
-              <h3 className="font-black flex items-center gap-2 uppercase tracking-tight text-sm">
-                <PlusCircle className="w-5 h-5 text-amber-500" /> Registrar Nuevo Gasto / Compra
-              </h3>
-              <button onClick={() => setModalManual(false)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X className="w-5 h-5" />
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <p className="text-2xl sm:text-3xl font-semibold font-mono tabular-nums tracking-tight truncate">{soles(gastosDetalle.total)}</p>
+              <button
+                type="button"
+                onClick={() => setDesgloseAbierto(v => !v)}
+                className="h-7 pl-2.5 pr-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-[11px] font-medium inline-flex items-center gap-1 transition-colors shrink-0"
+                aria-expanded={desgloseAbierto}
+              >
+                Detalle <ChevronDown className={`w-4 h-4 transition-transform ${desgloseAbierto ? 'rotate-180' : ''}`} />
               </button>
             </div>
-            
-            <div className="p-6 space-y-4 bg-slate-50 max-h-[80vh] overflow-y-auto custom-scrollbar">
+            {desgloseAbierto && (
+              <div className="mt-3 pt-3 border-t border-white/20 grid grid-cols-3 gap-2 text-xs animate-fade-in">
+                {[['Efectivo', gastosDetalle.efec], ['Yape', gastosDetalle.yape], ['Tarjeta', gastosDetalle.tarj]].map(([label, monto]) => (
+                  <div key={label} className="min-w-0">
+                    <p className="text-rose-50/75">{label}</p>
+                    <p className="font-mono tabular-nums text-white truncate">{soles(monto)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {[
+            { label: 'Pagado en efectivo', valor: soles(gastosDetalle.efec), hint: `Digital ${soles(gastosDetalle.yape + gastosDetalle.tarj)}`, Icon: Banknote, color: 'bg-emerald-50 text-emerald-600', borde: 'border-t-emerald-500' },
+            { label: 'Mayor categoría', valor: categoriaMayor ? categoriaMayor[0] : '—', hint: categoriaMayor ? `${soles(categoriaMayor[1])} · ${gastosDetalle.total > 0 ? Math.round((categoriaMayor[1] / gastosDetalle.total) * 100) : 0}% del total` : 'Sin gastos', Icon: Tag, color: 'bg-amber-50 text-amber-600', borde: 'border-t-amber-500', texto: true },
+            { label: 'IGV de facturas', valor: soles(gastosDetalle.igv), hint: `${gastosDetalle.conComprobante} con boleta o factura`, Icon: FileText, color: 'bg-sky-50 text-sky-600', borde: 'border-t-sky-500' },
+          ].map(({ label, valor, hint, Icon, color, borde, texto }) => (
+            <div key={label} className={`rounded-2xl border border-slate-200/70 border-t-4 ${borde} bg-white p-4 min-w-0`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-slate-500">{label}</p>
+                <span className={`w-8 h-8 rounded-lg grid place-items-center ${color}`}><Icon className="w-4 h-4" /></span>
+              </div>
+              <p className={`mt-1 font-semibold text-slate-900 truncate ${texto ? 'text-base sm:text-lg' : 'text-lg sm:text-xl font-mono tabular-nums'}`}>{valor}</p>
+              <p className="mt-1 text-[11px] leading-snug text-slate-400">{hint}</p>
+            </div>
+          ))}
+        </div>
 
-              {/* CHIPS DE CONCEPTOS RÁPIDOS */}
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
-                  Conceptos Frecuentes (Autollenado Rápido)
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {CONCEPTOS_RAPIDOS.map((cp, i) => (
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 items-start">
+
+          {/* LISTA DE GASTOS */}
+          <section className="xl:col-span-3 bg-white rounded-2xl border border-slate-200/70 min-w-0">
+            <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-slate-100">
+              <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 grid place-items-center"><Receipt className="w-4 h-4" /></span> Registro de gastos
+                <span className="text-xs font-semibold text-rose-700 bg-rose-50 rounded-full px-2.5 py-0.5">{compras.length}</span>
+              </h2>
+            </div>
+
+            {/* Filtros */}
+            <div className="px-4 sm:px-5 py-3 space-y-2 border-b border-slate-100">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex h-9 p-0.5 rounded-lg bg-slate-100/80 text-xs font-medium">
+                  {[['hoy', 'Hoy'], ['ayer', 'Ayer'], ['semana', 'Semana'], ['mes', 'Mes']].map(([id, label]) => (
                     <button
-                      key={i}
+                      key={id}
+                      type="button"
+                      onClick={() => setRangoPreset(id)}
+                      className={`px-3 rounded-md transition-colors ${rangoActivo === id ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={fechaDesde}
+                    onChange={e => { setFechaDesde(e.target.value); setRangoActivo(null); }}
+                    className={`${selectFiltro} font-mono text-xs`}
+                    aria-label="Desde"
+                  />
+                  <span className="text-slate-300 text-xs">–</span>
+                  <input
+                    type="date"
+                    value={fechaHasta}
+                    onChange={e => { setFechaHasta(e.target.value); setRangoActivo(null); }}
+                    className={`${selectFiltro} font-mono text-xs`}
+                    aria-label="Hasta"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 min-w-[160px]">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="search"
+                    value={busquedaTexto}
+                    onChange={e => setBusquedaTexto(e.target.value)}
+                    placeholder="Buscar gasto, proveedor, RUC…"
+                    className="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-100/80 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-slate-900/10"
+                  />
+                </div>
+                <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} className={selectFiltro}>
+                  <option value="Todas">Todas las categorías</option>
+                  {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select value={filtroMetodoPago} onChange={e => setFiltroMetodoPago(e.target.value)} className={selectFiltro}>
+                  <option value="Todos">Todos los pagos</option>
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Yape">Yape / Plin</option>
+                  <option value="Tarjeta">Tarjeta</option>
+                  <option value="Mixto">Mixto</option>
+                </select>
+              </div>
+            </div>
+
+            {cargando ? (
+              <div className="py-16 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-rose-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : compras.length > 0 ? (
+              <ul className="divide-y divide-slate-100">
+                {compras.map(c => {
+                  const est = estiloMetodo(c.metodoPago);
+                  const colores = coloresDe(c.categoria);
+                  return (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        onClick={() => setDetalleId(c.id)}
+                        className="w-full text-left flex items-center gap-3 px-4 sm:px-5 py-3 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:bg-slate-50"
+                      >
+                        <div className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${est.chip}`}>
+                          <est.Icon className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate text-slate-900">{c.proveedor}</p>
+                          <p className="text-xs text-slate-500 truncate flex items-center gap-1.5">
+                            <span>{formatearFecha(fechaDeCompra(c))}</span>
+                            <span className="text-slate-300">·</span>
+                            <span className={`inline-flex px-1.5 rounded-md border text-[10px] font-medium ${colores.chip}`}>{c.categoria || 'Sin categoría'}</span>
+                            {c.serieNumero && <><span className="text-slate-300">·</span><span className="font-mono">{c.tipoDocumento} {c.serieNumero}</span></>}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-mono text-sm font-semibold tabular-nums text-rose-600">- {soles(c.total)}</p>
+                          <p className={`text-[11px] font-medium ${est.text}`}>{est.id === 'Mixto' ? 'Mixto' : est.label}</p>
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="px-5 py-12 text-center">
+                <p className="text-sm text-slate-400">{hayFiltros ? 'Ningún gasto coincide con el filtro.' : 'No hay gastos en este periodo.'}</p>
+                {!hayFiltros && (
+                  <button type="button" onClick={abrirNuevo} className="mt-3 h-9 px-4 rounded-lg text-sm font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 transition-colors inline-flex items-center gap-1.5">
+                    <Plus className="w-4 h-4" /> Registrar el primero
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* PANEL LATERAL: DISTRIBUCIÓN */}
+          <div className="xl:col-span-2 space-y-5 min-w-0">
+            <section className="bg-white rounded-2xl border border-slate-200/70">
+              <div className="flex items-center gap-2 px-4 sm:px-5 py-3.5 border-b border-slate-100">
+                <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 grid place-items-center"><PieChart className="w-4 h-4" /></span>
+                <h2 className="text-sm font-semibold text-slate-800">Por categoría</h2>
+              </div>
+              {gastosDetalle.categorias.length > 0 ? (
+                <ul className="px-4 sm:px-5 py-4 space-y-3">
+                  {gastosDetalle.categorias.map(([cat, monto]) => {
+                    const pct = gastosDetalle.total > 0 ? (monto / gastosDetalle.total) * 100 : 0;
+                    const activa = filtroCategoria === cat;
+                    return (
+                      <li key={cat}>
+                        <button
+                          type="button"
+                          onClick={() => setFiltroCategoria(activa || cat === 'Sin Categoría' ? 'Todas' : cat)}
+                          className="w-full text-left group"
+                          title={activa ? 'Quitar filtro' : 'Ver solo esta categoría'}
+                        >
+                          <div className="flex items-center justify-between gap-2 text-sm">
+                            <span className={`truncate ${activa ? 'font-semibold text-slate-900' : 'text-slate-600 group-hover:text-slate-900'}`}>{cat}</span>
+                            <span className="font-mono tabular-nums text-slate-900 shrink-0">{soles(monto)}</span>
+                          </div>
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <div className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden">
+                              <div className={`h-full rounded-full ${coloresDe(cat).bar}`} style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-[11px] text-slate-400 tabular-nums w-9 text-right">{Math.round(pct)}%</span>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="px-5 py-8 text-center text-sm text-slate-400">Sin gastos para mostrar.</p>
+              )}
+            </section>
+
+            <section className="bg-white rounded-2xl border border-slate-200/70">
+              <div className="flex items-center gap-2 px-4 sm:px-5 py-3.5 border-b border-slate-100">
+                <span className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 grid place-items-center"><Calendar className="w-4 h-4" /></span>
+                <h2 className="text-sm font-semibold text-slate-800">Este mes</h2>
+              </div>
+              <dl className="px-4 sm:px-5 py-4 space-y-2.5 text-sm">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-500">Total gastado</dt>
+                  <dd className="font-mono tabular-nums font-semibold text-slate-900">{soles(stats?.totalGastado)}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-500">Registros</dt>
+                  <dd className="font-mono tabular-nums text-slate-900">{stats?.numFacturas ?? 0}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-500">IGV de compras</dt>
+                  <dd className="font-mono tabular-nums text-slate-900">{soles(stats?.totalIGV)}</dd>
+                </div>
+                <div className="flex justify-between gap-3 pt-2.5 border-t border-slate-100">
+                  <dt className="text-slate-500 shrink-0">Mayor proveedor</dt>
+                  <dd className="text-right min-w-0">
+                    <p className="text-slate-900 truncate">{stats?.topProveedor?.nombre || '—'}</p>
+                    {stats?.topProveedor && <p className="text-xs font-mono text-slate-400">{soles(stats.topProveedor.total)}</p>}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      {/* MODAL: DETALLE DE GASTO */}
+      {compraDetalle && (() => {
+        const c = compraDetalle;
+        const est = estiloMetodo(c.metodoPago);
+        const p = parsearGastoMetodos(c.metodoPago, c.total);
+        return modalBase(
+          () => setDetalleId(null),
+          <>
+            <p className="text-lg font-semibold text-slate-900 break-words">{c.proveedor}</p>
+            <p className="text-sm text-slate-500">{formatearFecha(fechaDeCompra(c))} · Registro #{c.id}</p>
+          </>,
+          <>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-xs text-slate-500">Monto</p>
+                <p className="text-2xl font-semibold font-mono tabular-nums text-rose-600">{soles(c.total)}</p>
+              </div>
+              <span className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium ${est.chip}`}>
+                <est.Icon className="w-4 h-4" /> {est.id === 'Mixto' ? 'Pago mixto' : est.label}
+              </span>
+            </div>
+            {p.esMixto && (
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                {[['Efectivo', p.efec], ['Yape', p.yape], ['Tarjeta', p.tarj]].map(([label, monto]) => (
+                  <div key={label} className="rounded-xl bg-slate-50 px-3 py-2">
+                    <p className="text-slate-500">{label}</p>
+                    <p className="font-mono tabular-nums text-slate-900">{soles(monto)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              <div><dt className="text-xs text-slate-400">Comprobante</dt><dd className="text-slate-800">{c.tipoDocumento || 'Recibo Interno'}</dd></div>
+              <div><dt className="text-xs text-slate-400">Número</dt><dd className="font-mono text-slate-800">{c.serieNumero || 'S/N'}</dd></div>
+              <div><dt className="text-xs text-slate-400">RUC</dt><dd className="font-mono text-slate-800">{c.ruc && c.ruc !== '00000000000' ? c.ruc : '—'}</dd></div>
+              <div><dt className="text-xs text-slate-400">IGV</dt><dd className="font-mono text-slate-800">{soles(c.igv)}</dd></div>
+            </dl>
+            <div>
+              <p className="text-xs font-medium text-slate-400 mb-2">Categoría · toca para cambiarla</p>
+              <div className="flex flex-wrap gap-1.5">
+                {CATEGORIAS.map(cat => {
+                  const activa = c.categoria === cat;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => !activa && actualizarCategoria(c.id, cat)}
+                      className={`h-8 px-3 rounded-full border text-xs font-medium transition active:scale-95 ${activa ? coloresDe(cat).activo : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>,
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCompraEliminando(c)}
+              className="h-11 px-4 rounded-xl text-sm font-medium text-rose-600 hover:bg-rose-50 transition-colors inline-flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" /> Eliminar
+            </button>
+            <button
+              type="button"
+              onClick={() => abrirEditar(c)}
+              className="ml-auto h-11 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors active:scale-[0.98] inline-flex items-center gap-2"
+            >
+              <Pencil className="w-4 h-4" /> Editar
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* MODAL: REGISTRAR / EDITAR GASTO */}
+      {formAbierto && form && (() => {
+        const tot = parseFloat(form.total) || 0;
+        const { base, igv } = calcularBaseIgv(tot, form.tipoDocumento);
+        return modalBase(
+          () => setFormAbierto(false),
+          <>
+            <p className="text-lg font-semibold text-slate-900">{editandoId ? 'Editar gasto' : 'Registrar gasto'}</p>
+            <p className="text-sm text-slate-500">{editandoId ? `Registro #${editandoId}` : 'Compra, pago o egreso del negocio'}</p>
+          </>,
+          <>
+            {!editandoId && (
+              <div>
+                <p className={lbl}>Conceptos frecuentes</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {CONCEPTOS_RAPIDOS.map((cp) => (
+                    <button
+                      key={cp.label}
                       type="button"
                       onClick={() => aplicarConceptoRapido(cp)}
-                      className="px-2.5 py-1 rounded-xl text-xs font-bold bg-white hover:bg-amber-100 hover:text-amber-900 border border-slate-200 text-slate-700 transition-all cursor-pointer active:scale-95"
+                      className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 transition active:scale-95"
                     >
                       {cp.label}
                     </button>
                   ))}
                 </div>
               </div>
+            )}
 
-              <div className="grid grid-cols-2 gap-4">
-                
-                {/* Nombre / Descripción */}
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">
-                    Nombre / Descripción del Gasto *
-                  </label>
-                  <input
-                    type="text"
-                    value={formCompra.proveedor}
-                    onChange={e => setFormCompra(f => ({ ...f, proveedor: e.target.value }))}
-                    placeholder="Ej. Pollo para caldo, Fluorescentes (2), Martha Silva Sueldo, Gas..."
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500 bg-white"
-                  />
-                </div>
+            <div>
+              <label className={lbl}>Descripción del gasto *</label>
+              <input
+                type="text"
+                value={form.proveedor}
+                onChange={e => setForm(f => ({ ...f, proveedor: e.target.value }))}
+                placeholder="Ej. Pollo para caldo, Gas, Sueldo Martha…"
+                className={inp}
+              />
+            </div>
 
-                {/* Monto Total */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">
-                    Monto Total (S/) *
-                  </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Monto *</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">S/</span>
                   <input
-                    type="number" min="0" step="0.01"
-                    value={formCompra.total}
-                    onChange={e => calcularPorTotal(e.target.value)}
+                    type="number" min="0" step="0.01" inputMode="decimal"
+                    value={form.total}
+                    onChange={e => setForm(f => ({ ...f, total: e.target.value }))}
                     placeholder="0.00"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-amber-500 bg-white font-mono font-black text-slate-900"
+                    className={`${inp} h-11 pl-9 font-mono text-lg font-semibold tabular-nums`}
                   />
                 </div>
-
-                {/* Método de Pago */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">
-                    Medio de Pago *
-                  </label>
-                  <select
-                    value={formCompra.metodoPago}
-                    onChange={e => {
-                      const nuevoMetodo = e.target.value;
-                      setFormCompra(f => {
-                        const tot = parseFloat(f.total) || 0;
-                        return {
-                          ...f,
-                          metodoPago: nuevoMetodo,
-                          montoEfectivoMixto: nuevoMetodo === 'Mixto' ? String(tot) : '',
-                          montoYapeMixto: '',
-                          montoTarjetaMixto: '',
-                        };
-                      });
-                    }}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 bg-white font-bold text-slate-800"
-                  >
-                    <option value="Efectivo">💵 Efectivo (Caja)</option>
-                    <option value="Yape">📱 Yape / Plin</option>
-                    <option value="Tarjeta">💳 Tarjeta / Banco</option>
-                    <option value="Mixto">🔄 Pago Mixto (Desglosar)</option>
-                  </select>
-                </div>
-
-                {/* PANEL DESGLOSE PAGO MIXTO */}
-                {formCompra.metodoPago === 'Mixto' && (() => {
-                  const tot = parseFloat(formCompra.total) || 0;
-                  const efec = parseFloat(formCompra.montoEfectivoMixto) || 0;
-                  const yape = parseFloat(formCompra.montoYapeMixto) || 0;
-                  const tarj = parseFloat(formCompra.montoTarjetaMixto) || 0;
-                  const suma = efec + yape + tarj;
-                  const dif = tot - suma;
-                  return (
-                    <div className="col-span-2 bg-amber-50/70 border border-amber-300 rounded-2xl p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                          🔄 Desglose de Pago Mixto
-                        </span>
-                        <span className="text-[11px] font-mono font-bold text-slate-600">Total: S/ {tot.toFixed(2)}</span>
-                      </div>
-                      
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">💵 Efectivo (S/)</label>
-                          <input
-                            type="number" min="0" step="0.01"
-                            value={formCompra.montoEfectivoMixto}
-                            onChange={e => setFormCompra(f => ({ ...f, montoEfectivoMixto: e.target.value }))}
-                            placeholder="0.00"
-                            className="w-full border border-amber-200 rounded-xl px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:border-amber-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">📱 Yape / Plin (S/)</label>
-                          <input
-                            type="number" min="0" step="0.01"
-                            value={formCompra.montoYapeMixto}
-                            onChange={e => setFormCompra(f => ({ ...f, montoYapeMixto: e.target.value }))}
-                            placeholder="0.00"
-                            className="w-full border border-amber-200 rounded-xl px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:border-amber-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">💳 Tarjeta (S/)</label>
-                          <input
-                            type="number" min="0" step="0.01"
-                            value={formCompra.montoTarjetaMixto}
-                            onChange={e => setFormCompra(f => ({ ...f, montoTarjetaMixto: e.target.value }))}
-                            placeholder="0.00"
-                            className="w-full border border-amber-200 rounded-xl px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:border-amber-500"
-                          />
-                        </div>
-                      </div>
-
-                      <div className={`flex items-center justify-between text-xs font-black px-3 py-2 rounded-xl ${
-                        Math.abs(dif) < 0.01 ? 'bg-emerald-100 text-emerald-800' :
-                        dif > 0 ? 'bg-amber-200 text-amber-900' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        <span>Suma Asignada: S/ {suma.toFixed(2)}</span>
-                        <span>
-                          {Math.abs(dif) < 0.01 ? '✅ Cuadrado Exacto' :
-                           dif > 0 ? `⚠️ Falta asignar: S/ ${dif.toFixed(2)}` :
-                           `⚠️ Excede por: S/ ${Math.abs(dif).toFixed(2)}`}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Categoría */}
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Categoría</label>
-                  <div className="flex flex-wrap gap-2">
-                    {CATEGORIAS.map(cat => {
-                      const activa = formCompra.categoria === cat;
-                      const colores = COLORES_CATEGORIA[cat];
-                      return (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => setFormCompra(f => ({ ...f, categoria: cat }))}
-                          className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all cursor-pointer ${
-                            activa ? `${colores.bg} ${colores.text} ${colores.border} scale-105 shadow-sm` : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                          }`}
-                        >
-                          {cat}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Fecha */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Fecha del Gasto</label>
-                  <input
-                    type="date"
-                    value={formCompra.fechaEmision}
-                    onChange={e => setFormCompra(f => ({ ...f, fechaEmision: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 bg-white font-mono"
-                  />
-                </div>
-
-                {/* Tipo de Comprobante */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Comprobante</label>
-                  <select
-                    value={formCompra.tipoDocumento}
-                    onChange={e => setFormCompra(f => ({ ...f, tipoDocumento: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-500 bg-white"
-                  >
-                    <option value="Recibo Interno">Recibo Interno / Sin Comprobante</option>
-                    <option value="Boleta">Boleta de Venta</option>
-                    <option value="Factura">Factura</option>
-                    <option value="Ticket">Ticket</option>
-                  </select>
-                </div>
-
-                {/* Serie y Número / RUC Opcionales */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Nº Comprobante / Recibo</label>
-                  <input
-                    type="text"
-                    value={formCompra.serieNumero}
-                    onChange={e => setFormCompra(f => ({ ...f, serieNumero: e.target.value }))}
-                    placeholder="Ej. REC-045, F001-124"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 bg-white font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">RUC (Opcional)</label>
-                  <input
-                    type="text" maxLength={11}
-                    value={formCompra.ruc}
-                    onChange={e => setFormCompra(f => ({ ...f, ruc: e.target.value }))}
-                    placeholder="11 dígitos"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 bg-white font-mono"
-                  />
-                </div>
-
+              </div>
+              <div>
+                <label className={lbl}>Fecha</label>
+                <input
+                  type="date"
+                  value={form.fechaEmision}
+                  onChange={e => setForm(f => ({ ...f, fechaEmision: e.target.value }))}
+                  className={`${inp} h-11 font-mono`}
+                />
               </div>
             </div>
 
-            <div className="p-5 border-t border-slate-100 flex justify-end gap-3 bg-white">
-              <button onClick={() => setModalManual(false)} className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer">
-                Cancelar
-              </button>
-              <button
-                onClick={guardarCompraManual}
-                disabled={guardando}
-                className="px-6 py-2.5 text-sm font-black text-slate-900 bg-amber-500 hover:bg-amber-400 rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer active:scale-95"
-              >
-                {guardando ? <span className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
-                Guardar Gasto
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════
-          MODAL DE EDICIÓN COMPLETA DE GASTO (ÁGIL + MIXTO)
-      ═══════════════════════════════════════════════════ */}
-      {modalEditar && compraEditando && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-scale-in">
-            <div className="bg-slate-900 p-5 flex justify-between items-center text-white">
-              <h3 className="font-black flex items-center gap-2 uppercase tracking-tight text-sm">
-                <Edit3 className="w-5 h-5 text-amber-500" /> Editar Gasto / Compra # {compraEditando.id}
-              </h3>
-              <button onClick={() => setModalEditar(false)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-4 bg-slate-50 max-h-[80vh] overflow-y-auto custom-scrollbar">
-              <div className="grid grid-cols-2 gap-4">
-                
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Nombre / Descripción *</label>
-                  <input
-                    type="text"
-                    value={compraEditando.proveedor}
-                    onChange={e => setCompraEditando(f => ({ ...f, proveedor: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-800 bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Monto Total (S/) *</label>
-                  <input
-                    type="number" min="0" step="0.01"
-                    value={compraEditando.total}
-                    onChange={e => calcularPorTotal(e.target.value, true)}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-base font-mono font-black text-slate-900 bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Medio de Pago</label>
-                  <select
-                    value={compraEditando.metodoPago}
-                    onChange={e => setCompraEditando(f => ({ ...f, metodoPago: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold bg-white"
-                  >
-                    <option value="Efectivo">💵 Efectivo (Caja)</option>
-                    <option value="Yape">📱 Yape / Plin</option>
-                    <option value="Tarjeta">💳 Tarjeta / Banco</option>
-                    <option value="Mixto">🔄 Pago Mixto (Desglosar)</option>
-                  </select>
-                </div>
-
-                {/* PANEL DESGLOSE PAGO MIXTO EN EDICIÓN */}
-                {compraEditando.metodoPago === 'Mixto' && (() => {
-                  const tot = parseFloat(compraEditando.total) || 0;
-                  const efec = parseFloat(compraEditando.montoEfectivoMixto) || 0;
-                  const yape = parseFloat(compraEditando.montoYapeMixto) || 0;
-                  const tarj = parseFloat(compraEditando.montoTarjetaMixto) || 0;
-                  const suma = efec + yape + tarj;
-                  const dif = tot - suma;
+            <div>
+              <p className={lbl}>Medio de pago</p>
+              <div className="grid grid-cols-4 gap-2">
+                {METODOS_PAGO.map(m => {
+                  const activo = form.metodoPago === m.id;
                   return (
-                    <div className="col-span-2 bg-amber-50/70 border border-amber-300 rounded-2xl p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-amber-900 uppercase tracking-wider">
-                          🔄 Desglose Pago Mixto
-                        </span>
-                        <span className="text-[11px] font-mono font-bold text-slate-600">Total: S/ {tot.toFixed(2)}</span>
-                      </div>
-                      
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">💵 Efectivo (S/)</label>
-                          <input
-                            type="number" min="0" step="0.01"
-                            value={compraEditando.montoEfectivoMixto}
-                            onChange={e => setCompraEditando(f => ({ ...f, montoEfectivoMixto: e.target.value }))}
-                            placeholder="0.00"
-                            className="w-full border border-amber-200 rounded-xl px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:border-amber-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">📱 Yape (S/)</label>
-                          <input
-                            type="number" min="0" step="0.01"
-                            value={compraEditando.montoYapeMixto}
-                            onChange={e => setCompraEditando(f => ({ ...f, montoYapeMixto: e.target.value }))}
-                            placeholder="0.00"
-                            className="w-full border border-amber-200 rounded-xl px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:border-amber-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">💳 Tarjeta (S/)</label>
-                          <input
-                            type="number" min="0" step="0.01"
-                            value={compraEditando.montoTarjetaMixto}
-                            onChange={e => setCompraEditando(f => ({ ...f, montoTarjetaMixto: e.target.value }))}
-                            placeholder="0.00"
-                            className="w-full border border-amber-200 rounded-xl px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:border-amber-500"
-                          />
-                        </div>
-                      </div>
-
-                      <div className={`flex items-center justify-between text-xs font-black px-3 py-2 rounded-xl ${
-                        Math.abs(dif) < 0.01 ? 'bg-emerald-100 text-emerald-800' :
-                        dif > 0 ? 'bg-amber-200 text-amber-900' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        <span>Suma Asignada: S/ {suma.toFixed(2)}</span>
-                        <span>
-                          {Math.abs(dif) < 0.01 ? '✅ Cuadrado' :
-                           dif > 0 ? `⚠️ Falta: S/ ${dif.toFixed(2)}` :
-                           `⚠️ Excede: S/ ${Math.abs(dif).toFixed(2)}`}
-                        </span>
-                      </div>
-                    </div>
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setForm(f => ({
+                        ...f,
+                        metodoPago: m.id,
+                        montoEfectivoMixto: m.id === 'Mixto' && !f.montoEfectivoMixto ? String(parseFloat(f.total) || '') : f.montoEfectivoMixto,
+                      }))}
+                      className={`h-14 flex flex-col items-center justify-center gap-0.5 rounded-xl border text-[11px] font-medium transition-all active:scale-[0.97] ${activo ? m.activo : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'}`}
+                    >
+                      <m.Icon className={`w-4 h-4 ${activo ? '' : m.icono}`} />
+                      {m.id === 'Yape' ? 'Yape' : m.label}
+                    </button>
                   );
-                })()}
+                })}
+              </div>
+            </div>
 
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Categoría</label>
-                  <select
-                    value={compraEditando.categoria || ''}
-                    onChange={e => setCompraEditando(f => ({ ...f, categoria: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold bg-white"
-                  >
-                    {CATEGORIAS.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
+            {form.metodoPago === 'Mixto' && (() => {
+              const efec = parseFloat(form.montoEfectivoMixto) || 0;
+              const yape = parseFloat(form.montoYapeMixto) || 0;
+              const tarj = parseFloat(form.montoTarjetaMixto) || 0;
+              const dif = tot - (efec + yape + tarj);
+              return (
+                <div className="rounded-xl bg-slate-50 p-3 space-y-3 animate-fade-in">
+                  <div className="grid grid-cols-3 gap-2">
+                    {[['montoEfectivoMixto', 'Efectivo'], ['montoYapeMixto', 'Yape'], ['montoTarjetaMixto', 'Tarjeta']].map(([campo, label]) => (
+                      <div key={campo}>
+                        <label className="block text-[11px] font-medium text-slate-500 mb-1">{label}</label>
+                        <input
+                          type="number" min="0" step="0.01" inputMode="decimal"
+                          value={form[campo]}
+                          onChange={e => setForm(f => ({ ...f, [campo]: e.target.value }))}
+                          placeholder="0.00"
+                          className={`${inp} font-mono tabular-nums`}
+                        />
+                      </div>
                     ))}
-                  </select>
+                  </div>
+                  <p className={`text-xs font-medium px-3 py-2 rounded-lg ${
+                    Math.abs(dif) < 0.01 ? 'bg-emerald-50 text-emerald-700' : dif > 0 ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
+                  }`}>
+                    {Math.abs(dif) < 0.01 ? 'Cuadra con el total' : dif > 0 ? `Falta asignar ${soles(dif)}` : `Excede por ${soles(Math.abs(dif))}`}
+                  </p>
                 </div>
+              );
+            })()}
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Fecha</label>
-                  <input
-                    type="date"
-                    value={compraEditando.fechaEmision}
-                    onChange={e => setCompraEditando(f => ({ ...f, fechaEmision: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm bg-white font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Tipo Comprobante</label>
-                  <select
-                    value={compraEditando.tipoDocumento}
-                    onChange={e => setCompraEditando(f => ({ ...f, tipoDocumento: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="Recibo Interno">Recibo Interno</option>
-                    <option value="Boleta">Boleta de Venta</option>
-                    <option value="Factura">Factura</option>
-                    <option value="Ticket">Ticket</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Serie / Número</label>
-                  <input
-                    type="text"
-                    value={compraEditando.serieNumero || ''}
-                    onChange={e => setCompraEditando(f => ({ ...f, serieNumero: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm bg-white font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">RUC</label>
-                  <input
-                    type="text" maxLength={11}
-                    value={compraEditando.ruc || ''}
-                    onChange={e => setCompraEditando(f => ({ ...f, ruc: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm bg-white font-mono"
-                  />
-                </div>
-
+            <div>
+              <p className={lbl}>Categoría</p>
+              <div className="flex flex-wrap gap-1.5">
+                {CATEGORIAS.map(cat => {
+                  const activa = form.categoria === cat;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, categoria: cat }))}
+                      className={`h-8 px-3 rounded-full border text-xs font-medium transition active:scale-95 ${activa ? coloresDe(cat).activo : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="p-5 border-t border-slate-100 flex justify-end gap-3 bg-white">
-              <button onClick={() => setModalEditar(false)} className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
-                Cancelar
-              </button>
-              <button
-                onClick={guardarEdicionCompra}
-                disabled={guardando}
-                className="px-6 py-2.5 text-sm font-black text-slate-900 bg-amber-500 hover:bg-amber-400 rounded-xl shadow-md flex items-center gap-2 cursor-pointer active:scale-95"
-              >
-                {guardando ? <span className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
-                Guardar Cambios
-              </button>
+            <div className="space-y-3">
+              <p className={lbl}>Comprobante</p>
+              <div className="grid grid-cols-4 p-1 rounded-xl bg-slate-100">
+                {TIPOS_DOCUMENTO.map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, tipoDocumento: t }))}
+                    className={`h-8 rounded-lg text-xs font-medium transition-all ${form.tipoDocumento === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                  >
+                    {t === 'Recibo Interno' ? 'Sin comp.' : t}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={lbl}>Número</label>
+                  <input
+                    type="text"
+                    value={form.serieNumero}
+                    onChange={e => setForm(f => ({ ...f, serieNumero: e.target.value }))}
+                    placeholder="Ej. F001-124"
+                    className={`${inp} font-mono`}
+                  />
+                </div>
+                <div>
+                  <label className={lbl}>RUC del proveedor</label>
+                  <input
+                    type="text" maxLength={11} inputMode="numeric"
+                    value={form.ruc}
+                    onChange={e => setForm(f => ({ ...f, ruc: e.target.value.replace(/\D/g, '') }))}
+                    placeholder="Opcional"
+                    className={`${inp} font-mono`}
+                  />
+                </div>
+              </div>
+              {form.tipoDocumento === 'Factura' && tot > 0 && (
+                <p className="text-xs text-slate-500 bg-sky-50 rounded-lg px-3 py-2">
+                  Base imponible <span className="font-mono text-slate-800">{soles(base)}</span> · IGV (18%) <span className="font-mono text-slate-800">{soles(igv)}</span>
+                </p>
+              )}
             </div>
-          </div>
-        </div>
-      )}
+          </>,
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setFormAbierto(false)} className="h-11 px-4 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={guardarGasto}
+              disabled={guardando}
+              className="ml-auto h-11 px-6 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-colors active:scale-[0.98] disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {guardando ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+              {editandoId ? 'Guardar cambios' : 'Guardar gasto'}
+            </button>
+          </div>,
+          'sm:max-w-xl'
+        );
+      })()}
 
-      {/* ═══════════════════════════════════════════════════
-          MODAL DE CONFIRMACIÓN DE ELIMINACIÓN
-      ═══════════════════════════════════════════════════ */}
+      {/* MODAL: CONFIRMAR ELIMINACIÓN */}
       {compraEliminando && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 text-center animate-scale-in">
-            <div className="w-14 h-14 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
-              <Trash2 className="w-7 h-7" />
+        <div className="fixed inset-0 z-[110] bg-slate-900/50 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 animate-fade-in" onClick={() => setCompraEliminando(null)}>
+          <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl shadow-2xl p-6 text-center animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 grid place-items-center mx-auto mb-3">
+              <Trash2 className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-black text-slate-900 mb-2 uppercase">¿Eliminar este registro de gasto?</h3>
-            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-              Vas a eliminar <strong>"{compraEliminando.proveedor}"</strong> por el monto de <strong>S/ {parseFloat(compraEliminando.total || 0).toFixed(2)}</strong>. Esta acción no se puede deshacer.
+            <p className="text-base font-semibold text-slate-900">¿Eliminar este gasto?</p>
+            <p className="mt-1 text-sm text-slate-500">
+              <span className="text-slate-800">{compraEliminando.proveedor}</span> por <span className="font-mono text-slate-800">{soles(compraEliminando.total)}</span>. No se puede deshacer.
             </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setCompraEliminando(null)}
-                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition-all cursor-pointer"
-              >
+            <div className="grid grid-cols-2 gap-2 mt-5">
+              <button type="button" onClick={() => setCompraEliminando(null)} className="h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition-colors">
                 Cancelar
               </button>
-              <button
-                onClick={ejecutarEliminarCompra}
-                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl text-sm shadow-lg shadow-red-500/20 transition-all cursor-pointer active:scale-95"
-              >
-                Sí, Eliminar
+              <button type="button" onClick={ejecutarEliminarCompra} className="h-11 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-colors active:scale-[0.98]">
+                Sí, eliminar
               </button>
             </div>
           </div>
         </div>
       )}
 
-      </section>
+      {/* TOAST */}
+      {toastMsg && (
+        <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:bottom-6 sm:right-6 sm:max-w-sm z-[250] animate-slide-up">
+          <div className={`flex items-start gap-3 px-4 py-3 rounded-2xl shadow-2xl border ${
+            toastMsg.tipo === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-white border-slate-200 text-slate-800'
+          }`}>
+            {toastMsg.tipo === 'error'
+              ? <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-500" />
+              : <CheckCircle className="w-5 h-5 shrink-0 mt-0.5 text-emerald-500" />}
+            <p className="text-sm font-medium leading-snug flex-1">{toastMsg.msg}</p>
+            <button type="button" onClick={() => setToastMsg(null)} className="shrink-0 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
