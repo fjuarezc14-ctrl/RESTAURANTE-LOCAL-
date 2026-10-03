@@ -105,7 +105,7 @@ async function main() {
   const rutaCarta = process.env.SEED_CARTA_JSON;
   if (rutaCarta && fs.existsSync(rutaCarta)) {
     const platos = JSON.parse(fs.readFileSync(rutaCarta, 'utf8'));
-    console.log(`🍽️  Cargando la carta del cliente (${platos.length} platos, precio en S/ 0)...`);
+    console.log(`🍽️  Cargando la carta del cliente (${platos.length} platos)...`);
     for (const p of platos) {
       await prisma.producto.create({
         data: {
@@ -134,7 +134,7 @@ async function main() {
   }
   console.log('👉 Mesas activas:        12 mesas libres');
   console.log(rutaCarta && fs.existsSync(rutaCarta)
-    ? '👉 Carta:                Cargada con precios en S/ 0 (complétalos en /carta)'
+    ? '👉 Carta:                Cargada (revisa los precios en /carta)'
     : '👉 Carta:                Vacía (Lista para ingresar platos en /carta)');
   console.log('👉 Empresa:              Configurada por defecto (Ajustable en /configuracion)');
   console.log('============================================================\n');

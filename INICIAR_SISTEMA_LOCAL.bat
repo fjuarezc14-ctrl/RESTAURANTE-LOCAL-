@@ -1,6 +1,6 @@
 ﻿@echo off
 setlocal EnableExtensions EnableDelayedExpansion
-title VALETEC - Restaurante Local (100% Offline POS)
+title VALETEC - Restaurante Valetec (100% Offline POS)
 color 0A
 
 cd /d "%~dp0"
@@ -53,7 +53,7 @@ timeout /t 5 /nobreak >nul
 
 cls
 echo ==============================================================================
-echo                  SISTEMA RESTAURANTE LOCAL INICIADO CON EXITO
+echo                  SISTEMA RESTAURANTE VALETEC INICIADO CON EXITO
 echo ==============================================================================
 echo.
 echo   * PC Servidor / Caja Principal :  http://localhost:5188
@@ -92,8 +92,8 @@ if "%opt%"=="2" (
         exit /b 0
     )
     echo Inicializando base de datos limpia...
-    docker exec restaurante-local-backend-1 npx prisma migrate deploy
-    docker exec restaurante-local-backend-1 npm run db:seed:clean
+    docker exec restaurante-valetec-backend-1 npx prisma migrate deploy
+    docker exec restaurante-valetec-backend-1 npm run db:seed:clean
     echo Listo. Presiona una tecla para continuar...
     pause >nul
     start http://localhost:5188

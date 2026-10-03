@@ -23,9 +23,9 @@ Está pensado para alguien que va a seguir modificando el código sin haber esta
 Después de un `git pull` con migraciones nuevas, en desarrollo hay que correr:
 
 ```bash
-docker exec restaurante-local-backend-1 npx prisma migrate deploy
-docker exec restaurante-local-backend-1 npx prisma generate
-docker restart restaurante-local-backend-1
+docker exec restaurante-valetec-backend-1 npx prisma migrate deploy
+docker exec restaurante-valetec-backend-1 npx prisma generate
+docker restart restaurante-valetec-backend-1
 ```
 
 El `prisma generate` es obligatorio: el cliente vive en un volumen del contenedor y no se regenera solo.

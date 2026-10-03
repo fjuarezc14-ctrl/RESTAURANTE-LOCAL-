@@ -12,3 +12,5 @@ installer/dist/
 installer/clientes/*/pins.local.json
 backend/carta.json
 backend/cliente.json
+.env.*
+!.env.example

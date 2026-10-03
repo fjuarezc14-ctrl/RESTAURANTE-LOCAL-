@@ -1,4 +1,5 @@
-name: restaurante-local
+# Cada restaurante en el mismo servidor necesita su propio COMPOSE_PROJECT_NAME y puertos (en el .env)
+name: restaurante-valetec
 
 services:
   # --- Frontend: React/Vite ---
@@ -7,13 +8,15 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     ports:
-      - "5188:5188"
+      - "${WEB_PORT:-5188}:5188"
     volumes:
       - .:/app
       - /app/node_modules
     environment:
       - NODE_ENV=development
       - VITE_BACKEND_URL=http://backend:3010
+      # Cliente (carpeta de installer/clientes/) cuyo logo se muestra; vacío = Valetec
+      - CLIENTE=${CLIENTE:-}
     depends_on:
       - db
 
@@ -23,18 +26,23 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     ports:
-      - "3010:3010"
+      - "${BACKEND_PORT:-3010}:3010"
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - ./installer/clientes:/clientes:ro
     #SE COMENTA PORQUE LAS VARIABLES YA ESTÁN EN "environment" Y EVITA ERROR DE RUTA
     #env_file:
     #  - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://local_user:local_password@db:5432/restaurante_local?connection_limit=20&pool_timeout=10
       - PORT=3010
-      - COMPANY_NAME=Restaurante Local
+      - COMPANY_NAME=Restaurante Valetec
       - COMPANY_RUC=20600000001
+      # Con la BD vacía, el primer arranque la deja lista como este cliente (ver installer/clientes/)
+      - CLIENTE=${CLIENTE:-}
+      - CLIENTES_DIR=/clientes
+      - INITIAL_ADMIN_PIN=${INITIAL_ADMIN_PIN:-}
     depends_on:
       db:
         condition: service_healthy
@@ -44,7 +52,7 @@ services:
   db:
     image: postgres:16-alpine
     ports:
-      - "5445:5432"
+      - "${DB_PORT:-5445}:5432"
     environment:
       - POSTGRES_USER=local_user
       - POSTGRES_PASSWORD=local_password

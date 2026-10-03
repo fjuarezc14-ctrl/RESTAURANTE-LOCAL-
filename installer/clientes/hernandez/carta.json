@@ -1,0 +1,140 @@
+[
+  {
+    "nombre": "Seco de res",
+    "categoria": "Platos de Fondo",
+    "precio": 10,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Pollo al sillao",
+    "categoria": "Platos de Fondo",
+    "precio": 10,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Pollo frito",
+    "categoria": "Platos de Fondo",
+    "precio": 10,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Chaufa de pollo",
+    "categoria": "Platos de Fondo",
+    "precio": 12,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Chicharrón de chancho",
+    "categoria": "Platos de Fondo",
+    "precio": 15,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Chaufa de chancho",
+    "categoria": "Platos de Fondo",
+    "precio": 16,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Bisteck",
+    "categoria": "Platos de Fondo",
+    "precio": 16,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Chicharrón de pollo",
+    "categoria": "Platos de Fondo",
+    "precio": 16,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Pechuga a la plancha",
+    "categoria": "Platos de Fondo",
+    "precio": 16,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Milanesa",
+    "categoria": "Platos de Fondo",
+    "precio": 16,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Trucha entera",
+    "categoria": "Platos de Fondo",
+    "precio": 18,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Tallarín saltado",
+    "categoria": "Platos de Fondo",
+    "precio": 18,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Tallarín verde",
+    "categoria": "Platos de Fondo",
+    "precio": 18,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Alitas en salsa BBQ",
+    "categoria": "Platos de Fondo",
+    "precio": 18,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Saltado de pollo",
+    "categoria": "Platos de Fondo",
+    "precio": 20,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Lomito saltado",
+    "categoria": "Platos de Fondo",
+    "precio": 20,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Chicha Morada (Jarra 1L)",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 12,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Chicha Morada (Vaso)",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 4,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Limonada (Jarra 1L)",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 12,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Gaseosa 500ml",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 5,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Gaseosa 1.5L",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 10,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Cerveza Personal",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 8,
+    "tipoStock": "ilimitado"
+  },
+  {
+    "nombre": "Agua Mineral",
+    "categoria": "Bebidas y Refrescos",
+    "precio": 3.5,
+    "tipoStock": "ilimitado"
+  }
+]

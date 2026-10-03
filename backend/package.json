@@ -1,7 +1,7 @@
 {
-  "name": "restaurante-local-backend",
+  "name": "restaurante-valetec-backend",
   "version": "1.0.0",
-  "description": "Backend API para Restaurante Local ERP",
+  "description": "Backend API para Restaurante Valetec ERP",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

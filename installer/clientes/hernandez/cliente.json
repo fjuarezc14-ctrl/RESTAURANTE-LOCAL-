@@ -1,0 +1,20 @@
+{
+  "empresa": {
+    "name": "Restaurante Señor Hernández",
+    "brandShort": "SEÑOR HERNÁNDEZ",
+    "tagline": "Cevichería",
+    "legalName": "SEÑOR HERNÁNDEZ CEVICHERÍA E.I.R.L.",
+    "ruc": "20601234567",
+    "address": "Av. Marina Nro. 789 - Cajamarca",
+    "phone": "(076) 364-589 / 987-654-321",
+    "tipoNegocio": "restaurante",
+    "ticketFooter": "¡Gracias por su preferencia! · SEÑOR HERNÁNDEZ"
+  },
+  "usuarios": [
+    { "nombre": "Administrador", "rol": "Administrador" },
+    { "nombre": "Cajero", "rol": "Cajero" },
+    { "nombre": "Mozo 1", "rol": "Mozo" },
+    { "nombre": "Mozo 2", "rol": "Mozo" },
+    { "nombre": "Cocina", "rol": "Cocinero" }
+  ]
+}
