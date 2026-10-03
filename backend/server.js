@@ -2675,46 +2675,9 @@ app.get('/api/productos', async (req, res) => {
       orderBy: [{ categoria: 'asc' }, { nombre: 'asc' }],
     });
 
-    // Obtener todas las ofertas activas (y que estén en su rango de fecha si se especificó)
-    const ahora = new Date();
-    const ofertasActivas = await prisma.oferta.findMany({
-      where: {
-        activa: true,
-        OR: [
-          { fechaInicio: null },
-          { fechaInicio: { lte: ahora } }
-        ],
-        AND: [
-          {
-            OR: [
-              { fechaFin: null },
-              { fechaFin: { gte: ahora } }
-            ]
-          }
-        ]
-      }
-    });
-
-    // Enriquecer cada producto con precioOferta si hay oferta activa para su categoría
-    const productosEnriquecidos = productos.map(p => {
-      const oferta = ofertasActivas.find(o => o.categorias.includes(p.categoria));
-      if (oferta) {
-        let precioOferta;
-        if (oferta.tipoDescuento === 'porcentaje') {
-          precioOferta = parseFloat((p.precio * (1 - oferta.valorDescuento / 100)).toFixed(2));
-        } else {
-          precioOferta = parseFloat((p.precio - oferta.valorDescuento).toFixed(2));
-        }
-        return {
-          ...p,
-          precioOferta: Math.max(0, precioOferta),
-          ofertaNombre: oferta.nombre,
-          ofertaTipo: oferta.tipoDescuento,
-          ofertaValor: oferta.valorDescuento,
-        };
-      }
-      return { ...p, precioOferta: null, ofertaNombre: null };
-    });
+    // Las ofertas por temporada se retiraron del sistema: los productos se venden a su precio normal.
+    // (Se mantienen precioOferta/ofertaNombre en null por compatibilidad con Salón y Caja.)
+    const productosEnriquecidos = productos.map(p => ({ ...p, precioOferta: null, ofertaNombre: null }));
 
     res.json(productosEnriquecidos);
   } catch (err) {
@@ -4697,7 +4660,8 @@ app.get('/api/compras', async (req, res) => {
     }
 
     if (metodoPago && metodoPago !== 'Todos') {
-      conditions.push({ metodoPago });
+      // Los pagos mixtos se guardan como "Mixto (Efec: S/ …, Yape: S/ …)"
+      conditions.push(metodoPago === 'Mixto' ? { metodoPago: { startsWith: 'Mixto' } } : { metodoPago });
     }
 
     if (busqueda && busqueda.trim()) {

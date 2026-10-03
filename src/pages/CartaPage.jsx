@@ -168,17 +168,6 @@ export default function CartaPage({ currentUser }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [categorias, setCategorias] = useState([]);
 
-  // Ofertas
-  const [ofertas, setOfertas] = useState([]);
-  const [ofertaModalOpen, setOfertaModalOpen] = useState(false);
-  const [guardandoOferta, setGuardandoOferta] = useState(false);
-  const [ofertaTab, setOfertaTab] = useState(false); // toggle the offers panel
-  const [editOferta, setEditOferta] = useState({
-    id: '', nombre: '', descripcion: '', tipoDescuento: 'porcentaje',
-    valorDescuento: '', categorias: [], fechaInicio: '', fechaFin: '',
-  });
-
-  const isAdmin = currentUser?.rol === 'Administrador';
   // Un Mozo con permiso Caja otorgado por el admin también ve la cat. PedidosYa
   const hasCajaAccess = currentUser?.rol === 'Administrador' || currentUser?.rol === 'Cajero' ||
     (currentUser?.permisos || []).includes('Caja');
@@ -203,20 +192,10 @@ export default function CartaPage({ currentUser }) {
     }
   }, []);
 
-  const fetchOfertas = useCallback(async () => {
-    try {
-      const data = await api.getOfertas();
-      setOfertas(data);
-    } catch (err) {
-      console.error('Error cargando ofertas:', err);
-    }
-  }, []);
-
   useEffect(() => {
     fetchProductos();
     fetchCategorias();
-    if (isAdmin) fetchOfertas();
-  }, [fetchProductos, fetchCategorias, fetchOfertas, isAdmin]);
+  }, [fetchProductos, fetchCategorias]);
 
   const puedeVerCategoria = (cat) => Boolean(cat) && (cat !== 'PedidosYa / Ofertas' || hasCajaAccess);
 
@@ -423,87 +402,6 @@ export default function CartaPage({ currentUser }) {
     }
   };
 
-  // ── Ofertas handlers ──────────────────────────────────────
-  const abrirOfertaModal = (o = null) => {
-    setEditOferta(o
-      ? {
-          id: o.id,
-          nombre: o.nombre,
-          descripcion: o.descripcion || '',
-          tipoDescuento: o.tipoDescuento,
-          valorDescuento: String(o.valorDescuento),
-          categorias: o.categorias || [],
-          fechaInicio: o.fechaInicio ? o.fechaInicio.split('T')[0] : '',
-          fechaFin: o.fechaFin ? o.fechaFin.split('T')[0] : '',
-        }
-      : { id: '', nombre: '', descripcion: '', tipoDescuento: 'porcentaje', valorDescuento: '', categorias: [], fechaInicio: '', fechaFin: '' }
-    );
-    setOfertaModalOpen(true);
-  };
-
-  const guardarOferta = async () => {
-    if (!editOferta.nombre || !editOferta.valorDescuento || editOferta.categorias.length === 0) {
-      alert('Completa el nombre, valor de descuento y selecciona al menos una categoría.'); return;
-    }
-    setGuardandoOferta(true);
-    try {
-      const body = {
-        nombre: editOferta.nombre,
-        descripcion: editOferta.descripcion || null,
-        tipoDescuento: editOferta.tipoDescuento,
-        valorDescuento: parseFloat(editOferta.valorDescuento),
-        categorias: editOferta.categorias,
-        activa: false,
-        fechaInicio: editOferta.fechaInicio || null,
-        fechaFin: editOferta.fechaFin || null,
-        creadoPor: currentUser?.nombre || 'Admin',
-      };
-      if (editOferta.id) {
-        await api.editarOferta(editOferta.id, body);
-      } else {
-        await api.crearOferta(body);
-      }
-      await fetchOfertas();
-      await fetchProductos(); // Actualizar precios con oferta
-      setOfertaModalOpen(false);
-    } catch (err) {
-      alert('Error guardando oferta: ' + err.message);
-    } finally {
-      setGuardandoOferta(false);
-    }
-  };
-
-  const toggleOferta = async (id, activa) => {
-    try {
-      await api.activarOferta(id, activa);
-      await fetchOfertas();
-      await fetchProductos();
-    } catch (err) {
-      alert('Error al cambiar estado de oferta: ' + err.message);
-    }
-  };
-
-  const eliminarOferta = async (id) => {
-    if (window.confirm('¿Eliminar esta oferta permanentemente?')) {
-      try {
-        await api.eliminarOferta(id);
-        await fetchOfertas();
-        await fetchProductos();
-      } catch (err) {
-        alert('Error eliminando oferta: ' + err.message);
-      }
-    }
-  };
-
-  const toggleCategoriaOferta = (cat) => {
-    setEditOferta(prev => ({
-      ...prev,
-      categorias: prev.categorias.includes(cat)
-        ? prev.categorias.filter(c => c !== cat)
-        : [...prev.categorias, cat]
-    }));
-  };
-
   if (loading) return (
     <div className="flex-1 flex items-center justify-center">
       <div className="text-center">
@@ -515,90 +413,6 @@ export default function CartaPage({ currentUser }) {
 
   return (
     <section className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
-
-      {/* ── PANEL DE OFERTAS (solo Admin) ─────────────────── */}
-      {isAdmin && (
-        <div className="mb-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-3xl border border-amber-200/60 shadow-sm overflow-hidden">
-          <div
-            onClick={() => setOfertaTab(!ofertaTab)}
-            className="w-full flex items-center justify-between p-4 md:p-5 text-left cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-amber-500 rounded-xl flex items-center justify-center text-slate-900 shadow-sm">
-                <Tag className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="font-black text-slate-800 text-sm uppercase tracking-tight">Ofertas por Temporada</h2>
-                <p className="text-xs text-slate-500">
-                  {ofertas.filter(o => o.activa).length} oferta{ofertas.filter(o => o.activa).length !== 1 ? 's' : ''} activa{ofertas.filter(o => o.activa).length !== 1 ? 's' : ''} · {ofertas.length} en total
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={(e) => { e.stopPropagation(); abrirOfertaModal(); }}
-                className="bg-amber-500 hover:bg-amber-400 text-slate-900 px-3 py-1.5 rounded-xl font-black text-xs uppercase tracking-wide flex items-center gap-1.5 shadow transition-all"
-              >
-                <PlusCircle className="w-4 h-4" /> Nueva Oferta
-              </button>
-              {ofertaTab ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-            </div>
-          </div>
-
-          {ofertaTab && (
-            <div className="px-4 pb-4 md:px-5 md:pb-5 border-t border-amber-200/60">
-              {ofertas.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-sm font-medium">
-                  No hay ofertas creadas. Crea la primera con el botón "Nueva Oferta".
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-4">
-                  {ofertas.map(o => (
-                    <div key={o.id} className={`bg-white rounded-2xl border p-4 shadow-sm transition-all ${o.activa ? 'border-amber-400 shadow-amber-100' : 'border-slate-200'}`}>
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1 min-w-0 mr-2">
-                          <h3 className="font-black text-slate-800 text-sm leading-tight truncate" title={o.nombre}>{o.nombre}</h3>
-                          {o.descripcion && <p className="text-xs text-slate-400 mt-0.5 truncate">{o.descripcion}</p>}
-                        </div>
-                        <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border ${o.activa ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                          {o.activa ? '🟢 Activa' : '⚪ Inactiva'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded-lg">
-                          {o.tipoDescuento === 'porcentaje' ? <Percent className="w-3 h-3" /> : <DollarSign className="w-3 h-3" />}
-                          {o.tipoDescuento === 'porcentaje' ? `${o.valorDescuento}% desc.` : `S/ ${o.valorDescuento} desc.`}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        {(o.categorias || []).map(c => (
-                          <span key={c} className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">{c}</span>
-                        ))}
-                      </div>
-                      <div className="flex gap-2 pt-2 border-t border-slate-100">
-                        <button
-                          onClick={() => toggleOferta(o.id, !o.activa)}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-xs font-black transition-all ${o.activa ? 'bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600' : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-700'}`}
-                        >
-                          {o.activa ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                          {o.activa ? 'Desactivar' : 'Activar'}
-                        </button>
-                        <button onClick={() => abrirOfertaModal(o)} className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-colors">
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => eliminarOferta(o.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ── HEADER CARTA ─────────────────────────────────── */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1045,116 +859,6 @@ export default function CartaPage({ currentUser }) {
           </div>
         </DialogFooter>
       </Dialog>
-
-      {/* ── MODAL OFERTA ────────────────────────────────── */}
-      {ofertaModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[95vh] flex flex-col">
-            <div className="bg-slate-900 p-5 flex justify-between items-center text-white shrink-0">
-              <h3 className="font-black flex items-center gap-2"><Tag className="w-5 h-5 text-amber-500" /> {editOferta.id ? 'Editar Oferta' : 'Nueva Oferta de Temporada'}</h3>
-              <button onClick={() => setOfertaModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Nombre de la Oferta</label>
-                <input type="text" value={editOferta.nombre} onChange={e => setEditOferta({ ...editOferta, nombre: e.target.value })} placeholder="Ej. Día del Maestro - 20% en Bebidas" className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Descripción (opcional)</label>
-                <input type="text" value={editOferta.descripcion} onChange={e => setEditOferta({ ...editOferta, descripcion: e.target.value })} placeholder="Ej. Válida todo el día del 6 de junio" className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Tipo de Descuento</label>
-                  <select value={editOferta.tipoDescuento} onChange={e => setEditOferta({ ...editOferta, tipoDescuento: e.target.value })} className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 bg-white">
-                    <option value="porcentaje">Porcentaje (%)</option>
-                    <option value="monto_fijo">Monto Fijo (S/)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-                    {editOferta.tipoDescuento === 'porcentaje' ? 'Porcentaje (%)' : 'Descuento (S/)'}
-                  </label>
-                  <input type="number" min="0" step="any" value={editOferta.valorDescuento} onChange={e => setEditOferta({ ...editOferta, valorDescuento: e.target.value })} placeholder={editOferta.tipoDescuento === 'porcentaje' ? '20' : '5.00'} className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 font-mono" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Fecha inicio (opcional)</label>
-                  <input type="date" value={editOferta.fechaInicio} onChange={e => setEditOferta({ ...editOferta, fechaInicio: e.target.value })} className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 font-mono" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Fecha fin (opcional)</label>
-                  <input type="date" value={editOferta.fechaFin} onChange={e => setEditOferta({ ...editOferta, fechaFin: e.target.value })} className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 font-mono" />
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                    Categorías con Descuento ({editOferta.categorias.length} seleccionada{editOferta.categorias.length === 1 ? '' : 's'})
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditOferta(prev => ({ ...prev, categorias: [...todasLasCategorias] }))}
-                      className="text-[11px] font-bold text-amber-600 hover:text-amber-700 hover:underline cursor-pointer"
-                    >
-                      Seleccionar todas
-                    </button>
-                    <span className="text-slate-300">|</span>
-                    <button
-                      type="button"
-                      onClick={() => setEditOferta(prev => ({ ...prev, categorias: [] }))}
-                      className="text-[11px] font-bold text-slate-500 hover:text-slate-700 hover:underline cursor-pointer"
-                    >
-                      Limpiar
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto custom-scrollbar p-1">
-                  {todasLasCategorias.map(cat => {
-                    const isSelected = editOferta.categorias.includes(cat);
-                    const isBarra = esBarra(cat);
-                    return (
-                      <label 
-                        key={cat} 
-                        className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border cursor-pointer transition-all text-xs font-bold ${
-                          isSelected 
-                            ? 'bg-amber-50/90 border-amber-400 text-amber-900 shadow-2xs' 
-                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <input 
-                            type="checkbox" 
-                            checked={isSelected} 
-                            onChange={() => toggleCategoriaOferta(cat)} 
-                            className="accent-amber-500 w-4 h-4 rounded cursor-pointer shrink-0" 
-                          />
-                          <span className="truncate">{cat}</span>
-                        </div>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
-                          isBarra ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {isBarra ? '🍹 Barra' : '🔥 Cocina'}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-            <div className="bg-slate-50 p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
-              <button onClick={() => setOfertaModalOpen(false)} className="px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-xl">Cancelar</button>
-              <button onClick={guardarOferta} disabled={guardandoOferta} className="px-5 py-2 text-sm font-black text-slate-900 bg-amber-500 hover:bg-amber-400 rounded-xl shadow-md transition-colors flex items-center gap-2 disabled:opacity-50">
-                {guardandoOferta ? <span className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin"></span> : <Save className="w-4 h-4" />}
-                Guardar Oferta
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
     </section>
   );

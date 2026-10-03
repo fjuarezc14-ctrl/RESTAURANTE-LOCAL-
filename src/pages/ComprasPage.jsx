@@ -135,6 +135,13 @@ export default function ComprasPage() {
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
   const [filtroMetodoPago, setFiltroMetodoPago] = useState('Todos');
   const [busquedaTexto, setBusquedaTexto] = useState('');
+  // Se consulta al servidor cuando se deja de escribir, no en cada tecla
+  const [busquedaAplicada, setBusquedaAplicada] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setBusquedaAplicada(busquedaTexto.trim()), 350);
+    return () => clearTimeout(t);
+  }, [busquedaTexto]);
+  const primeraCargaRef = React.useRef(true);
 
   const showToast = (msg, tipo = 'ok') => {
     setToastMsg({ msg, tipo });
@@ -142,13 +149,14 @@ export default function ComprasPage() {
   };
 
   const fetchTodo = useCallback(async () => {
-    setCargando(true);
+    // El indicador de carga solo en la primera carga: al filtrar se mantiene la lista visible
+    if (primeraCargaRef.current) setCargando(true);
     try {
       const [cs, st] = await Promise.all([
         api.getCompras(fechaDesde, fechaHasta, {
           categoria: filtroCategoria !== 'Todas' ? filtroCategoria : undefined,
           metodoPago: filtroMetodoPago !== 'Todos' ? filtroMetodoPago : undefined,
-          busqueda: busquedaTexto || undefined,
+          busqueda: busquedaAplicada || undefined,
         }),
         api.getComprasStats().catch(() => null),
       ]);
@@ -158,9 +166,28 @@ export default function ComprasPage() {
       console.error(e);
       showToast('Error cargando datos: ' + e.message, 'error');
     } finally {
+      primeraCargaRef.current = false;
       setCargando(false);
     }
-  }, [fechaDesde, fechaHasta, filtroCategoria, filtroMetodoPago, busquedaTexto]);
+  }, [fechaDesde, fechaHasta, filtroCategoria, filtroMetodoPago, busquedaAplicada]);
+
+  // 3) Si la página queda abierta de un día para otro, "Hoy" pasa al nuevo día
+  useEffect(() => {
+    const revisarCambioDeDia = () => {
+      if (rangoActivo !== 'hoy') return;
+      const hoy = getFechaPeru();
+      if (hoy !== fechaDesde || hoy !== fechaHasta) {
+        setFechaDesde(hoy);
+        setFechaHasta(hoy);
+      }
+    };
+    const interval = setInterval(revisarCambioDeDia, 60000);
+    document.addEventListener('visibilitychange', revisarCambioDeDia);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', revisarCambioDeDia);
+    };
+  }, [rangoActivo, fechaDesde, fechaHasta]);
 
   useEffect(() => {
     fetchTodo();
@@ -206,7 +233,7 @@ export default function ComprasPage() {
   // ── ABRIR FORMULARIO (NUEVO / EDITAR) ────────────────────────────────────
   const abrirNuevo = () => {
     setEditandoId(null);
-    setForm(formVacio(hoyStr));
+    setForm(formVacio(getFechaPeru()));
     setFormAbierto(true);
   };
 
@@ -220,7 +247,7 @@ export default function ComprasPage() {
       serieNumero: compra.serieNumero || '',
       total: String(compra.total || ''),
       categoria: compra.categoria || 'Otros',
-      fechaEmision: diaDeCompra(compra) || hoyStr,
+      fechaEmision: diaDeCompra(compra) || getFechaPeru(),
       metodoPago: parsed.esMixto ? 'Mixto' : (compra.metodoPago || 'Efectivo'),
       montoEfectivoMixto: parsed.esMixto ? String(parsed.efec) : '',
       montoYapeMixto: parsed.esMixto ? String(parsed.yape) : '',
@@ -289,7 +316,14 @@ export default function ComprasPage() {
       }
       await fetchTodo();
       setFormAbierto(false);
-      showToast(editandoId ? 'Gasto actualizado correctamente.' : 'Gasto registrado correctamente.');
+      const fueraDeRango = payload.fechaEmision && (payload.fechaEmision < fechaDesde || payload.fechaEmision > fechaHasta);
+      const fueraDeFiltro = fueraDeRango
+        || (filtroCategoria !== 'Todas' && payload.categoria !== filtroCategoria)
+        || (filtroMetodoPago !== 'Todos' && !String(payload.metodoPago).startsWith(filtroMetodoPago));
+      showToast(
+        (editandoId ? 'Gasto actualizado correctamente.' : 'Gasto registrado correctamente.')
+        + (fueraDeFiltro ? ` No aparece en la lista por los filtros actuales${fueraDeRango ? ` (fecha ${formatearDia(payload.fechaEmision, { day: '2-digit', month: '2-digit', year: 'numeric' })})` : ''}.` : '')
+      );
     } catch (err) {
       showToast('Error al guardar: ' + err.message, 'error');
     } finally {
