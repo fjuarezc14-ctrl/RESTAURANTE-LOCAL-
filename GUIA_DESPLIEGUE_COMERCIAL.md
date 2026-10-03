@@ -52,7 +52,7 @@ docker compose up -d --build
 > **Cliente ya preparado (ej. Hernández):** si el cliente tiene su carpeta en `installer/clientes/<cliente>/`, agrega en el `.env` de la **raíz** del proyecto (junto a `docker-compose.yml`):
 > ```env
 > CLIENTE=hernandez
-> INITIAL_ADMIN_PIN=   # opcional; si se deja vacío, el PIN del administrador se genera al azar
+> INITIAL_ADMIN_PIN=   # opcional; si se deja vacío, el PIN del administrador es 1234
 > ```
 > En el primer arranque, con la base de datos vacía, el sistema queda listo con la empresa, los usuarios, la carta y el logo del cliente. Los PINs se muestran **una sola vez** en `docker compose logs backend`. En ese caso no hace falta el Paso 4. Si la base ya tiene usuarios, no se toca nada.
 

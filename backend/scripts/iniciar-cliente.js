@@ -27,9 +27,12 @@ async function main() {
   const prisma = new PrismaClient();
   const usuarios = await prisma.usuario.count();
   await prisma.$disconnect();
-  if (usuarios > 0) return; // ya inicializado
+  if (usuarios > 0) {
+    console.log(`ℹ️  La BD de "${CLIENTE}" ya tiene usuarios: no se cambian sus PINs (INITIAL_ADMIN_PIN solo aplica con la BD vacía)`);
+    return;
+  }
 
-  // PINs: el del administrador puede venir del .env; los demás se generan al azar
+  // PINs: el del administrador viene del .env (1234 por defecto); los demás se generan al azar
   const cliente = JSON.parse(fs.readFileSync(rutaCliente, 'utf8'));
   const usados = new Set();
   const pinAlAzar = () => {
@@ -39,7 +42,7 @@ async function main() {
     return pin;
   };
   cliente.usuarios = cliente.usuarios.map((u, i) => {
-    const pin = i === 0 && process.env.INITIAL_ADMIN_PIN ? String(process.env.INITIAL_ADMIN_PIN) : pinAlAzar();
+    const pin = i === 0 ? String(process.env.INITIAL_ADMIN_PIN || '1234') : pinAlAzar();
     usados.add(pin);
     return { ...u, pin };
   });
