@@ -1,19 +1,20 @@
+// ============================================================
+// APP EXPRESS: middlewares y rutas. El servidor se inicia en server.js.
+// ============================================================
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 
-// <modulos>
 const { prisma } = require('./db');
-// </modulos>
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// <rutas>
+// Un router por módulo (ver src/rutas/)
 app.use(require('./rutas/configuracion'));
 app.use(require('./rutas/clientes'));
 app.use(require('./rutas/mesas'));
@@ -27,7 +28,6 @@ app.use(require('./rutas/ventas'));
 app.use(require('./rutas/caja'));
 app.use(require('./rutas/compras'));
 app.use(require('./rutas/reportes'));
-// </rutas>
 
 // ============================================================
 // FRONTEND COMPILADO (INSTALADOR WINDOWS)

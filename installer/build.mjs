@@ -192,7 +192,8 @@ async function main() {
   const obf = `npx --yes javascript-obfuscator@${OBFUSCATOR_VERSION}`;
   const obfBackend = '--compact true --string-array true --string-array-encoding base64 --string-array-threshold 0.75 '
     + '--identifier-names-generator hexadecimal --rename-globals false --self-defending false --control-flow-flattening false';
-  for (const f of ['server.js', 'src/app.js', 'config/company.js', 'prisma/seed-clean.js']) {
+  const codigoSrc = fs.readdirSync(path.join(BACKEND, 'src'), { recursive: true }).filter((f) => f.endsWith('.js')).map((f) => `src/${f}`);
+  for (const f of ['server.js', ...codigoSrc, 'config/company.js', 'prisma/seed-clean.js']) {
     const file = path.join(BACKEND, f);
     sh(`${obf} ${q(file)} --output ${q(file)} ${obfBackend}`, { quiet: true });
   }
