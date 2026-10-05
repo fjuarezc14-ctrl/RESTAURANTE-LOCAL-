@@ -8,7 +8,7 @@ import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 import { matchProductSemantic, relevanciaBusqueda, ordenarCategorias } from '../utils/busquedaProductos';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
-import { useAviso, useConfirmar } from '../components/ui';
+import { useAviso, useConfirmar, usePedirDato } from '../components/ui';
 import {
   ModalAperturaCaja,
   ModalRetiroCaja,
@@ -463,6 +463,7 @@ export default function CajaPage({ currentUser }) {
   const FACTURACION_ELECTRONICA = COMPANY_CONFIG?.facturacionElectronica ?? true;
   const aviso = useAviso();
   const confirmar = useConfirmar();
+  const pedirDato = usePedirDato();
   const [mesas, setMesas] = useState([]);
   const [pedidosLlevar, setPedidosLlevar] = useState([]);
   const [stats, setStats] = useState({ atendidas: 0, ingresos: 0 });
@@ -1024,7 +1025,7 @@ export default function CajaPage({ currentUser }) {
       }
     } catch (err) {
       console.error("Error consultando API de DNI/RUC en delivery:", err);
-      alert("No se encontró el cliente o error en la consulta.");
+      aviso.advertencia("No se encontró el cliente o error en la consulta.");
     } finally {
       setIsBuscando(false);
     }
@@ -1116,17 +1117,16 @@ export default function CajaPage({ currentUser }) {
 
 
 
-  const enviarPorWhatsApp = (v) => {
+  const enviarPorWhatsApp = async (v) => {
     if (!v) return;
-    const telefono = prompt("Ingresa el número de WhatsApp del cliente (Ej. 999888777):");
+    const telefono = await pedirDato({
+      titulo: 'Enviar Comprobante por WhatsApp',
+      mensaje: 'Ingresa el número de WhatsApp del cliente:',
+      placeholder: '999888777',
+      validar: (val) => val.replace(/\D/g, '').length === 9 ? null : 'Ingresa un número de celular válido de 9 dígitos',
+    });
     if (!telefono) return;
-    
-    // Validar formato básico peruano (9 dígitos)
     const cleanedPhone = telefono.replace(/\D/g, '');
-    if (cleanedPhone.length !== 9) {
-      alert("Por favor, ingresa un número de celular válido de 9 dígitos.");
-      return;
-    }
     
     let serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
     let correlativoStr = String(v.numero || v.id).padStart(4, '0');
@@ -1156,15 +1156,15 @@ export default function CajaPage({ currentUser }) {
     if (!mesaSeleccionada || !mesaSeleccionada.pedidoData) return;
     if (tipoComprobante === 'Factura') {
       if (!numDocumento || numDocumento.trim().length !== 11) {
-        alert('Para emitir Factura, el RUC debe tener 11 dígitos.');
+        aviso.advertencia('Para emitir Factura, el RUC debe tener 11 dígitos.');
         return;
       }
       if (!clienteNombre || !clienteNombre.trim()) {
-        alert('Por favor, busca y valida el RUC del cliente antes de cobrar.');
+        aviso.advertencia('Por favor, busca y valida el RUC del cliente antes de cobrar.');
         return;
       }
       if (!clienteDireccion || !clienteDireccion.trim()) {
-        alert('La Dirección fiscal del cliente es obligatoria para emitir una Factura. Por favor, ingrésala.');
+        aviso.advertencia('La Dirección fiscal del cliente es obligatoria para emitir una Factura. Por favor, ingrésala.');
         return;
       }
     }
@@ -1193,7 +1193,7 @@ export default function CajaPage({ currentUser }) {
 
     if (metodoPago === 'Crédito') {
       if (!clienteCreditoSeleccionado) {
-        alert('Debe seleccionar un cliente con línea de crédito para continuar.');
+        aviso.advertencia('Debe seleccionar un cliente con línea de crédito para continuar.');
         return;
       }
     }
@@ -1221,7 +1221,7 @@ export default function CajaPage({ currentUser }) {
       if (incluirCreditoMixto) {
         const validos = (clientesCreditoMixto || []).filter(c => c.clienteId && parseMonto(c.monto) > 0);
         if (validos.length === 0) {
-          alert('⚠️ Has marcado la opción de incluir crédito en Pago Mixto. Debes seleccionar al menos un cliente de crédito e ingresar su monto.');
+          aviso.advertencia('Has marcado incluir crédito en Pago Mixto. Debes seleccionar al menos un cliente de crédito e ingresar su monto.');
           return;
         }
 
@@ -1238,14 +1238,14 @@ export default function CajaPage({ currentUser }) {
       }
 
       if (tarjVal + yapeVal + credVal > (total + 0.01)) {
-        alert('⚠️ La suma de Tarjeta, Yape / Plin y Crédito no puede superar el total a pagar. El vuelto solo aplica sobre Efectivo.');
+        aviso.advertencia('La suma de Tarjeta, Yape / Plin y Crédito no puede superar el total a pagar. El vuelto solo aplica sobre Efectivo.');
         return;
       }
 
       const restante = parseFloat(Math.max(0, total - (tarjVal + yapeVal + credVal)).toFixed(2));
       if (efecVal < (restante - 0.01)) {
         const faltante = parseFloat(Math.max(0, total - (efecVal + tarjVal + yapeVal + credVal)).toFixed(2));
-        alert(`⚠️ Monto insuficiente. Debes cubrir el total de S/ ${total.toFixed(2)}.\nFaltan S/ ${faltante.toFixed(2)}`);
+        aviso.error(`Monto insuficiente. Debes cubrir el total de S/ ${total.toFixed(2)}. Faltan S/ ${faltante.toFixed(2)}`);
         return;
       }
 
@@ -1382,12 +1382,12 @@ export default function CajaPage({ currentUser }) {
           descCortesiaTicket
         );
       } else {
-        alert(`✅ Consumo Personal registrado. Mesa liberada.`);
+        aviso.exito('Consumo Personal registrado. Mesa liberada.');
       }
 
       await fetchCajaData();
     } catch (err) {
-      alert('Error al procesar cobro: ' + err.message);
+      aviso.error('Error al procesar cobro: ' + err.message);
     } finally {
       setCobrando(false);
     }
@@ -1397,13 +1397,18 @@ export default function CajaPage({ currentUser }) {
 
 
   const confirmarEntregaDelivery = async (pedidoId, codigo) => {
-    if (!confirm(`¿Confirmas la entrega del pedido ${codigo}?`)) return;
+    const ok = await confirmar({
+      titulo: 'Confirmar Entrega',
+      mensaje: `¿Confirmas la entrega del pedido ${codigo}?`,
+      textoConfirmar: 'Confirmar Entrega',
+    });
+    if (!ok) return;
     try {
       await api.confirmarEntrega(pedidoId);
       await fetchCajaData();
-      alert(`✅ Entrega del pedido ${codigo} confirmada.`);
+      aviso.exito(`Entrega del pedido ${codigo} confirmada`);
     } catch (err) {
-      alert('Error: ' + err.message);
+      aviso.error('Error: ' + err.message);
     }
   };
 
@@ -1564,7 +1569,7 @@ export default function CajaPage({ currentUser }) {
       setCambioTipoEntregaModal(false);
       setVentaATipoCambiar(null);
       setCambioTipoPin('');
-      alert('✅ Tipo de entrega corregido exitosamente.');
+      aviso.exito('Tipo de entrega corregido exitosamente.');
     } catch (err) {
       setCambioTipoError('Error de conexión: ' + err.message);
     } finally {
@@ -1603,7 +1608,7 @@ export default function CajaPage({ currentUser }) {
       setAnularPin('');
       setAnularMotivo('');
       await fetchCajaData();
-      alert('✅ Devolución / Anulación registrada con éxito. La venta ha sido ajustada a S/ 0.00 en caja.');
+      aviso.exito('Devolución / Anulación registrada con éxito. La venta ha sido ajustada a S/ 0.00 en caja.');
     } catch (err) {
       setAnularError('Error al procesar devolución: ' + err.message);
     } finally {
@@ -1935,7 +1940,7 @@ export default function CajaPage({ currentUser }) {
     
     // Validar stock si es limitado
     if (prod.tipoStock === 'limitado' && cantTotalEnTicket >= prod.stock) {
-      alert(`⚠️ Stock agotado. Solo quedan ${prod.stock} unidades de "${prod.nombre}".`);
+      aviso.advertencia(`Stock agotado. Solo quedan ${prod.stock} unidades de "${prod.nombre}".`);
       return;
     }
 
@@ -1968,7 +1973,7 @@ export default function CajaPage({ currentUser }) {
         .filter(i => String(i.id) === String(nuevo[idx].id))
         .reduce((sum, item) => sum + item.cant, 0);
       if (prodOriginal && prodOriginal.tipoStock === 'limitado' && cantTotal >= prodOriginal.stock) {
-        alert(`⚠️ Stock agotado. Solo quedan ${prodOriginal.stock} unidades de "${prodOriginal.nombre}".`);
+        aviso.advertencia(`Stock agotado. Solo quedan ${prodOriginal.stock} unidades de "${prodOriginal.nombre}".`);
         return;
       }
       nuevo[idx] = { ...nuevo[idx], cant: nuevo[idx].cant + 1 };
@@ -2072,51 +2077,51 @@ export default function CajaPage({ currentUser }) {
   };
 
   const enviarDeliveryACocina = async () => {
-    if (itemsDelivery.length === 0) { alert('Debes agregar al menos un producto.'); return; }
+    if (itemsDelivery.length === 0) { aviso.advertencia('Debes agregar al menos un producto.'); return; }
     // Pedidos nuevos por PedidosYa deshabilitados (versión de prueba)
     if (tipoDelivery === 'PedidosYa' && !editingPedidoId) { avisarPedidosYaPrueba(); return; }
 
     // Validar datos según el canal seleccionado
     if (tipoDelivery === 'PedidosYa') {
       if (!codigoPY.trim()) {
-        alert('El código de PedidosYa es obligatorio.');
+        aviso.advertencia('El código de PedidosYa es obligatorio.');
         return;
       }
     } else if (tipoDelivery === 'ParaLlevar') {
       if (!codigoPY.trim()) {
-        alert('El nombre del cliente o número de ticket es obligatorio.');
+        aviso.advertencia('El nombre del cliente o número de ticket es obligatorio.');
         return;
       }
       if (deliveryTipoComprobante === 'Factura') {
         if (!deliveryNumDocumento || deliveryNumDocumento.length !== 11) {
-          alert('Para emitir Factura, el RUC debe tener 11 dígitos.');
+          aviso.advertencia('Para emitir Factura, el RUC debe tener 11 dígitos.');
           return;
         }
         if (!deliveryClienteNombre.trim()) {
-          alert('Para emitir Factura, la Razón Social del cliente es obligatoria.');
+          aviso.advertencia('Para emitir Factura, la Razón Social del cliente es obligatoria.');
           return;
         }
         if (!deliveryDireccion.trim()) {
-          alert('Para emitir Factura, la Dirección fiscal del cliente es obligatoria. Por favor, ingrésala.');
+          aviso.advertencia('Para emitir Factura, la Dirección fiscal del cliente es obligatoria. Por favor, ingrésala.');
           return;
         }
       }
     } else if (tipoDelivery === 'DeliveryPropio') {
       if (!deliveryClienteNombre.trim()) {
-        alert('El nombre del cliente es obligatorio.');
+        aviso.advertencia('El nombre del cliente es obligatorio.');
         return;
       }
       if (!deliveryDireccion.trim()) {
-        alert('La dirección del cliente es obligatoria.');
+        aviso.advertencia('La dirección del cliente es obligatoria.');
         return;
       }
       if (!deliveryTelefono.trim()) {
-        alert('El teléfono del cliente es obligatorio.');
+        aviso.advertencia('El teléfono del cliente es obligatorio.');
         return;
       }
       if (deliveryTipoComprobante === 'Factura') {
         if (!deliveryNumDocumento || deliveryNumDocumento.length !== 11) {
-          alert('Para emitir Factura, el RUC debe tener 11 dígitos.');
+          aviso.advertencia('Para emitir Factura, el RUC debe tener 11 dígitos.');
           return;
         }
       }
@@ -2126,12 +2131,12 @@ export default function CajaPage({ currentUser }) {
     const tieneCortesias = deliveryMetodoPago === 'Consumo' || deliveryMetodoPago === 'Cortesía' || cortesiaDeliveryIndices.length > 0;
     if (tieneCortesias) {
       if (!pinAdminDelivery.trim()) {
-        alert(`⚠️ Debes ingresar el PIN del administrador/cajero para autorizar ${deliveryMetodoPago === 'Consumo' ? 'un Consumo de Personal' : 'la Cortesía'}.`);
+        aviso.advertencia(`Debes ingresar el PIN del administrador/cajero para autorizar ${deliveryMetodoPago === "Consumo" ? "un Consumo de Personal" : "la Cortesía"}.`);
         return;
       }
       const authResult = await api.validateAuth(pinAdminDelivery.trim());
       if (!authResult || !authResult.ok) {
-        alert(`❌ PIN incorrecto. Solo el administrador/cajero puede autorizar ${deliveryMetodoPago === 'Consumo' ? 'un Consumo de Personal' : 'la Cortesía'}.`);
+        aviso.error(`PIN incorrecto. Solo el administrador/cajero puede autorizar ${deliveryMetodoPago === "Consumo" ? "un Consumo de Personal" : "la Cortesía"}.`);
         setPinAdminDelivery('');
         return;
       }
@@ -2139,7 +2144,7 @@ export default function CajaPage({ currentUser }) {
 
     if (tipoDelivery !== 'PedidosYa' && deliveryMetodoPago === 'Crédito') {
       if (!deliveryClienteCreditoSeleccionado) {
-        alert('Debe seleccionar un cliente con línea de crédito para continuar.');
+        aviso.advertencia('Debe seleccionar un cliente con línea de crédito para continuar.');
         return;
       }
     }
@@ -2185,24 +2190,24 @@ export default function CajaPage({ currentUser }) {
       const credVal = parseFloat(deliveryMontoCredito || 0);
 
       if (efecVal < 0 || tarjVal < 0 || yapeVal < 0 || credVal < 0) {
-        alert('Los montos de pago no pueden ser valores negativos.');
+        aviso.advertencia('Los montos de pago no pueden ser valores negativos.');
         return;
       }
 
       if (credVal > 0 && !deliveryClienteCreditoSeleccionado) {
-        alert('Debe seleccionar un cliente para la porción de pago a crédito.');
+        aviso.advertencia('Debe seleccionar un cliente para la porción de pago a crédito.');
         return;
       }
 
       if (tarjVal + yapeVal + credVal > (grandTotal + 0.01)) {
-        alert('La suma de Tarjeta, Yape / Plin y Crédito no puede superar el total a pagar.');
+        aviso.advertencia('La suma de Tarjeta, Yape / Plin y Crédito no puede superar el total a pagar.');
         return;
       }
 
       const restante = parseFloat(Math.max(0, grandTotal - (tarjVal + yapeVal + credVal)).toFixed(2));
       if (efecVal < (restante - 0.01)) {
         const faltante = parseFloat(Math.max(0, restante - efecVal).toFixed(2));
-        alert(`Monto insuficiente. Debes cubrir el total de S/ ${grandTotal.toFixed(2)}.\nFaltan S/ ${faltante.toFixed(2)}`);
+        aviso.error(`Monto insuficiente. Debes cubrir el total de S/ ${grandTotal.toFixed(2)}. Faltan S/ ${faltante.toFixed(2)}`);
         return;
       }
 
@@ -2315,10 +2320,10 @@ export default function CajaPage({ currentUser }) {
           descCortesiaTicket
         );
       } else {
-        alert(`✅ Pedido ${codigoPY.toUpperCase()} enviado a Cocina. Venta registrada.`);
+        aviso.exito(`Pedido ${codigoPY.toUpperCase()} enviado a Cocina. Venta registrada.`);
       }
     } catch (err) {
-      alert('Error: ' + err.message);
+      aviso.error('Error: ' + err.message);
     } finally {
       setEnviandoDelivery(false);
     }
