@@ -1,502 +1,27 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// <modulos>
+const { prisma } = require('./db');
+const { loginRateLimiter, registerLoginFailure, registerLoginSuccess } = require('./middlewares/limiteLogin');
+const { generarPinSignature } = require('./servicios/auth');
+const { alertasCancelacion } = require('./servicios/cancelaciones');
+const { COLORES_CATEGORIA, actualizarDestinoCategoria, mismoNombre, renombrarCategoriaEnOfertas, sincronizarCategorias } = require('./servicios/categorias');
+const { calcularSubtotalEIgv, limpiarCodigoPago, obtenerMontosVenta, parsearCreditoSplit } = require('./servicios/dinero');
+const { BARRA_CATEGORIAS, DEFAULT_BARRA_CATEGORIAS, getEmpresaConfig, guardarConfigEnCache, isBarraCategoria } = require('./servicios/empresa');
+const { evaluarEstadoEnsalada, expandPedidoItemsForDb } = require('./servicios/pedidos');
+const { interfacesIPv4, ipRutaPorDefecto, puntajeIp } = require('./servicios/red');
+// </modulos>
+
 const app = express();
-
-// Optimización de Conexiones Prisma (Pool size y timeout para concurrencia)
-let dbUrl = process.env.DATABASE_URL || '';
-if (dbUrl && !dbUrl.includes('connection_limit')) {
-  dbUrl += (dbUrl.includes('?') ? '&' : '?') + 'connection_limit=20&pool_timeout=10';
-  process.env.DATABASE_URL = dbUrl;
-}
-
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
-});
-const LIMITE_CANCELACION_MS = 5 * 60 * 1000; // 5 minutos
-
-function generarPinSignature(pin, userId) {
-  return crypto.createHash('sha256').update(`${pin || ''}_${userId}_salt_hernandez_auth`).digest('hex').substring(0, 16);
-}
-
-// ============================================================
-// STORE EN MEMORIA: ALERTAS DE CANCELACIÓN PARA COCINA Y BARRA
-// Se limpia automáticamente cada 2 horas (ítems > 2h se descartan).
-// ============================================================
-let cancelacionesCocina = []; // [{ id, pedidoId, items, mesaInfo, canceladoEn, codigoPedidosYa }]
-let cancelacionesBarra = [];  // [{ id, pedidoId, items, mesaInfo, canceladoEn, codigoPedidosYa }]
-
-setInterval(() => {
-  const dosHorasAtras = Date.now() - 2 * 60 * 60 * 1000;
-  cancelacionesCocina = cancelacionesCocina.filter(c => new Date(c.canceladoEn).getTime() > dosHorasAtras);
-  cancelacionesBarra = cancelacionesBarra.filter(c => new Date(c.canceladoEn).getTime() > dosHorasAtras);
-}, 30 * 60 * 1000).unref(); // limpiar cada 30 min
-
-// Categorías que van a la BARRA (el resto va a COCINA)
-const DEFAULT_BARRA_CATEGORIAS = [
-  'Bebidas y Refrescos',
-  'Gaseosas',
-  'Cervezas',
-  'Bar y Cocteles',
-  'Bebidas Calientes',
-  'Postres',
-  'Bebidas',
-];
-
-function isBarraCategoria(cat) {
-  if (!cat) return false;
-  // Una lista vacía guardada es válida (todas las categorías van a Cocina)
-  const list = (cachedCompanyConfig && Array.isArray(cachedCompanyConfig.barraCategorias))
-    ? cachedCompanyConfig.barraCategorias
-    : DEFAULT_BARRA_CATEGORIAS;
-  return list.some(b => String(b).trim().toLowerCase() === String(cat).trim().toLowerCase());
-}
-
-const BARRA_CATEGORIAS = {
-  includes: (cat) => isBarraCategoria(cat)
-};
-
-// Helper para parsear la distribución de crédito en ventas con múltiples clientes
-function parsearCreditoSplit(ofertaDescripcion, defaultClienteId, defaultMonto) {
-  if (ofertaDescripcion && typeof ofertaDescripcion === 'string') {
-    const match = ofertaDescripcion.match(/\[CREDITO_SPLIT:(\[.*?\])\]/) || ofertaDescripcion.match(/\[CREDITO_SPLIT:(.*?)\]/);
-    if (match && match[1]) {
-      try {
-        const parsed = JSON.parse(match[1]);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(item => ({
-            clienteId: parseInt(item.clienteId || item.id),
-            nombre: item.nombre || '',
-            monto: parseFloat(item.monto || 0)
-          })).filter(item => !isNaN(item.clienteId) && item.monto > 0);
-        }
-      } catch (e) {
-        console.error('Error parseando CREDITO_SPLIT:', e);
-      }
-    }
-  }
-  const defId = parseInt(defaultClienteId);
-  const defM = parseFloat(defaultMonto || 0);
-  if (!isNaN(defId) && defId > 0 && defM > 0) {
-    return [{ clienteId: defId, monto: defM, nombre: '' }];
-  }
-  return [];
-}
-
-// Helper financiero dinámico para IGV y Subtotal (adaptable a régimen 10% / 10.5% o 18%)
-function getIgvDivisor() {
-  const tasa = (cachedCompanyConfig && cachedCompanyConfig.igvRate !== undefined)
-    ? parseFloat(cachedCompanyConfig.igvRate)
-    : (parseFloat(process.env.IGV_RATE || '0.105'));
-  return 1 + tasa;
-}
-
-function calcularSubtotalEIgv(montoTotal) {
-  const total = parseFloat(montoTotal || 0);
-  const divisor = getIgvDivisor();
-  const subtotal = parseFloat((total / divisor).toFixed(2));
-  const igv = parseFloat((total - subtotal).toFixed(2));
-  return { subtotal, igv };
-}
-
-// Helper universal para desglosar y asegurar que el 100% de la venta real en Caja sume correctamente
-function obtenerMontosVenta(v) {
-  if (!v || v.anulado || v.pedido?.estado === 'Cancelado') {
-    return { efec: 0, tarj: 0, yape: 0 };
-  }
-  if (v.metodoPago === 'Cortesía' || v.metodoPago === 'Consumo' || v.metodoPago === 'PedidosYa' || v.metodoPago === 'Crédito') {
-    return { efec: 0, tarj: 0, yape: 0 };
-  }
-
-  let efec = parseFloat(v.montoEfectivo || 0);
-  let tarj = parseFloat(v.montoTarjeta || 0);
-  let yape = parseFloat(v.montoYape || 0);
-  const total = parseFloat(v.total || 0);
-
-  if (total <= 0) {
-    return { efec: 0, tarj: 0, yape: 0 };
-  }
-
-  if (v.metodoPago === 'Efectivo') {
-    return { efec: total, tarj: 0, yape: 0 };
-  }
-  if (v.metodoPago === 'Tarjeta') {
-    return { efec: 0, tarj: total, yape: 0 };
-  }
-  if (v.metodoPago === 'Yape') {
-    return { efec: 0, tarj: 0, yape: total };
-  }
-
-  // Para 'Mixto' u otros: si la suma difiere del total físico (restando la parte a crédito) o está incompleta
-  const totalFisico = total - parseFloat(v.montoCredito || 0);
-  const suma = efec + tarj + yape;
-  if (Math.abs(suma - totalFisico) > 0.01) {
-    if (suma === 0) {
-      efec = totalFisico; // Fallback seguro
-    } else if (totalFisico > suma) {
-      efec += (totalFisico - suma); // Cubrir remanente en efectivo para no perder recaudación
-    }
-  }
-
-  return { efec, tarj, yape };
-}
-
-// ============================================================
-// CONFIGURACIÓN DE PARRILLADAS Y PIQUEOS MIX (COMBO DECOMPOSITION)
-// ============================================================
-const MIX_PRODUCTS_DECOMPOSITION = {};
-
-function parseSelectionsFromNotes(notas) {
-  const selections = {};
-  if (!notas) return selections;
-  
-  // 1. Bracket format: [Key: Value]
-  const bracketMatches = String(notas).match(/\[([^\]:]+):\s*([^\]]+)\]/g);
-  if (bracketMatches) {
-    bracketMatches.forEach(m => {
-      const parts = m.slice(1, -1).split(':');
-      if (parts.length >= 2) {
-        const key = parts[0].trim();
-        const val = parts.slice(1).join(':').trim();
-        selections[key] = val;
-      }
-    });
-  }
-
-  // 2. Dot or newline separated: Key: Value (e.g. "Bebida: Chicha · Entrada: Sopa")
-  const segments = String(notas).split(/[·\n]/);
-  for (const seg of segments) {
-    const cleaned = seg.trim().replace(/^\[|\]$/g, '');
-    if (cleaned.includes(':')) {
-      const colonIdx = cleaned.indexOf(':');
-      const key = cleaned.substring(0, colonIdx).trim();
-      const val = cleaned.substring(colonIdx + 1).trim();
-      if (key && val && !selections[key]) {
-        selections[key] = val;
-      }
-    }
-  }
-
-  return selections;
-}
-
-function parseJsonSafe(txt, fallback) {
-  if (!txt) return fallback;
-  try {
-    const parsed = typeof txt === 'string' ? JSON.parse(txt) : txt;
-    return parsed ?? fallback;
-  } catch (err) {
-    console.warn('[parseJsonSafe] JSON inválido:', err.message);
-    return fallback;
-  }
-}
-
-async function expandPedidoItemsForDb(itemsList) {
-  const expandedList = [];
-  const defaultProduct = await prisma.producto.findFirst({ where: { activo: true }, orderBy: { id: 'asc' } });
-  if (!defaultProduct) {
-    throw new Error('No hay productos registrados en la carta. Carga productos antes de realizar pedidos.');
-  }
-
-  for (const i of itemsList) {
-    let rawProdId = parseInt(i.productoId || i.id);
-    let validProd = null;
-
-    if (!isNaN(rawProdId) && rawProdId > 0) {
-      validProd = await prisma.producto.findUnique({ where: { id: rawProdId } });
-    }
-
-    if (!validProd && i.nombre) {
-      validProd = await prisma.producto.findFirst({
-        where: { nombre: { equals: String(i.nombre), mode: 'insensitive' } }
-      });
-    }
-
-    if (!validProd) {
-      validProd = defaultProduct;
-    }
-
-    const prodId = validProd.id;
-    const prodNombre = String(i.nombre || validProd.nombre);
-    const decomp = MIX_PRODUCTS_DECOMPOSITION[prodId];
-
-    if (decomp) {
-      const parsedNotes = parseSelectionsFromNotes(i.notas);
-      const acompanamiento = parsedNotes["Acompañamiento"] || parsedNotes["Elige el Acompañamiento"] || parsedNotes["Elige la Guarnición"] || parsedNotes["guarnicion"] || "Sin Acompañamiento";
-
-      const detailedGrillNotesArray = [
-        `🥔 ACOMPAÑAMIENTO: ${acompanamiento}`
-      ];
-
-      if (i.notas && i.notas.includes("(Nota:")) {
-        const customNoteMatch = i.notas.match(/\(Nota:\s*([^\)]+)\)/);
-        if (customNoteMatch && customNoteMatch[1]) {
-          detailedGrillNotesArray.push(`📝 NOTAS CAJA: ${customNoteMatch[1]}`);
-        }
-      }
-
-      // 1. MAIN BILLING ITEM
-      expandedList.push({
-        productoId: prodId,
-        nombre: prodNombre,
-        precio: parseFloat(i.precio),
-        cantidad: parseInt(i.cant || i.cantidad),
-        historial: false,
-        entregado: false,
-        notas: detailedGrillNotesArray.join(' · '),
-      });
-
-      // 2. DETAILED GRILL COMPONENTS
-      if (decomp.components && decomp.components.length > 0) {
-        for (const comp of decomp.components) {
-          expandedList.push({
-            productoId: prodId,
-            nombre: comp.nombre,
-            precio: 0,
-            cantidad: parseInt(i.cant || i.cantidad),
-            historial: false,
-            entregado: false,
-            notas: null,
-            esComponente: true,
-          });
-        }
-      }
-
-      // 3. DRINK SELECTIONS
-      if (decomp.hasDrinkSelections) {
-        const selectedDrinkNames = [];
-        const drinkKeys = ["Elige Bebida 1 (Medio Litro)", "Elige Bebida 2 (Medio Litro)", "Elige Bebida 2 (Un Litro)", "Elige la Bebida", "Bebida", "Bebida 1", "Bebida 2"];
-
-        for (const key of drinkKeys) {
-          const val = parsedNotes[key];
-          if (val) selectedDrinkNames.push(val);
-        }
-
-        let groupedDrinks = [...selectedDrinkNames];
-        if (prodId === 49 || prodId === 53) {
-          if (selectedDrinkNames.length === 2 && selectedDrinkNames[0] === selectedDrinkNames[1]) {
-            const drinkName = selectedDrinkNames[0];
-            const name1Lt = drinkName.replace("1/2 Lt", "1 Lt").replace("1/2 Litro", "1 Litro").replace("1/2 lt", "1 lt");
-            groupedDrinks = [name1Lt];
-          }
-        }
-
-        if (groupedDrinks.length === 0 && (prodId === 50 || prodId === 51)) {
-          groupedDrinks.push("Vino Tabernero (Botella)");
-        }
-
-        for (const drinkName of groupedDrinks) {
-          let lookupName = drinkName;
-          let displayName = drinkName;
-          if (drinkName === "Gaseosa Chiki") { lookupName = "Gaseosa Mediana"; displayName = "Gaseosa Chiki"; }
-          else if (drinkName === "Vino Tabernero (Copa)") { lookupName = "Vino Tabernero"; displayName = "Vino Tabernero (Copa)"; }
-          else if (drinkName === "Vaso de Chicha Morada" || drinkName === "Chicha Morada - Vaso") { lookupName = "Chicha Morada - Vaso"; displayName = "Chicha Morada - Vaso"; }
-          else if (drinkName === "Sangría 1/2 Litro" || drinkName === "Sangria 1/2 Litro") { lookupName = "Sangría Española o Hawaiana 1/2 Lt"; displayName = "Sangría Española o Hawaiana 1/2 Lt"; }
-          else if (drinkName === "Sangría 1 Litro" || drinkName === "Sangria 1 Litro") { lookupName = "Sangría Española o Hawaiana 1 Lt"; displayName = "Sangría Española o Hawaiana 1 Lt"; }
-
-          const drinkProd = await prisma.producto.findFirst({ where: { nombre: { contains: lookupName, mode: 'insensitive' } } });
-          expandedList.push({
-            productoId: drinkProd ? drinkProd.id : prodId,
-            nombre: drinkProd ? drinkProd.nombre : displayName,
-            precio: 0,
-            cantidad: parseInt(i.cant || i.cantidad),
-            historial: false,
-            entregado: false,
-            notas: null,
-            esComponente: true,
-          });
-        }
-      }
-
-      // 4. FIXED REPORTING
-      if (decomp.reportingItems && decomp.reportingItems.length > 0) {
-        for (const rep of decomp.reportingItems) {
-          expandedList.push({
-            productoId: rep.productoId,
-            nombre: rep.nombre,
-            precio: 0,
-            cantidad: Math.ceil(rep.cantidadMultiplier * parseInt(i.cant || i.cantidad)),
-            historial: rep.toBar ? false : true,
-            entregado: rep.toBar ? false : true,
-            notas: null,
-            esComponente: true,
-          });
-        }
-      }
-    } else {
-      expandedList.push({
-        productoId: prodId,
-        nombre: prodNombre,
-        precio: parseFloat(i.precio),
-        cantidad: parseInt(i.cant || i.cantidad),
-        historial: i.historial || false,
-        entregado: i.entregado || false,
-        notas: i.notas ? String(i.notas) : null,
-      });
-
-      const cantidadPadre = parseInt(i.cant || i.cantidad || 1);
-
-      // Combo armado con productos de la carta: cada componente va a su estación y descuenta su stock
-      const componentes = parseJsonSafe(validProd.componentes, []);
-      for (const comp of Array.isArray(componentes) ? componentes : []) {
-        const compId = parseInt(comp.productoId);
-        const compCant = parseInt(comp.cantidad || 1);
-        if (isNaN(compId) || compId <= 0 || isNaN(compCant) || compCant <= 0) continue;
-        const compProd = await prisma.producto.findUnique({ where: { id: compId } });
-        if (!compProd) continue;
-        expandedList.push({
-          productoId: compProd.id,
-          nombre: compProd.nombre,
-          precio: 0,
-          cantidad: compCant * cantidadPadre,
-          historial: false,
-          entregado: false,
-          notas: `(Incluido en ${prodNombre})`,
-          esComponente: true,
-        });
-      }
-
-      // Opciones elegidas que apuntan a un producto real de la carta (guarnición, bebida, postre...)
-      const opcionesElegidas = Array.isArray(i.opciones) ? i.opciones : [];
-      let expandidoPorOpciones = false;
-      for (const op of opcionesElegidas) {
-        const opId = parseInt(op?.productoId);
-        if (isNaN(opId) || opId <= 0) continue;
-        const opProd = await prisma.producto.findUnique({ where: { id: opId } });
-        if (!opProd) continue;
-        expandedList.push({
-          productoId: opProd.id,
-          nombre: opProd.nombre,
-          precio: 0,
-          cantidad: cantidadPadre,
-          historial: false,
-          entregado: false,
-          notas: `(${op.paso || 'Opción'} de ${prodNombre})`,
-          esComponente: true,
-        });
-        expandidoPorOpciones = true;
-      }
-
-      // Formato antiguo: deducir la bebida desde el texto de las notas
-      if (i.notas && !expandidoPorOpciones) {
-        const parsedNotes = parseSelectionsFromNotes(i.notas);
-        const drinkKeys = [
-          "Elige la Bebida (1.5 Litros)",
-          "Elige la Bebida (1 Litro)",
-          "Elige la Bebida",
-          "Bebida",
-          "Bebida 1",
-          "Bebida 2"
-        ];
-        const selectedDrinkNames = [];
-        const isExcludedVal = (v) => !v || ["sin bebida", "omitir (sin bebida)", "sin refresco", "ninguno", "sin entrada"].includes(String(v).trim().toLowerCase());
-
-        for (const [k, v] of Object.entries(parsedNotes)) {
-          if (isExcludedVal(v)) continue;
-          const lk = k.toLowerCase();
-          if (lk.includes('bebida') || lk.includes('refresco') || lk.includes('gaseosa') || lk.includes('chicha') || lk.includes('jugo')) {
-            if (!selectedDrinkNames.includes(v)) selectedDrinkNames.push(v);
-          }
-        }
-        for (const key of drinkKeys) {
-          const val = parsedNotes[key];
-          if (!isExcludedVal(val) && !selectedDrinkNames.includes(val)) {
-            selectedDrinkNames.push(val);
-          }
-        }
-
-        for (const drinkName of selectedDrinkNames) {
-          let lookupName = drinkName;
-          let displayName = drinkName;
-
-          if (drinkName === "Gaseosa Chiki") {
-            lookupName = "Gaseosa Mediana";
-            displayName = "Gaseosa Chiki";
-          } else if (drinkName === "Gaseosa 1.5 Litros" || drinkName === "Gaseosa 1 1/2 Lt") {
-            lookupName = "Gaseosa 1 1/2 Lt";
-            displayName = "Gaseosa 1.5 Litros";
-          } else if (drinkName === "Chicha Morada 1.5 Litros" || drinkName === "Chicha Morada - 1 1/2 Lt") {
-            lookupName = "Chicha Morada - 1 1/2 Lt";
-            displayName = "Chicha Morada 1.5 Litros";
-          } else if (drinkName === "Limonada 1.5 Litros" || drinkName === "Limonada - 1 1/2 Lt") {
-            lookupName = "Limonada - 1 1/2 Lt";
-            displayName = "Limonada 1.5 Litros";
-          }
-
-          const drinkProd = await prisma.producto.findFirst({
-            where: { nombre: { contains: lookupName, mode: 'insensitive' } }
-          });
-
-          expandedList.push({
-            productoId: drinkProd ? drinkProd.id : prodId,
-            nombre: drinkProd ? drinkProd.nombre : displayName,
-            precio: 0,
-            cantidad: parseInt(i.cant || i.cantidad),
-            historial: false, // Va para la barra
-            entregado: false,
-            notas: "(Bebida Incluida en Combo - S/ 0.00)",
-            esComponente: true,
-          });
-        }
-      }
-    }
-  }
-  return expandedList;
-}
-
-async function evaluarEstadoEnsalada(itemsList) {
-  return 'No Aplica';
-}
 
 app.use(cors());
 app.use(express.json());
-
-// ============================================================
-// CONFIGURACIÓN DINÁMICA DE LA EMPRESA
-// ============================================================
-let cachedCompanyConfig = null;
-
-async function getEmpresaConfig() {
-  if (cachedCompanyConfig) return cachedCompanyConfig;
-  try {
-    let conf = await prisma.empresaConfig.findFirst();
-    if (!conf) {
-      conf = await prisma.empresaConfig.create({
-        data: {
-          name: process.env.COMPANY_NAME || "Valetec Gourmet",
-          brandShort: process.env.BRAND_SHORT || "VALETEC GOURMET",
-          tagline: "Sistema Gastronómico & Punto de Venta",
-          legalName: process.env.LEGAL_NAME || "VALETEC GOURMET S.A.C.",
-          ruc: process.env.COMPANY_RUC || "20600000001",
-          address: process.env.COMPANY_ADDRESS || "Av. Principal 123",
-          phone: process.env.COMPANY_PHONE || "987-654-321",
-          email: process.env.COMPANY_EMAIL || "contacto@valetecgourmet.pe",
-          ticketFooter: process.env.TICKET_FOOTER || "¡Gracias por su preferencia! · VALETEC GOURMET",
-        }
-      });
-    }
-    cachedCompanyConfig = conf;
-    return conf;
-  } catch (err) {
-    return {
-      name: process.env.COMPANY_NAME || "Valetec Gourmet",
-      brandShort: process.env.BRAND_SHORT || "VALETEC GOURMET",
-      tagline: process.env.TAGLINE || "Sistema Gastronómico & Punto de Venta",
-      legalName: process.env.LEGAL_NAME || "VALETEC GOURMET S.A.C.",
-      ruc: process.env.COMPANY_RUC || "20600000001",
-      address: process.env.COMPANY_ADDRESS || "Av. Principal 123",
-      phone: process.env.COMPANY_PHONE || "987-654-321",
-      email: process.env.COMPANY_EMAIL || "contacto@valetecgourmet.pe",
-      ticketFooter: process.env.TICKET_FOOTER || "¡Gracias por su preferencia! · VALETEC GOURMET",
-    };
-  }
-}
 
 // GET /api/empresa -> Obtener datos actuales de la empresa
 app.get('/api/empresa', async (req, res) => {
@@ -543,7 +68,7 @@ app.put('/api/empresa', async (req, res) => {
         }
       });
     }
-    cachedCompanyConfig = conf;
+    guardarConfigEnCache(conf);
     res.json({ ok: true, config: conf });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -564,39 +89,6 @@ app.get('/api/status', async (req, res) => {
     apisunatActivo: !modoDemo
   });
 });
-
-// ── Detección de la IP del servidor en la red local ──
-// Adaptadores que casi nunca son la red del local (WSL, Hyper-V, VirtualBox, VMware, Docker, VPN...)
-const INTERFAZ_VIRTUAL = /vethernet|wsl|hyper-v|virtualbox|vmware|vmnet|vbox|docker|br-|veth|virbr|tun|tap|vpn|zerotier|tailscale|hamachi|radmin|loopback|bluetooth|npcap/i;
-
-const interfacesIPv4 = () => Object.entries(os.networkInterfaces())
-  .flatMap(([nombre, lista]) => (lista || [])
-    .filter(i => i && i.family === 'IPv4' && !i.internal && !i.address.startsWith('169.254.'))
-    .map(i => ({ ip: i.address, interfaz: nombre, virtual: INTERFAZ_VIRTUAL.test(nombre) })));
-
-// IP que el sistema usa para salir a la red: un socket UDP "conectado" no envía ningún paquete,
-// solo le pide al sistema operativo que elija la interfaz de la ruta por defecto.
-const ipRutaPorDefecto = () => new Promise((resolve) => {
-  const sock = require('dgram').createSocket('udp4');
-  const fin = (ip) => { try { sock.close(); } catch { /* ya cerrado */ } resolve(ip); };
-  sock.on('error', () => fin(null));
-  try {
-    sock.connect(53, '8.8.8.8', () => {
-      try { fin(sock.address().address); } catch { fin(null); }
-    });
-  } catch { fin(null); }
-  setTimeout(() => fin(null), 500);
-});
-
-// Orden: IP fijada a mano > ruta por defecto > redes domésticas típicas > resto; las virtuales al final
-const puntajeIp = ({ ip, virtual }, ipRuta) => {
-  if (ip === ipRuta) return 0;
-  if (virtual) return 50;
-  if (ip.startsWith('192.168.')) return 10;
-  if (ip.startsWith('10.')) return 20;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return 30; // rango habitual de Docker/WSL
-  return 40;
-};
 
 // GET /api/red/direcciones -> Direcciones para conectar celulares y tablets (se calculan al momento)
 app.get('/api/red/direcciones', async (req, res) => {
@@ -1185,8 +677,6 @@ app.get('/api/clientes/consulta/:doc', async (req, res) => {
   }
 });
 
-
-
 // ============================================================
 // MESAS — Consolidado con todos los pedidos activos
 // ============================================================
@@ -1648,8 +1138,6 @@ app.get('/api/pedidos/barra', async (req, res) => {
   }
 });
 
-
-
 // PATCH /api/pedidos/items/:itemId/preparar → Cocinero o Barman marca listo un item de cocina/barra de forma individual
 app.patch('/api/pedidos/items/:itemId/preparar', async (req, res) => {
   const itemId = parseInt(req.params.itemId);
@@ -1951,7 +1439,7 @@ app.patch('/api/pedidos/:id/cancelar', async (req, res) => {
       !BARRA_CATEGORIAS.includes(i.producto?.categoria || '')
     );
     if (itemsParaCocina.length > 0) {
-      cancelacionesCocina.push({
+      alertasCancelacion.cocina.push({
         id: `cancel-${Date.now()}-${pedido.id}`,
         pedidoId: pedido.id,
         items: itemsParaCocina.map(i => ({
@@ -1972,7 +1460,7 @@ app.patch('/api/pedidos/:id/cancelar', async (req, res) => {
       BARRA_CATEGORIAS.includes(i.producto?.categoria || '')
     );
     if (itemsParaBarra.length > 0) {
-      cancelacionesBarra.push({
+      alertasCancelacion.barra.push({
         id: `cancel-${Date.now()}-${pedido.id}`,
         pedidoId: pedido.id,
         items: itemsParaBarra.map(i => ({
@@ -1996,25 +1484,25 @@ app.patch('/api/pedidos/:id/cancelar', async (req, res) => {
 
 // GET /api/cocina/cancelaciones → Devuelve las alertas de cancelación pendientes de confirmación para Cocina
 app.get('/api/cocina/cancelaciones', (req, res) => {
-  res.json(cancelacionesCocina);
+  res.json(alertasCancelacion.cocina);
 });
 
 // DELETE /api/cocina/cancelaciones/:id → Cocina confirma que vio la alerta ("Entendido")
 app.delete('/api/cocina/cancelaciones/:id', (req, res) => {
   const { id } = req.params;
-  cancelacionesCocina = cancelacionesCocina.filter(c => c.id !== id);
+  alertasCancelacion.cocina = alertasCancelacion.cocina.filter(c => c.id !== id);
   res.json({ ok: true });
 });
 
 // GET /api/barra/cancelaciones → Devuelve las alertas de cancelación pendientes de confirmación para Barra
 app.get('/api/barra/cancelaciones', (req, res) => {
-  res.json(cancelacionesBarra);
+  res.json(alertasCancelacion.barra);
 });
 
 // DELETE /api/barra/cancelaciones/:id → Barra confirma que vio la alerta ("Entendido")
 app.delete('/api/barra/cancelaciones/:id', (req, res) => {
   const { id } = req.params;
-  cancelacionesBarra = cancelacionesBarra.filter(c => c.id !== id);
+  alertasCancelacion.barra = alertasCancelacion.barra.filter(c => c.id !== id);
   res.json({ ok: true });
 });
 
@@ -2099,7 +1587,7 @@ app.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
     };
 
     if (esBarra) {
-      cancelacionesBarra.push({
+      alertasCancelacion.barra.push({
         id: `cancel-item-${Date.now()}-${item.id}`,
         pedidoId: pedido.id,
         items: [itemAlerta],
@@ -2109,7 +1597,7 @@ app.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
         canceladoEn: new Date().toISOString(),
       });
     } else {
-      cancelacionesCocina.push({
+      alertasCancelacion.cocina.push({
         id: `cancel-item-${Date.now()}-${item.id}`,
         pedidoId: pedido.id,
         items: [itemAlerta],
@@ -2212,18 +1700,6 @@ app.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
   }
 });
 
-// ============================================================
-// DELIVERY / PEDIDOS YA
-// ============================================================
-
-// Código de operación de Yape/Plin o voucher de tarjeta: solo se guarda si el cobro usa esos medios
-const limpiarCodigoPago = (codigoPago, metodoPago, montoTarjeta, montoYape) => {
-  const usaDigital = metodoPago === 'Tarjeta' || metodoPago === 'Yape'
-    || (metodoPago === 'Mixto' && ((parseFloat(montoTarjeta) || 0) > 0 || (parseFloat(montoYape) || 0) > 0));
-  const codigo = codigoPago ? String(codigoPago).trim().slice(0, 60) : '';
-  return usaDigital && codigo ? codigo : null;
-};
-
 app.post('/api/pedidos/llevar', async (req, res) => {
   const {
     codigoPedidosYa,
@@ -2282,7 +1758,6 @@ app.post('/api/pedidos/llevar', async (req, res) => {
     const totalConDescuento = Math.max(0, itemsBruto - descuentoMonto);
     let grandTotal = finalMetodoPago === 'Cortesía' ? 0.00 : (totalConDescuento + shippingFee);
     const descuentoFinal = finalMetodoPago === 'Cortesía' ? itemsBruto : descuentoMonto;
-
 
     // Validar crédito antes de crear el pedido para no dejar comandas huérfanas sin venta
     const tieneCredito = finalMetodoPago === 'Crédito' || (finalMetodoPago === 'Mixto' && parseFloat(montoCredito || 0) > 0);
@@ -2749,54 +2224,6 @@ app.delete('/api/productos/:id', async (req, res) => {
   }
 });
 
-// ============================================================
-// CATEGORÍAS DE LA CARTA
-// ============================================================
-
-const COLORES_CATEGORIA = ['amber', 'emerald', 'sky', 'violet', 'rose', 'orange', 'lime', 'slate'];
-
-const mismoNombre = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
-
-// Registra en la tabla las categorías que ya usan los productos (las base se crean en la migración)
-async function sincronizarCategorias() {
-  const existentes = await prisma.categoria.findMany({ select: { nombre: true } });
-  const usadas = await prisma.producto.findMany({ where: { activo: true }, distinct: ['categoria'], select: { categoria: true } });
-  const nuevas = [];
-  for (const { categoria: nombre } of usadas) {
-    const limpio = String(nombre || '').trim();
-    if (!limpio) continue;
-    if (existentes.some(e => mismoNombre(e.nombre, limpio)) || nuevas.some(n => mismoNombre(n, limpio))) continue;
-    nuevas.push(limpio);
-  }
-  if (nuevas.length > 0) {
-    await prisma.categoria.createMany({
-      data: nuevas.map(nombre => ({ nombre, color: isBarraCategoria(nombre) ? 'sky' : 'amber' })),
-      skipDuplicates: true,
-    });
-  }
-}
-
-// Actualiza la lista de categorías de Barra quitando el nombre anterior y agregando el nuevo si va a Barra
-async function actualizarDestinoCategoria(tx, nombreAnterior, nombreNuevo, esBarra) {
-  const conf = await getEmpresaConfig();
-  if (!conf || !conf.id) return;
-  const base = Array.isArray(conf.barraCategorias) ? conf.barraCategorias : DEFAULT_BARRA_CATEGORIAS;
-  const lista = base.filter(c => !mismoNombre(c, nombreAnterior) && !mismoNombre(c, nombreNuevo));
-  if (esBarra && nombreNuevo) lista.push(nombreNuevo);
-  const actualizada = await tx.empresaConfig.update({ where: { id: conf.id }, data: { barraCategorias: lista } });
-  cachedCompanyConfig = { ...cachedCompanyConfig, ...actualizada };
-}
-
-// Reemplaza (o quita si nombreNuevo es null) una categoría dentro de las ofertas
-async function renombrarCategoriaEnOfertas(tx, nombreAnterior, nombreNuevo) {
-  const ofertas = await tx.oferta.findMany({ where: { categorias: { has: nombreAnterior } } });
-  for (const o of ofertas) {
-    const cats = o.categorias.filter(c => c !== nombreAnterior);
-    if (nombreNuevo && !cats.includes(nombreNuevo)) cats.push(nombreNuevo);
-    await tx.oferta.update({ where: { id: o.id }, data: { categorias: cats } });
-  }
-}
-
 // GET /api/categorias → Categorías con destino y cantidad de productos
 app.get('/api/categorias', async (req, res) => {
   try {
@@ -3087,62 +2514,6 @@ app.put('/api/usuarios/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// ============================================================
-// SEGURIDAD: RATE LIMITER CONTRA FUERZA BRUTA EN LOGIN POR PIN
-// ============================================================
-const loginAttempts = new Map(); // ip -> { count, firstAttempt, blockedUntil }
-
-function loginRateLimiter(req, res, next) {
-  const ip = req.ip || req.connection?.remoteAddress || 'local';
-  const now = Date.now();
-  const attempt = loginAttempts.get(ip);
-
-  if (attempt && attempt.blockedUntil && now < attempt.blockedUntil) {
-    const remainingSeconds = Math.ceil((attempt.blockedUntil - now) / 1000);
-    return res.status(429).json({
-      error: `Demasiados intentos fallidos. Acceso temporalmente bloqueado por ${remainingSeconds} segundos.`
-    });
-  }
-  next();
-}
-
-function registerLoginFailure(req) {
-  const ip = req.ip || req.connection?.remoteAddress || 'local';
-  const now = Date.now();
-  const attempt = loginAttempts.get(ip) || { count: 0, firstAttempt: now, blockedUntil: 0 };
-
-  // Si pasaron más de 60 segundos desde el primer intento fallido, resetear ventana
-  if (now - attempt.firstAttempt > 60 * 1000) {
-    attempt.count = 1;
-    attempt.firstAttempt = now;
-    attempt.blockedUntil = 0;
-  } else {
-    attempt.count += 1;
-  }
-
-  // Si supera 5 intentos fallidos consecutivos en menos de 1 minuto, bloquear por 30 segundos
-  if (attempt.count >= 5) {
-    attempt.blockedUntil = now + 30 * 1000;
-  }
-
-  loginAttempts.set(ip, attempt);
-}
-
-function registerLoginSuccess(req) {
-  const ip = req.ip || req.connection?.remoteAddress || 'local';
-  loginAttempts.delete(ip);
-}
-
-// Limpiar periódicamente IPs antiguas cada 10 minutos
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, attempt] of loginAttempts.entries()) {
-    if (now - attempt.firstAttempt > 10 * 60 * 1000 && (!attempt.blockedUntil || now > attempt.blockedUntil)) {
-      loginAttempts.delete(ip);
-    }
-  }
-}, 10 * 60 * 1000).unref();
 
 app.post('/api/usuarios/login', loginRateLimiter, async (req, res) => {
   const { pin } = req.body;
@@ -3474,7 +2845,6 @@ app.patch('/api/ventas/:ventaId/datos-cliente', async (req, res) => {
       where: { id: parseInt(ventaId) }
     });
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada.' });
-
 
     // Actualizar datos
     const ventaActualizada = await prisma.$transaction(async (tx) => {
@@ -3980,7 +3350,6 @@ app.post('/api/ventas', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 // GET /api/ventas → Historial detallado de las ventas del día o rango de fechas (hora Perú)
 app.get('/api/ventas', async (req, res) => {
@@ -5466,40 +4835,6 @@ app.get('/api/reportes/rotacion', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// HELPERS E INTEGRACIÓN APISUNAT.PE (SUNAT PSE)
-// ============================================================
-
-async function obtenerSiguienteSerieYNumero(tipoComprobante, txPrisma = prisma) {
-  if (tipoComprobante !== 'Boleta' && tipoComprobante !== 'Factura') {
-    return { serie: null, numero: null };
-  }
-
-  const isFactura = tipoComprobante === 'Factura';
-  const serieDefault = isFactura ? (process.env.SERIE_FACTURA || 'F001') : (process.env.SERIE_BOLETA || 'B001');
-  const minCorrelativo = isFactura
-    ? parseInt(process.env.ULTIMO_CORRELATIVO_FACTURA || '2')
-    : parseInt(process.env.ULTIMO_CORRELATIVO_BOLETA || '0');
-
-  // Bloqueo por serie hasta el fin de la transacción: evita correlativos duplicados en cobros simultáneos
-  if (txPrisma !== prisma) {
-    await txPrisma.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${serieDefault}))`;
-  }
-
-  const ultimaVenta = await txPrisma.venta.findFirst({
-    where: { tipoComprobante, serie: serieDefault, numero: { not: null } },
-    orderBy: { numero: 'desc' }
-  });
-
-  const siguienteNumero = ultimaVenta
-    ? Math.max(ultimaVenta.numero + 1, minCorrelativo + 1)
-    : (minCorrelativo + 1);
-
-  return {
-    serie: serieDefault,
-    numero: siguienteNumero
-  };
-}
 
 // ============================================================
 // FRONTEND COMPILADO (INSTALADOR WINDOWS)
