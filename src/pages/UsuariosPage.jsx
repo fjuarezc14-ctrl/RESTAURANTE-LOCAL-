@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, X, Trash2, Edit, Eye, EyeOff, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, UsersRound, Save, Salad, BookOpen, Wallet, Tags } from 'lucide-react';
+import { UserPlus, X, Trash2, Edit, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, UsersRound, Save, Salad, BookOpen, Wallet, Tags } from 'lucide-react';
 import { api } from '../api';
 import { safeJsonParse } from '../utils/safeJson';
 import { useAviso, useConfirmar } from '../components/ui';
+import { pin as pinEsquema, nombre as nombreEsquema } from '@shared/esquemas/comunes.js';
 
 // El Administrador siempre tiene acceso a todos los módulos
 const TODOS_LOS_PERMISOS = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
@@ -16,7 +17,6 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
   const [guardando, setGuardando] = useState(false);
   const [newUser, setNewUser] = useState({ nombre: '', rol: '', pin: '', permisos: [] });
   const [editingUser, setEditingUser] = useState(null); // null si es nuevo
-  const [visiblePins, setVisiblePins] = useState({}); // id -> boolean
 
   // La sesión vive en sessionStorage (ver App.jsx); se prefiere el usuario que pasa App
   const currentUser = currentUserProp || safeJsonParse(sessionStorage.getItem('currentUser'), {});
@@ -62,13 +62,19 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
     setModalOpen(true);
   };
 
-  const togglePinVisibilidad = (id) => {
-    setVisiblePins(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
   const guardarUsuario = async () => {
-    if (!newUser.nombre || !newUser.rol || !newUser.pin || newUser.permisos.length === 0) {
-      aviso.advertencia('Completa todos los campos y asigna al menos un permiso.');
+    const validacionNombre = nombreEsquema.safeParse(newUser.nombre);
+    if (!validacionNombre.success) {
+      aviso.advertencia(validacionNombre.error.issues?.[0]?.message || 'El nombre es obligatorio.');
+      return;
+    }
+    const validacionPin = pinEsquema.safeParse(newUser.pin);
+    if (!validacionPin.success) {
+      aviso.advertencia(validacionPin.error.issues?.[0]?.message || 'El PIN debe tener exactamente 4 dígitos numéricos.');
+      return;
+    }
+    if (!newUser.rol || newUser.permisos.length === 0) {
+      aviso.advertencia('Selecciona un rol y asigna al menos un permiso.');
       return;
     }
     if (editingUser && editingUser.id === currentUser?.id && newUser.rol !== editingUser.rol) {
@@ -178,8 +184,6 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
                 if (u.rol === 'Cajero') colorRol = 'bg-emerald-100 text-emerald-800 border-emerald-200';
                 if (u.rol === 'Contador') colorRol = 'bg-purple-100 text-purple-800 border-purple-200';
                 
-                const pinVisible = visiblePins[u.id];
-
                 return (
                   <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
@@ -187,14 +191,8 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
                         <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs">{u.nombre.substring(0, 2).toUpperCase()}</div>
                         <div>
                           <p className="font-bold text-slate-800">{u.nombre}</p>
-                          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono mt-0.5">
-                            <span>PIN: {pinVisible ? u.pin : '••••'}</span>
-                            <button 
-                              onClick={() => togglePinVisibilidad(u.id)}
-                              className="text-slate-400 hover:text-slate-600 transition-colors p-0.5"
-                            >
-                              {pinVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                            </button>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono mt-0.5">
+                            <span>PIN: ••••</span>
                           </div>
                         </div>
                       </div>
