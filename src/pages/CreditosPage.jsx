@@ -2,6 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, X, Search, Wallet, Phone, MapPin, UserRound, Briefcase, ArrowDownCircle, Eye, Pencil, Trash2, CreditCard, Banknote, Smartphone, CheckCircle, ChevronLeft, ChevronRight, Contact, Clock, ShoppingBag } from 'lucide-react';
 import { api } from '../api';
 import { useConfirmar, useAviso } from '../components/ui';
+import {
+  ModalClienteCredito,
+  ModalAbonoCredito,
+  ModalDetalleCuentaCredito,
+} from '../modulos/creditos/modales';
 
 const METODOS_PAGO = ['Efectivo', 'Tarjeta', 'Yape', 'Mixto'];
 
@@ -434,221 +439,35 @@ export default function CreditosPage({ currentUser }) {
         </div>
       </div>
 
-      {/* MODAL CLIENTE */}
-      {modalCliente && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[400] flex items-center justify-center p-4" onClick={() => setModalCliente(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="font-black text-slate-800 text-lg">{editandoCliente ? 'Editar Cliente' : 'Nuevo Cliente'}</h2>
-              <button onClick={() => setModalCliente(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-            </div>
+      {/* MODAL CLIENTE MODULAR */}
+      <ModalClienteCredito
+        abierto={modalCliente}
+        editandoCliente={editandoCliente}
+        formCliente={formCliente}
+        setFormCliente={setFormCliente}
+        usuarios={usuarios}
+        onCerrar={() => setModalCliente(false)}
+        onGuardar={guardarCliente}
+      />
 
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Nombre *</label>
-                <input value={formCliente.nombre} onChange={e => setFormCliente({ ...formCliente, nombre: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500/30 outline-none text-sm" placeholder="Ej. Juan Pérez" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Tipo Doc.</label>
-                  <select value={formCliente.tipoDoc} onChange={e => setFormCliente({ ...formCliente, tipoDoc: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm outline-none">
-                    <option>DNI</option>
-                    <option>RUC</option>
-                    <option>CE</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">N° Documento</label>
-                  <input value={formCliente.numDoc} onChange={e => setFormCliente({ ...formCliente, numDoc: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500/30 outline-none text-sm" />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Teléfono</label>
-                <input value={formCliente.telefono} onChange={e => setFormCliente({ ...formCliente, telefono: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500/30 outline-none text-sm" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Dirección</label>
-                <input value={formCliente.direccion} onChange={e => setFormCliente({ ...formCliente, direccion: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500/30 outline-none text-sm" />
-              </div>
+      {/* MODAL ABONO MODULAR */}
+      <ModalAbonoCredito
+        abierto={modalAbono && !!clienteAbono}
+        cliente={clienteAbono}
+        formAbono={formAbono}
+        setFormAbono={setFormAbono}
+        METODOS_PAGO={METODOS_PAGO}
+        onCerrar={() => setModalAbono(false)}
+        onGuardar={guardarAbono}
+      />
 
-              <div className="flex items-center gap-2 p-3 bg-violet-50 rounded-xl">
-                <input type="checkbox" checked={formCliente.esTrabajador} onChange={e => setFormCliente({ ...formCliente, esTrabajador: e.target.checked })}
-                  className="w-4 h-4 accent-violet-600" />
-                <div>
-                  <label className="text-sm font-bold text-violet-800">Es trabajador interno</label>
-                  <p className="text-xs text-violet-500">Permite líneas de crédito para personal</p>
-                </div>
-              </div>
+      {/* MODAL DETALLE CUENTA MODULAR */}
+      <ModalDetalleCuentaCredito
+        abierto={modalDetalle && !!clienteDetalle}
+        cliente={clienteDetalle}
+        onCerrar={() => setModalDetalle(false)}
+      />
 
-              {formCliente.esTrabajador && (
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Asociar con usuario del sistema</label>
-                  <select value={formCliente.usuarioId} onChange={e => setFormCliente({ ...formCliente, usuarioId: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm outline-none">
-                    <option value="">— Sin asociar —</option>
-                    {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre} ({u.rol})</option>)}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setModalCliente(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm">Cancelar</button>
-              <button onClick={guardarCliente} className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-800">{editandoCliente ? 'Guardar Cambios' : 'Crear Cliente'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL ABONO */}
-      {modalAbono && clienteAbono && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[400] flex items-center justify-center p-4" onClick={() => setModalAbono(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="font-black text-slate-800 text-lg">Registrar Abono</h2>
-                <p className="text-xs text-slate-500">{clienteAbono.nombre}</p>
-              </div>
-              <button onClick={() => setModalAbono(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-            </div>
-            {/* Banner de saldo deudor */}
-            <div className={`flex items-center justify-between rounded-xl px-4 py-3 mb-4 ${(clienteAbono.saldo || 0) > 0 ? 'bg-rose-50 border border-rose-200' : 'bg-emerald-50 border border-emerald-200'}`}>
-              <div>
-                <p className={`text-[10px] font-black uppercase ${(clienteAbono.saldo || 0) > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>Saldo Deudor Actual</p>
-                <p className={`text-2xl font-black font-mono ${(clienteAbono.saldo || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>S/ {(clienteAbono.saldo || 0).toFixed(2)}</p>
-              </div>
-              {(clienteAbono.saldo || 0) > 0
-                ? <span className="text-3xl">⚠️</span>
-                : <span className="text-3xl">✅</span>
-              }
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Monto *</label>
-                <input type="number" step="0.01" value={formAbono.monto} onChange={e => setFormAbono({ ...formAbono, monto: e.target.value })}
-                  className="w-full px-3 py-3 rounded-xl border border-slate-200 text-lg font-black text-center focus:ring-2 focus:ring-emerald-500/30 outline-none"
-                  placeholder="S/ 0.00" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Método de Pago</label>
-                <select value={formAbono.metodoPago} onChange={e => setFormAbono({ ...formAbono, metodoPago: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm outline-none">
-                  {METODOS_PAGO.map(m => <option key={m}>{m}</option>)}
-                </select>
-              </div>
-
-              {formAbono.metodoPago === 'Mixto' && (
-                <div className="grid grid-cols-3 gap-2">
-                  <input type="number" placeholder="Efectivo" value={formAbono.montoEfectivo} onChange={e => setFormAbono({ ...formAbono, montoEfectivo: e.target.value })} className="px-2 py-2 rounded-xl border border-slate-200 text-sm" />
-                  <input type="number" placeholder="Tarjeta" value={formAbono.montoTarjeta} onChange={e => setFormAbono({ ...formAbono, montoTarjeta: e.target.value })} className="px-2 py-2 rounded-xl border border-slate-200 text-sm" />
-                  <input type="number" placeholder="Yape" value={formAbono.montoYape} onChange={e => setFormAbono({ ...formAbono, montoYape: e.target.value })} className="px-2 py-2 rounded-xl border border-slate-200 text-sm" />
-                </div>
-              )}
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Nota (opcional)</label>
-                <input value={formAbono.nota} onChange={e => setFormAbono({ ...formAbono, nota: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm outline-none" placeholder="Ej. Abono parcial" />
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setModalAbono(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm">Cancelar</button>
-              <button onClick={guardarAbono} className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm">Registrar Abono</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DETALLE CUENTA */}
-      {modalDetalle && clienteDetalle && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[400] flex items-center justify-center p-4" onClick={() => setModalDetalle(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-2xl max-h-[80vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h2 className="font-black text-slate-800 text-lg">Cuenta Corriente</h2>
-                <p className="text-sm text-slate-500">{clienteDetalle.nombre} {clienteDetalle.numDoc ? `(${clienteDetalle.tipoDoc}: ${clienteDetalle.numDoc})` : ''}</p>
-              </div>
-              <button onClick={() => setModalDetalle(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              <div className="bg-slate-50 rounded-xl p-4 text-center">
-                <p className="text-[10px] uppercase font-bold text-slate-400">Consumido</p>
-                <p className="font-black text-lg text-slate-800">S/ {(clienteDetalle.totalConsumido || 0).toFixed(2)}</p>
-              </div>
-              <div className="bg-emerald-50 rounded-xl p-4 text-center">
-                <p className="text-[10px] uppercase font-bold text-emerald-500">Abonado</p>
-                <p className="font-black text-lg text-emerald-600">S/ {(clienteDetalle.totalAbonado || 0).toFixed(2)}</p>
-              </div>
-              <div className={`rounded-xl p-4 text-center ${(clienteDetalle.saldo || 0) > 0 ? 'bg-rose-50' : 'bg-slate-50'}`}>
-                <p className={`text-[10px] uppercase font-bold ${(clienteDetalle.saldo || 0) > 0 ? 'text-rose-500' : 'text-slate-400'}`}>Saldo</p>
-                <p className={`font-black text-lg ${(clienteDetalle.saldo || 0) > 0 ? 'text-rose-600' : 'text-slate-800'}`}>S/ {(clienteDetalle.saldo || 0).toFixed(2)}</p>
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <h3 className="font-bold text-sm text-slate-700 mb-3">Ventas a Crédito</h3>
-              {clienteDetalle.ventasCredito?.length === 0 ? (
-                <p className="text-sm text-slate-400 py-4 text-center">Sin consumos registrados</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-[10px] uppercase text-slate-400 border-b border-slate-100">
-                      <th className="py-2">Fecha</th>
-                      <th className="py-2">Comprobante</th>
-                      <th className="py-2 text-right">Monto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clienteDetalle.ventasCredito?.map(v => (
-                      <tr key={v.id} className="border-b border-slate-50">
-                        <td className="py-2">{new Date(v.fecha).toLocaleDateString('es-PE')}</td>
-                        <td className="py-2">{v.tipoComprobante}</td>
-                        <td className="py-2 text-right font-bold">{Number(v.montoCredito || 0) > 0 ? `S/ ${Number(v.montoCredito).toFixed(2)}` : `S/ ${Number(v.total || 0).toFixed(2)}`}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            <div>
-              <h3 className="font-bold text-sm text-slate-700 mb-3">Historial de Abonos</h3>
-              {clienteDetalle.AbonosCredito?.length === 0 ? (
-                <p className="text-sm text-slate-400 py-4 text-center">Sin abonos registrados</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-[10px] uppercase text-slate-400 border-b border-slate-100">
-                      <th className="py-2">Fecha</th>
-                      <th className="py-2">Método</th>
-                      <th className="py-2">Registrado por</th>
-                      <th className="py-2 text-right">Monto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clienteDetalle.AbonosCredito?.map(a => (
-                      <tr key={a.id} className="border-b border-slate-50">
-                        <td className="py-2">{new Date(a.creadoEn).toLocaleDateString('es-PE')} {new Date(a.creadoEn).toLocaleTimeString('es-PE', {hour: '2-digit', minute:'2-digit'})}</td>
-                        <td className="py-2">{a.metodoPago}</td>
-                        <td className="py-2">{a.registradoPor}</td>
-                        <td className="py-2 text-right font-bold text-emerald-600">S/ {a.monto.toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
