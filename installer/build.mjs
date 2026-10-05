@@ -146,7 +146,7 @@ async function main() {
 
   // 4. Backend con motores de Prisma para Windows
   console.log('📦 Empaquetando backend...');
-  for (const f of ['server.js', 'config', 'prisma', 'package.json', 'package-lock.json']) {
+  for (const f of ['server.js', 'src', 'shared', 'config', 'prisma', 'package.json', 'package-lock.json']) {
     copy(path.join(REPO, 'backend', f), path.join(BACKEND, f));
   }
   fs.rmSync(path.join(BACKEND, 'prisma', 'seed.js'), { force: true }); // seed de demostración: borra ventas
@@ -192,7 +192,7 @@ async function main() {
   const obf = `npx --yes javascript-obfuscator@${OBFUSCATOR_VERSION}`;
   const obfBackend = '--compact true --string-array true --string-array-encoding base64 --string-array-threshold 0.75 '
     + '--identifier-names-generator hexadecimal --rename-globals false --self-defending false --control-flow-flattening false';
-  for (const f of ['server.js', 'config/company.js', 'prisma/seed-clean.js']) {
+  for (const f of ['server.js', 'src/app.js', 'config/company.js', 'prisma/seed-clean.js']) {
     const file = path.join(BACKEND, f);
     sh(`${obf} ${q(file)} --output ${q(file)} ${obfBackend}`, { quiet: true });
   }
