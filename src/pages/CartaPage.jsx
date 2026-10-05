@@ -6,6 +6,7 @@ import { parseComponentes, calcularPrecioComponentes, normalizarOpcion, extractI
 import { ordenarCategorias } from '../utils/categorias';
 import { Button, Input, Label, Badge, Dialog, DialogHeader, DialogFooter, useAviso, useConfirmar } from '../components/ui';
 import { cn } from '../utils/cn';
+import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
 
 // --- SISTEMA DE BÚSQUEDA INTELIGENTE Y FONÉTICA ---
 const SINONIMOS = {
