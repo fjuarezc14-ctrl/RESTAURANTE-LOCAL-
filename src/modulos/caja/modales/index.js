@@ -8,3 +8,4 @@ export { default as ModalCorregirTipoEntrega } from './ModalCorregirTipoEntrega'
 export { default as ModalCancelarLlevar } from './ModalCancelarLlevar';
 export { default as ModalComprobanteSunat } from './ModalComprobanteSunat';
 export { default as ModalAnularVenta } from './ModalAnularVenta';
+export { default as ModalConfirmacionCobro } from './ModalConfirmacionCobro';
