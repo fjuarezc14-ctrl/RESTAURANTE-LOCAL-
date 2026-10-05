@@ -11,7 +11,10 @@
     "db:studio": "npx prisma studio",
     "db:setup": "npx prisma migrate deploy && node prisma/seed.js",
     "db:seed:clean": "node prisma/seed-clean.js",
-    "db:repair": "node scripts/data-repair.js"
+    "db:repair": "node scripts/data-repair.js",
+    "test": "vitest run",
+    "test:db": "docker compose -f test/docker-compose.yml up -d --wait",
+    "test:db:down": "docker compose -f test/docker-compose.yml down"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -22,7 +25,9 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.9",
-    "prisma": "^5.22.0"
+    "prisma": "^5.22.0",
+    "supertest": "^7.3.1",
+    "vitest": "^5.0.3"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
