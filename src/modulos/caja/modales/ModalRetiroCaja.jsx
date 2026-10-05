@@ -228,3 +228,5 @@ export function ModalRetiroCaja({
     </Dialog>
   );
 }
+
+export default ModalRetiroCaja;

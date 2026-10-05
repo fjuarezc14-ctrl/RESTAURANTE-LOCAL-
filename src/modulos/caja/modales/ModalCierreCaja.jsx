@@ -673,3 +673,5 @@ export function ModalCierreCaja({
     </div>
   );
 }
+
+export default ModalCierreCaja;

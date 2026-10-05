@@ -1,3 +1,10 @@
-export { ModalAperturaCaja } from './ModalAperturaCaja';
-export { ModalRetiroCaja } from './ModalRetiroCaja';
-export { ModalCierreCaja } from './ModalCierreCaja';
+export { default as ModalAperturaCaja } from './ModalAperturaCaja';
+export { default as ModalRetiroCaja } from './ModalRetiroCaja';
+export { default as ModalCierreCaja } from './ModalCierreCaja';
+export { default as ModalHistorialCierres } from './ModalHistorialCierres';
+export { default as ModalReimpresionCierre } from './ModalReimpresionCierre';
+export { default as ModalCorregirMetodoPago } from './ModalCorregirMetodoPago';
+export { default as ModalCorregirTipoEntrega } from './ModalCorregirTipoEntrega';
+export { default as ModalCancelarLlevar } from './ModalCancelarLlevar';
+export { default as ModalComprobanteSunat } from './ModalComprobanteSunat';
+export { default as ModalAnularVenta } from './ModalAnularVenta';

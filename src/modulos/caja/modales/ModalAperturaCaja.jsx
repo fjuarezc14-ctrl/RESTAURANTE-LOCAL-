@@ -275,3 +275,5 @@ export function ModalAperturaCaja({
     </Dialog>
   );
 }
+
+export default ModalAperturaCaja;
