@@ -7,6 +7,7 @@ import { ordenarCategorias } from '../utils/categorias';
 import { Button, Input, Label, Badge, Dialog, DialogHeader, DialogFooter, useAviso, useConfirmar } from '../components/ui';
 import { cn } from '../utils/cn';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
+import { nombre as nombreEsquema, monto as montoEsquema } from '@shared/esquemas/comunes.js';
 
 // --- SISTEMA DE BÚSQUEDA INTELIGENTE Y FONÉTICA ---
 const SINONIMOS = {
@@ -342,13 +343,21 @@ export default function CartaPage({ currentUser }) {
   };
 
   const guardarProducto = async () => {
-    const precio = parseFloat(editProd.precio);
-    if (!editProd.nombre.trim() || isNaN(precio)) {
-      aviso.advertencia('Ingresa un nombre y precio válido.');
+    const validNombre = nombreEsquema.safeParse(editProd.nombre);
+    if (!validNombre.success) {
+      aviso.advertencia(validNombre.error.issues?.[0]?.message || 'El nombre del producto es obligatorio.');
       return;
     }
-    if (!editProd.categoria) {
-      aviso.advertencia('Elige una categoría.');
+
+    const numPrecio = parseFloat(editProd.precio);
+    const validPrecio = montoEsquema.safeParse(numPrecio);
+    if (!validPrecio.success) {
+      aviso.advertencia(validPrecio.error.issues?.[0]?.message || 'El precio debe ser un monto válido (ej: 25.50).');
+      return;
+    }
+
+    if (!editProd.categoria?.trim()) {
+      aviso.advertencia('Elige una categoría para el producto.');
       return;
     }
 
@@ -375,9 +384,9 @@ export default function CartaPage({ currentUser }) {
     setGuardando(true);
     try {
       const body = {
-        nombre: editProd.nombre.trim(),
-        categoria: editProd.categoria,
-        precio,
+        nombre: validNombre.data,
+        categoria: editProd.categoria.trim(),
+        precio: validPrecio.data,
         tipoStock: limitado ? 'limitado' : 'ilimitado',
         stock: limitado ? Math.max(0, parseInt(stockTexto) || 0) : 0,
         requiereGuarnicion: preguntas.length > 0,
