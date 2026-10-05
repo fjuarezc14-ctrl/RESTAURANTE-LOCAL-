@@ -33,9 +33,10 @@ function formatCuentaRegresiva(ms) {
 
 // --- SISTEMA DE AUDIO Y VIBRACIÓN OPTIMIZADO PARA SALÓN / MOZOS ---
 let globalAudioCtx = null;
+let userHasInteracted = false;
 
 function getAudioContext() {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined' || !userHasInteracted) return null;
   if (!globalAudioCtx) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (AudioContextClass) {
@@ -48,12 +49,22 @@ function getAudioContext() {
   return globalAudioCtx;
 }
 
-// Desbloquear AudioContext en el primer gesto del usuario (táctil, click o teclado)
+// Desbloquear AudioContext tras el primer gesto táctil o click del usuario
 if (typeof window !== 'undefined') {
   const unlockAudio = () => {
-    const ctx = getAudioContext();
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
+    userHasInteracted = true;
+    try {
+      if (!globalAudioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          globalAudioCtx = new AudioContextClass();
+        }
+      }
+      if (globalAudioCtx && globalAudioCtx.state === 'suspended') {
+        globalAudioCtx.resume().catch(() => {});
+      }
+    } catch {
+      // Ignorar restricciones de audio del navegador
     }
   };
   ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(evt => {
