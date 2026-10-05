@@ -15,3 +15,4 @@ export { default as ModalDetalleVenta } from './ModalDetalleVenta';
 export { default as ModalTodasCategorias } from './ModalTodasCategorias';
 export { default as ModalOpcionesProducto } from './ModalOpcionesProducto';
 export { default as ModalCobroMesa } from './ModalCobroMesa';
+export { default as ModalNuevoPedidoDelivery } from './ModalNuevoPedidoDelivery';
