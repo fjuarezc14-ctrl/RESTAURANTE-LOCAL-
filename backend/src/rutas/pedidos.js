@@ -604,7 +604,7 @@ router.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
     let itemsRestantes = [];
 
     if (esUltimoItem) {
-      // Treat as a complete cancelation of the comanda!
+      // Tratar como cancelación total de la comanda
       await prisma.pedido.update({
         where: { id },
         data: {
@@ -612,8 +612,10 @@ router.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
           canceladoPor: canceladoPor || 'Sin especificar',
           motivoCancela: motivo || 'Cancelación completa de ítems',
           canceladoEn: new Date(),
+          total: 0,
         },
       });
+      await prisma.itemPedido.delete({ where: { id: item.id } }).catch(() => null);
       // itemsRestantes queda [] — el pedido se canceló por completo
     } else {
       if (nuevaCantidad === 0) {

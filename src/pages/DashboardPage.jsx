@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Users, Flame, CheckCircle, Banknote, LayoutGrid, ChefHat, Calculator, Lock, Unlock, AlertTriangle, ShieldAlert, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
@@ -16,10 +16,18 @@ export default function DashboardPage() {
   const [cargandoForzar, setCargandoForzar] = useState(false);
   const [errorForzar, setErrorForzar] = useState('');
 
+  const isFetchingDashboardRef = useRef(false);
+
   useEffect(() => {
     let activeCierreCutoff = localStorage.getItem('ultimoCierre');
 
     const updateStats = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      if (isFetchingDashboardRef.current) return;
+      isFetchingDashboardRef.current = true;
+
       try {
         if (!activeCierreCutoff) {
           try {
@@ -28,7 +36,9 @@ export default function DashboardPage() {
               activeCierreCutoff = new Date(cierreRes.ultimoCierre.fechaCierre).toISOString();
               localStorage.setItem('ultimoCierre', activeCierreCutoff);
             }
-          } catch (_) {}
+          } catch (err) {
+            console.debug('[DashboardPage] No se pudo obtener el último cierre:', err?.message);
+          }
         }
 
         const [mesas, resumen, rotacion, estadoCajaRes] = await Promise.all([
@@ -54,11 +64,13 @@ export default function DashboardPage() {
         setTopProducts(platosFiltrados.slice(0, 5));
       } catch (err) {
         console.error('Error cargando dashboard:', err);
+      } finally {
+        isFetchingDashboardRef.current = false;
       }
     };
 
     updateStats();
-    const interval = setInterval(updateStats, 3000);
+    const interval = setInterval(updateStats, 12000);
     return () => clearInterval(interval);
   }, []);
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Clock, CheckCheck, CheckCircle2, User, Truck, XCircle, AlertTriangle, Salad, ShoppingBag, Bike, UtensilsCrossed, Timer, X } from 'lucide-react';
 import { useAviso } from './ui';
 
@@ -72,12 +72,18 @@ export default function MonitorPreparacion({
   const [confirmandoItemId, setConfirmandoItemId] = useState(null);
   const [despachando, setDespachando] = useState(false);
 
+  const isFetchingRef = useRef(false);
+
   const fetchPedidos = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       const data = await cargarPedidos();
       if (Array.isArray(data)) setPedidos(data);
     } catch (err) {
       console.error(`Error cargando ${titulo}:`, err);
+    } finally {
+      isFetchingRef.current = false;
     }
   }, [cargarPedidos, titulo]);
 
@@ -94,13 +100,16 @@ export default function MonitorPreparacion({
     fetchPedidos();
     fetchCancelaciones();
 
-    // Refresco periódico cada 2 segundos
+    // Refresco periódico cada 3 segundos solo cuando la pestaña esté visible
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
       fetchPedidos();
       fetchCancelaciones();
       setAhora(Date.now());
       setHora(horaLima());
-    }, 2000);
+    }, 3000);
 
     // Refresco inmediato al tocar la pantalla o reactivar la pestaña
     let lastImmediateFetch = 0;

@@ -15,7 +15,7 @@ async function apiRequest(endpoint, options = {}) {
     ...(options.body ? { 'Content-Type': 'application/json' } : {})
   };
 
-  const timeoutMs = options.timeoutMs || 10000;
+  const timeoutMs = options.timeoutMs || 15000;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 

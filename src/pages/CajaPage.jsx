@@ -734,51 +734,73 @@ export default function CajaPage({ currentUser }) {
     }
   };
 
-  const fetchCajaData = useCallback(async () => {
-    try {
-      const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList, ultimoCierreRes, estadoCajaRes, usuariosList] = await Promise.all([
-        api.getMesas().catch(() => null),
-        api.getResumenVentas().catch(() => ({ atendidas: 0, ingresos: 0 })),
-        api.getPedidosLlevar().catch(() => null),
-        api.getHistorialVentas().catch(() => null),
-        api.getProductos().catch(() => null),
-        api.getClientes().catch(() => []),
-        api.getAbonos().catch(() => []),
-        api.getCompras().catch(() => []),
-        api.getUltimoCierre().catch(() => null),
-        api.getEstadoCaja().catch(() => null),
-        api.getUsuarios().catch(() => []),
-      ]);
-      if (mesasData) setMesas(mesasData);
-      if (llevarData) setPedidosLlevar(llevarData);
-      if (resumenData) setStats({ atendidas: resumenData.atendidas || 0, ingresos: resumenData.ingresos || 0 });
-      if (ventasData) setVentas(ventasData);
-      if (prods) setProductosMenu(prods);
-      if (usuariosList && Array.isArray(usuariosList)) setUsuariosSistema(usuariosList);
-      setClientes(clientsList || []);
-      setAbonos(abonosList || []);
-      setComprasTurno(comprasList || []);
+  const isFetchingCajaRef = useRef(false);
 
-      if (estadoCajaRes && typeof estadoCajaRes.abierto === 'boolean') {
-        setCajaEstado(estadoCajaRes);
-        if (estadoCajaRes.abierto && estadoCajaRes.turno?.cajeroNombre) {
-          setCajeroNombre(estadoCajaRes.turno.cajeroNombre);
+  const fetchCajaData = useCallback(async (options = { full: true }) => {
+    if (isFetchingCajaRef.current) return;
+    isFetchingCajaRef.current = true;
+
+    try {
+      if (options?.full) {
+        const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList, ultimoCierreRes, estadoCajaRes, usuariosList] = await Promise.all([
+          api.getMesas().catch(() => null),
+          api.getResumenVentas().catch(() => ({ atendidas: 0, ingresos: 0 })),
+          api.getPedidosLlevar().catch(() => null),
+          api.getHistorialVentas().catch(() => null),
+          api.getProductos().catch(() => null),
+          api.getClientes().catch(() => []),
+          api.getAbonos().catch(() => []),
+          api.getCompras().catch(() => []),
+          api.getUltimoCierre().catch(() => null),
+          api.getEstadoCaja().catch(() => null),
+          api.getUsuarios().catch(() => []),
+        ]);
+        if (mesasData) setMesas(mesasData);
+        if (llevarData) setPedidosLlevar(llevarData);
+        if (resumenData) setStats({ atendidas: resumenData.atendidas || 0, ingresos: resumenData.ingresos || 0 });
+        if (ventasData) setVentas(ventasData);
+        if (prods) setProductosMenu(prods);
+        if (usuariosList && Array.isArray(usuariosList)) setUsuariosSistema(usuariosList);
+        setClientes(clientsList || []);
+        setAbonos(abonosList || []);
+        setComprasTurno(comprasList || []);
+
+        if (estadoCajaRes && typeof estadoCajaRes.abierto === 'boolean') {
+          setCajaEstado(estadoCajaRes);
+          if (estadoCajaRes.abierto && estadoCajaRes.turno?.cajeroNombre) {
+            setCajeroNombre(estadoCajaRes.turno.cajeroNombre);
+          }
+          if (estadoCajaRes.abierto && estadoCajaRes.turno?.fechaApertura) {
+            const fAperturaISO = new Date(estadoCajaRes.turno.fechaApertura).toISOString();
+            setUltimoCierre(fAperturaISO);
+          } else if (estadoCajaRes.ultimoCierre?.fechaCierre) {
+            const fCierreISO = new Date(estadoCajaRes.ultimoCierre.fechaCierre).toISOString();
+            setUltimoCierre(fCierreISO);
+          }
+        } else if (ultimoCierreRes?.ultimoCierre?.fechaCierre) {
+          const fechaDbISO = new Date(ultimoCierreRes.ultimoCierre.fechaCierre).toISOString();
+          setUltimoCierre(prev => (prev !== fechaDbISO ? fechaDbISO : prev));
+          localStorage.setItem('ultimoCierre', fechaDbISO);
         }
-        if (estadoCajaRes.abierto && estadoCajaRes.turno?.fechaApertura) {
-          const fAperturaISO = new Date(estadoCajaRes.turno.fechaApertura).toISOString();
-          setUltimoCierre(fAperturaISO);
-        } else if (estadoCajaRes.ultimoCierre?.fechaCierre) {
-          const fCierreISO = new Date(estadoCajaRes.ultimoCierre.fechaCierre).toISOString();
-          setUltimoCierre(fCierreISO);
+      } else {
+        // Sondeo ligero de alta frecuencia: solo mesas, delivery activo y estado de caja
+        const [mesasData, resumenData, llevarData, estadoCajaRes] = await Promise.all([
+          api.getMesas().catch(() => null),
+          api.getResumenVentas().catch(() => null),
+          api.getPedidosLlevar().catch(() => null),
+          api.getEstadoCaja().catch(() => null),
+        ]);
+        if (mesasData) setMesas(mesasData);
+        if (llevarData) setPedidosLlevar(llevarData);
+        if (resumenData) setStats({ atendidas: resumenData.atendidas || 0, ingresos: resumenData.ingresos || 0 });
+        if (estadoCajaRes && typeof estadoCajaRes.abierto === 'boolean') {
+          setCajaEstado(estadoCajaRes);
         }
-      } else if (ultimoCierreRes?.ultimoCierre?.fechaCierre) {
-        const fechaDbISO = new Date(ultimoCierreRes.ultimoCierre.fechaCierre).toISOString();
-        setUltimoCierre(prev => (prev !== fechaDbISO ? fechaDbISO : prev));
-        localStorage.setItem('ultimoCierre', fechaDbISO);
       }
     } catch (err) {
-      // Ignorar micro-caídas o lags de red Wi-Fi
+      console.debug('[CajaPage] Micro-latencia en sondeo:', err?.message);
     } finally {
+      isFetchingCajaRef.current = false;
       setLoading(false);
     }
   }, []);
@@ -869,10 +891,18 @@ export default function CajaPage({ currentUser }) {
   };
 
   useEffect(() => {
-    fetchCajaData();
+    // Carga inicial completa de todo el turno
+    fetchCajaData({ full: true });
+
+    // Sondeo ligero de alta frecuencia (solo mesas y delivery) cada 6 segundos
     const interval = setInterval(() => {
-      if (!modalOpen && !deliveryModal && !cierreModalOpen && !historialCierresModalOpen) fetchCajaData();
-    }, 4000);
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      if (!modalOpen && !deliveryModal && !cierreModalOpen && !historialCierresModalOpen) {
+        fetchCajaData({ full: false });
+      }
+    }, 6000);
     return () => clearInterval(interval);
   }, [fetchCajaData, modalOpen, deliveryModal, cierreModalOpen, historialCierresModalOpen]);
 
@@ -3146,9 +3176,8 @@ export default function CajaPage({ currentUser }) {
         setMetodoPago={setMetodoPago}
         cortesiaItemIds={cortesiaItemIds}
         setCortesiaItemIds={setCortesiaItemIds}
-        pagaCon={pagaCon}
-        setPagaCon={setPagaCon}
-        vueltoCalculado={vueltoCalculado}
+        pagaCon={pagaConEfectivoMesa}
+        setPagaCon={setPagaConEfectivoMesa}
         montoMixtoEfectivo={montoMixtoEfectivo}
         setMontoMixtoEfectivo={setMontoMixtoEfectivo}
         montoMixtoTarjeta={montoMixtoTarjeta}

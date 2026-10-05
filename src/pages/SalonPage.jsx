@@ -68,7 +68,10 @@ function playChimeNotification() {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try {
         navigator.vibrate([250, 100, 250]);
-      } catch (err) {}
+      } catch (err) {
+        // Dispositivo sin hardware de vibración o bloqueado por permisos
+        console.debug('[SalonPage] Vibración no disponible:', err?.message);
+      }
     }
 
     // 2. Campana sonora Web Audio API
