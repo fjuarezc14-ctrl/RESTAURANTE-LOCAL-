@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   X,
   Banknote,
@@ -13,9 +12,12 @@ import {
   Trash2,
   AlertTriangle,
   Layers,
+  Check,
 } from 'lucide-react';
 import { api } from '../../../api';
 import { formatearMoneda } from '../../../utils/dinero';
+import SelectorClienteCreditoCombobox from '../componentes/SelectorClienteCreditoCombobox';
+import { getEstiloMetodo } from '../constantes/metodosPago';
 
 /**
  * Modal principal para cobrar y liberar una mesa activa
@@ -29,36 +31,40 @@ export default function ModalCobroMesa({
   setMetodoPago,
   cortesiaItemIds = [],
   setCortesiaItemIds,
-  pagaCon,
-  setPagaCon,
-  vueltoCalculado = 0,
-  montoMixtoEfectivo,
-  setMontoMixtoEfectivo,
-  montoMixtoTarjeta,
-  setMontoMixtoTarjeta,
-  montoMixtoYape,
-  setMontoMixtoYape,
-  consumoUsuario,
-  setConsumoUsuario,
-  consumoPin,
-  setConsumoPin,
-  consumoMotivo,
-  setConsumoMotivo,
-  codigoOperacionPago,
-  setCodigoOperacionPago,
-  numDocumento,
-  setNumDocumento,
-  handleDocumentoChange,
-  clienteNombre,
-  setClienteNombre,
-  clienteDireccion,
-  setClienteDireccion,
-  usuarios = [],
-  DENOMINACIONES_PEN = [],
-  procesarCobroYFacturar,
+  pagaConEfectivoMesa = '',
+  setPagaConEfectivoMesa = () => {},
+  mixtoEfectivo = '',
+  setMixtoEfectivo = () => {},
+  mixtoTarjeta = '',
+  setMixtoTarjeta = () => {},
+  mixtoYape = '',
+  setMixtoYape = () => {},
+  codigoPago = '',
+  setCodigoPago = () => {},
+  consumoPin = '',
+  setConsumoPin = () => {},
+  consumoPinError = '',
+  setConsumoPinError = () => {},
+  motivoCortesia = '',
+  setMotivoCortesia = () => {},
+  clientes = [],
+  clienteCreditoSeleccionado = null,
+  setClienteCreditoSeleccionado = () => {},
+  incluirCreditoMixto = false,
+  setIncluirCreditoMixto = () => {},
+  clientesCreditoMixto = [],
+  setClientesCreditoMixto = () => {},
+  setTipoComprobante = () => {},
+  numDocumento = '',
+  setNumDocumento = () => {},
+  handleDocumentoChange = () => {},
+  clienteNombre = '',
+  setClienteNombre = () => {},
+  clienteDireccion = '',
+  setClienteDireccion = () => {},
+  procesarCobroYFacturar = () => {},
   cobrando = false,
-  setMesaSeleccionada,
-  // Helper de moneda
+  setMesaSeleccionada = () => {},
   soles = (v) => formatearMoneda(v),
   parseMonto = (val) => {
     const n = parseFloat(String(val || '').replace(/,/g, '.'));
@@ -80,6 +86,7 @@ export default function ModalCobroMesa({
       />
     </div>
   ),
+  estiloMetodo = getEstiloMetodo,
 }) {
   if (!abierto || !mesa) return null;
 

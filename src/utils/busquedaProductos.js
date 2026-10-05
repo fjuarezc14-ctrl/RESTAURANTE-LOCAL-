@@ -112,3 +112,31 @@ export const ordenarCategorias = (categorias, ordenPrioridades) => [...categoria
   if (idxB !== -1) return 1;
   return a.localeCompare(b);
 });
+
+export const agruparProductos = (items = []) => {
+  const list = [];
+  const esTallarin = (p) => p.categoria === 'Tallarines Verdes' || (p.nombre && /tallar[ií]n(es)?\s+verde(s)?/i.test(p.nombre));
+  const tallarines = (items || []).filter(esTallarin);
+  const otros = (items || []).filter(p => !esTallarin(p));
+
+  if (tallarines.length > 1) {
+    const ordenados = [...tallarines].sort((a, b) => a.precio - b.precio);
+    list.push({
+      id: 'group_tallarines_verdes',
+      nombre: 'Tallarines Verdes (Variantes)',
+      categoria: ordenados[0].categoria || 'Platos Criollos y Fondos',
+      precioMin: ordenados[0].precio,
+      precioMax: ordenados[ordenados.length - 1].precio,
+      esAgrupado: true,
+      variantes: tallarines,
+      tipoStock: 'ilimitado',
+      stock: 0,
+      activo: true
+    });
+  } else if (tallarines.length === 1) {
+    list.push(tallarines[0]);
+  }
+
+  return [...list, ...otros];
+};
+
