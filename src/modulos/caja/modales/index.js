@@ -9,3 +9,6 @@ export { default as ModalCancelarLlevar } from './ModalCancelarLlevar';
 export { default as ModalComprobanteSunat } from './ModalComprobanteSunat';
 export { default as ModalAnularVenta } from './ModalAnularVenta';
 export { default as ModalConfirmacionCobro } from './ModalConfirmacionCobro';
+export { default as ModalDetalleMesa } from './ModalDetalleMesa';
+export { default as ModalDetallePedidoLlevar } from './ModalDetallePedidoLlevar';
+export { default as ModalDetalleVenta } from './ModalDetalleVenta';

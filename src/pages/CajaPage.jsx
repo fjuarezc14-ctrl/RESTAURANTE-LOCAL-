@@ -21,6 +21,9 @@ import {
   ModalComprobanteSunat,
   ModalAnularVenta,
   ModalConfirmacionCobro,
+  ModalDetalleMesa,
+  ModalDetallePedidoLlevar,
+  ModalDetalleVenta,
 } from '../modulos/caja/modales';
 
 // Desactivado por defecto (se emite en portal SUNAT SOL o ticket de control interno)
@@ -3069,318 +3072,60 @@ export default function CajaPage({ currentUser }) {
       </div>
 
       {/* MODAL: DETALLE DE MESA */}
-      {mesaDetalle && (() => {
-        const m = mesaDetalle;
-        const items = (m.pedidoData?.items || []).filter(Boolean);
-        return modalDetalle(
-          () => setMesaDetalleNum(null),
-          <>
-            <p className="text-lg font-semibold text-slate-900">Mesa {m.num}</p>
-            <p className="text-sm text-slate-500 flex flex-wrap items-center gap-x-2">
-              <span>{m.pedidoData?.mesero || '—'}</span><span className="text-slate-300">·</span>
-              <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{m.pedidoData?.hora}</span>
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {estadoChip(mesaCobrable(m), 'Listo p/ cobrar', mesaEnPreparacion(m) ? 'En preparación' : 'Por servir')}
-              {m.pedidoData?.estadoEnsalada && <span className="text-[11px] text-emerald-700 bg-emerald-50 rounded-md px-1.5 py-0.5">🥗 Ensalada {m.pedidoData.estadoEnsalada.toLowerCase()}</span>}
-            </div>
-          </>,
-          <div>
-            <p className="text-xs font-medium text-slate-400 mb-2">Consumo ({items.length})</p>
-            {items.length > 0 ? (
-              <ul className="divide-y divide-slate-100">
-                {items.map((i, idx) => (
-                  <li key={idx} className="flex items-start justify-between gap-3 py-2 text-sm">
-                    <span className="min-w-0 text-slate-700"><span className="font-mono text-slate-400 mr-2">{i.cant}×</span>{i.nombre}</span>
-                    {i.precio != null && <span className="font-mono tabular-nums text-slate-600 shrink-0">{soles(i.cant * i.precio)}</span>}
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="text-sm text-slate-400">Sin consumos</p>}
-          </div>,
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <p className="text-xs text-slate-500">Total</p>
-              <p className="text-xl font-semibold font-mono tabular-nums text-slate-900">{soles(m.pedidoData?.total)}</p>
-            </div>
-            {!mesaCobrable(m) ? (
-              <div className="text-right">
-                <button
-                  type="button"
-                  disabled
-                  className="h-11 px-6 rounded-xl bg-slate-100 text-slate-400 text-sm font-semibold cursor-not-allowed inline-flex items-center gap-2"
-                >
-                  <Clock className="w-4 h-4" /> {mesaEnPreparacion(m) ? 'En preparación' : 'Por servir'}
-                </button>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  {mesaEnPreparacion(m)
-                    ? (platosEnPreparacion(m) > 0 ? `${platosEnPreparacion(m)} plato(s) en preparación` : 'Esperando a cocina y barra')
-                    : `El mozo debe servir ${platosSinServir(m)} plato(s)`}
-                </p>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => { setMesaDetalleNum(null); abrirCobroMesa(m); }}
-                className="h-11 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors active:scale-[0.98]"
-              >
-                Cobrar mesa
-              </button>
-            )}
-          </div>
-        );
-      })()}
+      <ModalDetalleMesa
+        mesa={mesaDetalle}
+        onCerrar={() => setMesaDetalleNum(null)}
+        onCobrar={(m) => { setMesaDetalleNum(null); abrirCobroMesa(m); }}
+        esCobrable={mesaDetalle ? mesaCobrable(mesaDetalle) : false}
+        enPreparacion={mesaDetalle ? mesaEnPreparacion(mesaDetalle) : false}
+        cantPlatosEnPreparacion={mesaDetalle ? platosEnPreparacion(mesaDetalle) : 0}
+        cantPlatosSinServir={mesaDetalle ? platosSinServir(mesaDetalle) : 0}
+      />
 
       {/* MODAL: DETALLE DE PEDIDO PARA LLEVAR / DELIVERY */}
-      {pedidoDetalle && (() => {
-        const p = pedidoDetalle;
-        const o = origenPedido(p.codigoPedidosYa, p);
-        const listo = esPedidoListo(p);
-        const items = (p.items || []).filter(Boolean);
-        return modalDetalle(
-          () => setPedidoDetalleId(null),
-          <>
-            <p className="text-xs font-medium text-slate-400 flex items-center gap-1.5"><o.Icon className="w-3.5 h-3.5" /> {o.etiqueta}</p>
-            <p className="text-lg font-semibold text-slate-900 break-words">{o.nombre}</p>
-            <p className="text-sm text-slate-500">{p.cajero} · {p.hora}</p>
-            <div className="mt-2">{estadoChip(listo, 'Listo para entregar', 'En cocina')}</div>
-          </>,
-          <>
-            {o.info && (
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                {o.info.telefono && <div><dt className="text-xs text-slate-400 flex items-center gap-1"><Phone className="w-3 h-3" /> Teléfono</dt><dd className="text-slate-800">{o.info.telefono}</dd></div>}
-                {o.info.direccion && <div className="sm:col-span-2"><dt className="text-xs text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> Dirección</dt><dd className="text-slate-800 break-words">{o.info.direccion}</dd></div>}
-                {o.info.conCuanto && <div><dt className="text-xs text-slate-400">Paga con</dt><dd className="font-mono text-slate-800">{o.info.conCuanto}</dd></div>}
-                {o.info.vuelto && <div><dt className="text-xs text-slate-400">Vuelto</dt><dd className="font-mono text-slate-800">{o.info.vuelto}</dd></div>}
-              </dl>
-            )}
-            <div>
-              <p className="text-xs font-medium text-slate-400 mb-2">Productos ({items.length})</p>
-              {items.length > 0 ? (
-                <ul className="divide-y divide-slate-100">
-                  {items.map((i, idx) => (
-                    <li key={idx} className="flex items-start justify-between gap-3 py-2 text-sm">
-                      <span className="min-w-0 text-slate-700"><span className="font-mono text-slate-400 mr-2">{i.cant}×</span>{i.nombre}</span>
-                      {i.precio != null && <span className="font-mono tabular-nums text-slate-600 shrink-0">{soles(i.cant * i.precio)}</span>}
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="text-sm text-slate-400">Sin detalle de productos</p>}
-            </div>
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-              <span className="text-sm text-slate-500">Total</span>
-              <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">{soles(p.total)}</span>
-            </div>
-          </>,
-          <div className="grid grid-cols-2 sm:flex sm:justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setPedidoDetalleId(null);
-                setPedidoACancelarLlevar(p);
-                setPinCancelLlevar('');
-                setErrorCancelLlevar('');
-                setCancelLlevarModalOpen(true);
-              }}
-              className="h-10 px-4 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors inline-flex items-center justify-center gap-1.5"
-            >
-              <Trash2 className="w-4 h-4" /> Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => { setPedidoDetalleId(null); iniciarModificarDelivery(p); }}
-              className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors inline-flex items-center justify-center gap-1.5"
-            >
-              <Pencil className="w-4 h-4" /> Modificar
-            </button>
-            {listo && (
-              <button
-                type="button"
-                onClick={() => { setPedidoDetalleId(null); confirmarEntregaDelivery(p.pedidoId, p.codigoPedidosYa); }}
-                className="col-span-2 h-10 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors inline-flex items-center justify-center gap-1.5"
-              >
-                <PackageCheck className="w-4 h-4" /> Confirmar entrega
-              </button>
-            )}
-          </div>
-        );
-      })()}
+      <ModalDetallePedidoLlevar
+        pedido={pedidoDetalle}
+        onCerrar={() => setPedidoDetalleId(null)}
+        origen={pedidoDetalle ? origenPedido(pedidoDetalle.codigoPedidosYa, pedidoDetalle) : {}}
+        listo={pedidoDetalle ? esPedidoListo(pedidoDetalle) : false}
+        onCancelar={(p) => {
+          setPedidoDetalleId(null);
+          setPedidoACancelarLlevar(p);
+          setPinCancelLlevar('');
+          setErrorCancelLlevar('');
+          setCancelLlevarModalOpen(true);
+        }}
+        onModificar={(p) => {
+          setPedidoDetalleId(null);
+          iniciarModificarDelivery(p);
+        }}
+        onConfirmarEntrega={(pedidoId, codigoPY) => {
+          setPedidoDetalleId(null);
+          confirmarEntregaDelivery(pedidoId, codigoPY);
+        }}
+      />
 
       {/* MODAL: DETALLE DE VENTA */}
-      {ventaDetalle && (() => {
-        const v = ventaDetalle;
-        const est = estiloMetodo(v.metodoPago);
-        const items = itemsDeVenta(v);
-        const infoDelivery = parseDeliveryInfo(v.codigoPedidosYa) || parseDeliveryInfo(v.nombreCliente);
-        const ofertaLimpia = v.ofertaDescripcion ? v.ofertaDescripcion.replace(/\[CREDITO_SPLIT:.*?\]/g, '').trim() : '';
-        return modalDetalle(
-          () => setVentaDetalleId(null),
-          <>
-            <p className="text-xs font-medium text-slate-400 font-mono">#VT-{v.id} · {v.hora}</p>
-            <p className="text-lg font-semibold text-slate-900">
-              {v.tipoComprobante} {v.serie ? `${v.serie}-${String(v.numero).padStart(4, '0')}` : ''}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {v.anulado ? (
-                <span className="text-xs font-medium text-red-700 bg-red-50 rounded-md px-2 py-0.5">Devuelto</span>
-              ) : (
-                <span className={`inline-flex items-center gap-1 text-xs font-medium rounded-md px-2 py-0.5 ${est.chip}`}><est.Icon className="w-3 h-3" /> {v.metodoPago}</span>
-              )}
-              {!v.anulado && v.metodoPago === 'Cortesía' && <span className="text-xs font-medium text-orange-700 bg-orange-50 rounded-md px-2 py-0.5">Cortesía total</span>}
-              {!v.anulado && v.metodoPago !== 'Cortesía' && v.itemsResumen?.includes('CORTESÍA') && <span className="text-xs font-medium text-orange-700 bg-orange-50 rounded-md px-2 py-0.5">Con cortesía</span>}
-            </div>
-          </>,
-          <>
-            {v.anulado && (
-              <div className="rounded-xl bg-red-50 border border-red-100 px-3.5 py-3 text-sm text-red-700">
-                <p className="font-medium">Venta devuelta</p>
-                {v.motivoAnulacion && <p className="text-red-600/90">Motivo: {v.motivoAnulacion} ({v.anuladoPor || 'Admin'})</p>}
-              </div>
-            )}
-
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
-              <div className="min-w-0">
-                <dt className="text-xs text-slate-400">Cliente</dt>
-                <dd className="text-slate-800 break-words">{clienteDeVenta(v)}</dd>
-                {v.numDocumento && !v.numDocumento.startsWith('DELIVERY -') && <dd className="text-xs font-mono text-slate-500">{v.numDocumento}</dd>}
-              </div>
-              <div className="min-w-0">
-                <dt className="text-xs text-slate-400">Cobrado por</dt>
-                <dd className="text-slate-800">{v.cajeroNombre || 'Cajero Principal'}</dd>
-                {v.mesero && <dd className="text-xs text-slate-500">Mesero: {v.mesero}</dd>}
-              </div>
-              {v.codigoPago && (
-                <div className="min-w-0">
-                  <dt className="text-xs text-slate-400">Código de pago</dt>
-                  <dd className="font-mono text-slate-800 break-all">{v.codigoPago}</dd>
-                </div>
-              )}
-              <div className="min-w-0">
-                <dt className="text-xs text-slate-400">Origen</dt>
-                <dd className="flex items-center gap-1 text-slate-800">
-                  <span className="truncate">{v.codigoPedidosYa && !v.codigoPedidosYa.startsWith('DELIVERY -') && !v.codigoPedidosYa.startsWith('LLEVAR -') ? `PedidosYa · ${v.codigoPedidosYa}` : origenDeVenta(v)}</span>
-                  {v.codigoPedidosYa && iconoEditar(() => abrirCambioTipoEntregaModal(v), 'Corregir tipo de entrega (requiere PIN Administrador)')}
-                </dd>
-              </div>
-              {!v.anulado && (
-                <div className="min-w-0">
-                  <dt className="text-xs text-slate-400">Método de pago</dt>
-                  <dd className="flex items-center gap-1 text-slate-800">
-                    <span className={est.text}>{v.metodoPago}</span>
-                    {iconoEditar(() => {
-                      setVentaACambiar(v);
-                      setCambioNuevoMetodo(v.metodoPago);
-                      setCambioPin('');
-                      setCambioError('');
-                      setCambioMetodoModal(true);
-                    }, 'Corregir método de pago (requiere PIN Administrador)')}
-                  </dd>
-                  {v.metodoPago === 'Mixto' && (
-                    <dd className="mt-1 text-xs font-mono text-slate-500 space-y-0.5">
-                      {(v.montoEfectivo || 0) > 0 && <p>Efectivo {soles(v.montoEfectivo)}</p>}
-                      {(v.montoTarjeta || 0) > 0 && <p>Tarjeta {soles(v.montoTarjeta)}</p>}
-                      {(v.montoYape || 0) > 0 && <p>Yape {soles(v.montoYape)}</p>}
-                      {(v.montoCredito || 0) > 0 && <p>Crédito {soles(v.montoCredito)}</p>}
-                    </dd>
-                  )}
-                </div>
-              )}
-              {infoDelivery?.telefono && (
-                <div className="min-w-0">
-                  <dt className="text-xs text-slate-400 flex items-center gap-1"><Phone className="w-3 h-3" /> Teléfono</dt>
-                  <dd className="text-slate-800">{infoDelivery.telefono}</dd>
-                </div>
-              )}
-              {infoDelivery?.direccion && (
-                <div className="min-w-0 sm:col-span-2">
-                  <dt className="text-xs text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> Dirección</dt>
-                  <dd className="text-slate-800 break-words">{infoDelivery.direccion}</dd>
-                </div>
-              )}
-            </dl>
-
-            <div>
-              <p className="text-xs font-medium text-slate-400 mb-2">Productos ({items.length})</p>
-              {items.length > 0 ? (
-                <ul className="divide-y divide-slate-100">
-                  {items.map((i, idx) => (
-                    <li key={idx} className="flex items-start justify-between gap-3 py-2 text-sm">
-                      <span className="min-w-0 text-slate-700">{i.cant != null && <span className="font-mono text-slate-400 mr-2">{i.cant}×</span>}{i.nombre}</span>
-                      {i.subtotal != null && <span className="font-mono tabular-nums text-slate-600 shrink-0">{soles(i.subtotal)}</span>}
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="text-sm text-slate-400">Sin ítems</p>}
-              {ofertaLimpia && <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5">🏷️ {ofertaLimpia}</p>}
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 space-y-1 text-sm">
-              {!v.anulado && v.descuentoAplicado > 0 && (
-                <>
-                  <div className="flex justify-between text-slate-500"><span>Subtotal</span><span className="font-mono tabular-nums">{soles(parseFloat(v.total || 0) + parseFloat(v.descuentoAplicado || 0))}</span></div>
-                  <div className="flex justify-between text-blue-600"><span>Descuento</span><span className="font-mono tabular-nums">−{soles(v.descuentoAplicado)}</span></div>
-                </>
-              )}
-              <div className="flex items-baseline justify-between">
-                <span className="text-slate-500">Total</span>
-                {v.anulado ? (
-                  <span className="text-right">
-                    <span className="block text-xl font-semibold font-mono tabular-nums text-red-600">S/ 0.00</span>
-                    <span className="block text-xs font-mono line-through text-slate-400">{soles(v.montoOriginal ?? v.total)}</span>
-                  </span>
-                ) : (
-                  <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">{soles(v.total)}</span>
-                )}
-              </div>
-            </div>
-
-            {!v.anulado && (
-              <a
-                href="https://ww1.sunat.gob.pe/ol-ti-itfesimpopciones/FESimpSunat.htm"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50/60 hover:bg-blue-100/60 px-3.5 py-2.5 text-sm font-medium text-blue-900 transition-colors shadow-sm"
-                title="Abrir portal oficial de SUNAT para emitir comprobante electrónico"
-              >
-                <span className="flex items-center gap-2">
-                  <ExternalLink className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span>Emitir boleta / factura en SUNAT (Portal SOL)</span>
-                </span>
-                <span className="text-xs font-semibold text-blue-600 bg-white px-2 py-0.5 rounded border border-blue-200 shrink-0">sunat.gob.pe ↗</span>
-              </a>
-            )}
-          </>,
-          !v.anulado && (
-            <div className="grid grid-cols-3 sm:flex sm:justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => abrirAnularVentaModal(v)}
-                className="h-10 px-3 sm:px-4 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors inline-flex items-center justify-center gap-1.5"
-                title="Registrar devolución (requiere PIN Administrador)"
-              >
-                <Ban className="w-4 h-4" /> <span className="truncate">Devolución</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => enviarPorWhatsApp(v)}
-                className="h-10 px-3 sm:px-4 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors inline-flex items-center justify-center gap-1.5"
-              >
-                <svg className="w-4 h-4 fill-current text-emerald-600 shrink-0" viewBox="0 0 24 24">
-                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.003 5.324 5.328 0 11.859 0c3.161.001 6.136 1.23 8.375 3.466 2.238 2.237 3.467 5.21 3.466 8.373-.003 6.535-5.328 11.86-11.859 11.86-2.007-.001-3.98-.51-5.753-1.48L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.725 1.45 5.269 0 9.557-4.287 9.559-9.556.001-2.553-.99-4.955-2.792-6.758-1.802-1.802-4.199-2.793-6.753-2.794-5.27 0-9.559 4.287-9.56 9.559-.001 1.625.434 3.208 1.262 4.622L1.51 21.054l4.137-1.9zm12.135-6.843c-.268-.134-1.583-.78-1.828-.87-.247-.09-.427-.134-.607.134-.18.267-.697.87-.852 1.047-.156.178-.311.201-.579.067-.268-.134-1.132-.418-2.156-1.332-.796-.71-1.335-1.586-1.492-1.853-.156-.268-.017-.413.117-.547.12-.12.268-.312.401-.468.134-.156.179-.268.268-.446.09-.178.045-.335-.022-.469-.067-.134-.607-1.462-.832-2.002-.22-.53-.442-.457-.607-.466-.156-.008-.337-.008-.518-.008-.18 0-.473.067-.72.337-.247.268-.943.922-.943 2.248s.965 2.604 1.1 2.784c.134.18 1.9 2.901 4.6 4.068.643.277 1.143.443 1.534.568.646.205 1.233.176 1.697.107.518-.077 1.583-.647 1.807-1.272.223-.624.223-1.159.156-1.272-.069-.112-.249-.18-.517-.313z" />
-                </svg>
-                <span className="truncate">WhatsApp</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => reimprimirComprobante(v)}
-                className="h-10 px-3 sm:px-5 rounded-xl bg-slate-900 hover:bg-slate-700 text-white text-sm font-semibold transition-colors inline-flex items-center justify-center gap-1.5"
-              >
-                <Printer className="w-4 h-4" /> <span className="truncate">Reimprimir</span>
-              </button>
-            </div>
-          )
-        );
-      })()}
+      <ModalDetalleVenta
+        venta={ventaDetalle}
+        onCerrar={() => setVentaDetalleId(null)}
+        onAbrirAnulacion={(v) => abrirAnularVentaModal(v)}
+        onEnviarWhatsApp={(v) => enviarPorWhatsApp(v)}
+        onReimprimir={(v) => reimprimirComprobante(v)}
+        onEditarMetodoPago={(v) => {
+          setVentaACambiar(v);
+          setCambioNuevoMetodo(v.metodoPago);
+          setCambioPin('');
+          setCambioError('');
+          setCambioMetodoModal(true);
+        }}
+        onEditarTipoEntrega={(v) => abrirCambioTipoEntregaModal(v)}
+        estiloMetodo={estiloMetodo}
+        itemsDeVenta={itemsDeVenta}
+        clienteDeVenta={clienteDeVenta}
+        origenDeVenta={origenDeVenta}
+        parseDeliveryInfo={parseDeliveryInfo}
+      />
 
       {/* MODAL DE COBRO (MESAS) */}
       {modalOpen && mesaSeleccionada && (() => {
