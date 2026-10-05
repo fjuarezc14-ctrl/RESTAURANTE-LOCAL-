@@ -1,0 +1,219 @@
+// Caja: apertura, movimientos, arqueo en vivo, cierre y anulación de ventas
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  PIN_ADMIN, PIN_CAJERO, abrirCaja, api, cobrar, crearBase, crearCliente, item, limpiarBD, mesaListaParaCobrar, prisma,
+} from './helpers.mjs';
+
+let carta;
+const pedidoDeMesa = (mesa = 1) => mesaListaParaCobrar(mesa, [item(carta.lomo, 2), item(carta.gaseosa, 1)]); // S/ 54.50
+const estado = async () => (await api().get('/api/caja/estado')).body;
+const movimiento = (datos) => api().post('/api/caja/movimientos').send({ cajeroNombre: 'Carla Caja', ...datos });
+const anular = (ventaId, pin = PIN_ADMIN) => api().patch(`/api/ventas/${ventaId}/anular`).send({ pin, motivo: 'Cliente devolvió' });
+
+beforeEach(async () => {
+  await limpiarBD();
+  carta = await crearBase();
+});
+
+describe('apertura', () => {
+  it('abre la caja con el fondo inicial', async () => {
+    const turno = await abrirCaja(150);
+    expect(turno).toMatchObject({ estado: 'ABIERTO', montoInicial: 150, cajeroNombre: 'Carla Caja' });
+    expect((await estado()).abierto).toBe(true);
+  });
+
+  it('exige el nombre del cajero', async () => {
+    const res = await api().post('/api/caja/apertura').send({ montoInicial: 100 });
+    expect(res.status).toBe(400);
+  });
+
+  it('no permite dos cajas abiertas a la vez', async () => {
+    await abrirCaja();
+    const res = await api().post('/api/caja/apertura').send({ cajeroNombre: 'Otro', montoInicial: 50 });
+    expect(res.status).toBe(400);
+    expect(await prisma.cierreCaja.count()).toBe(1);
+  });
+
+  it('un fondo negativo se guarda como 0', async () => {
+    expect((await abrirCaja(-20)).montoInicial).toBe(0);
+  });
+});
+
+describe('movimientos', () => {
+  it('no registra movimientos con la caja cerrada', async () => {
+    expect((await movimiento({ monto: 10, motivo: 'Gas' })).status).toBe(400);
+  });
+
+  it.each([
+    ['monto 0', { monto: 0, motivo: 'Gas' }],
+    ['monto negativo', { monto: -5, motivo: 'Gas' }],
+    ['sin motivo', { monto: 10, motivo: '  ' }],
+  ])('rechaza %s', async (_caso, datos) => {
+    await abrirCaja();
+    expect((await movimiento(datos)).status).toBe(400);
+    expect(await prisma.movimientoCaja.count()).toBe(0);
+  });
+
+  it('un tipo desconocido se guarda como retiro', async () => {
+    await abrirCaja();
+    const res = await movimiento({ monto: 10, motivo: 'Gas', tipo: 'OTRO' });
+    expect(res.body.movimiento).toMatchObject({ tipo: 'RETIRO', monto: 10 });
+  });
+});
+
+describe('arqueo en vivo', () => {
+  it('suma ventas, abonos e ingresos y resta retiros para el efectivo esperado', async () => {
+    await abrirCaja(100);
+    await cobrar(await pedidoDeMesa(1)); // efectivo 54.50
+    await cobrar(await pedidoDeMesa(2), { metodoPago: 'Tarjeta' }); // tarjeta 54.50
+    const cliente = await crearCliente('Juan');
+    await cobrar(await pedidoDeMesa(3), { metodoPago: 'Crédito', clienteCreditoId: cliente.id }); // crédito 54.50
+    await api().post(`/api/clientes/${cliente.id}/abonar`).send({ monto: 10, metodoPago: 'Efectivo' });
+    await api().post(`/api/clientes/${cliente.id}/abonar`).send({ monto: 5, metodoPago: 'Yape' });
+    await movimiento({ monto: 5, motivo: 'Sencillo', tipo: 'INGRESO' });
+    await movimiento({ monto: 20, motivo: 'Compra de hielo' });
+
+    const { resumenEnVivo } = await estado();
+    expect(resumenEnVivo).toMatchObject({
+      montoInicial: 100,
+      ventasEfectivo: 54.5,
+      ventasTarjeta: 54.5,
+      ventasYape: 5, // incluye el abono por Yape
+      totalVentas: 163.5,
+      cantidadVentas: 3,
+      abonosEfectivo: 10,
+      ingresosExtra: 5,
+      retirosCaja: 20,
+      efectivoEsperadoEnGaveta: 149.5, // 100 + 54.50 + 10 + 5 - 20
+    });
+  });
+
+  it('la parte en efectivo de un pago mixto entra al efectivo esperado', async () => {
+    await abrirCaja(0);
+    await cobrar(await pedidoDeMesa(), { metodoPago: 'Mixto', montoEfectivo: 30, montoTarjeta: 24.5 });
+    const { resumenEnVivo } = await estado();
+    expect(resumenEnVivo).toMatchObject({ ventasEfectivo: 30, ventasTarjeta: 24.5, efectivoEsperadoEnGaveta: 30 });
+  });
+});
+
+describe('cierre', () => {
+  it('cierra el turno con la diferencia entre lo contado y lo esperado', async () => {
+    await abrirCaja(100);
+    const res = await api().post('/api/caja/cierre').send({
+      cajeroNombre: 'Carla Caja', efectivoEsperado: 149.5, efectivoContado: 150, efectivoVentas: 54.5,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.cierre).toMatchObject({ estado: 'CERRADO', efectivoEsperado: 149.5, efectivoContado: 150, diferencia: 0.5 });
+    expect((await estado()).abierto).toBe(false);
+  });
+
+  it('una diferencia negativa (faltante) se guarda negativa', async () => {
+    await abrirCaja(100);
+    const res = await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoEsperado: 100, efectivoContado: 87.3 });
+    expect(res.body.cierre.diferencia).toBe(-12.7);
+  });
+
+  // Hoy el servidor guarda el esperado que calcula la pantalla. Cuando se calcule en el servidor (§5 del plan),
+  // esta prueba debe cambiar para exigir el valor del arqueo en vivo.
+  it('hoy guarda el efectivo esperado que envía la pantalla', async () => {
+    await abrirCaja(100);
+    const res = await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoEsperado: 999, efectivoContado: 100 });
+    expect(res.body.cierre).toMatchObject({ efectivoEsperado: 999, diferencia: -899 });
+  });
+
+  it('rechaza montos negativos', async () => {
+    await abrirCaja();
+    const res = await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoContado: -1 });
+    expect(res.status).toBe(400);
+    expect((await estado()).abierto).toBe(true);
+  });
+
+  it('no cierra si no hay caja abierta', async () => {
+    const res = await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoContado: 0 });
+    expect(res.status).toBe(400);
+  });
+
+  it('después del cierre no se puede cobrar', async () => {
+    await abrirCaja();
+    const pedidoId = await pedidoDeMesa();
+    await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoContado: 100, efectivoEsperado: 100 });
+    expect((await cobrar(pedidoId)).body.cajaCerrada).toBe(true);
+  });
+
+  it('cierre forzado: solo con el PIN de un administrador', async () => {
+    await abrirCaja();
+    const conCajero = await api().post('/api/caja/cierre-forzado').send({ adminPin: PIN_CAJERO });
+    expect(conCajero.status).toBe(403);
+
+    const conAdmin = await api().post('/api/caja/cierre-forzado').send({ adminPin: PIN_ADMIN, motivo: 'Fin de día' });
+    expect(conAdmin.status).toBe(200);
+    expect(conAdmin.body.cierre).toMatchObject({ estado: 'CERRADO', cerradoPorAdmin: true });
+  });
+});
+
+describe('anulación de ventas', () => {
+  it('solo el administrador puede anular', async () => {
+    await abrirCaja();
+    const { body } = await cobrar(await pedidoDeMesa());
+    expect((await anular(body.ventaId, '9999')).status).toBe(401);
+    expect((await anular(body.ventaId, PIN_CAJERO)).status).toBe(403);
+    expect((await prisma.venta.findUnique({ where: { id: body.ventaId } })).anulado).toBe(false);
+  });
+
+  it('deja la venta en 0, guarda el monto original y la saca del arqueo', async () => {
+    await abrirCaja(100);
+    const pedidoId = await pedidoDeMesa();
+    const { body } = await cobrar(pedidoId);
+    const res = await anular(body.ventaId);
+    expect(res.status).toBe(200);
+
+    const venta = await prisma.venta.findUnique({ where: { id: body.ventaId } });
+    expect(venta).toMatchObject({ anulado: true, total: 0, montoEfectivo: 0, montoOriginal: 54.5, anuladoPor: 'Admin' });
+    expect((await prisma.pedido.findUnique({ where: { id: pedidoId } })).estado).toBe('Cancelado');
+    expect((await estado()).resumenEnVivo).toMatchObject({ totalVentas: 0, ventasEfectivo: 0, efectivoEsperadoEnGaveta: 100 });
+  });
+
+  it('no anula dos veces', async () => {
+    await abrirCaja();
+    const { body } = await cobrar(await pedidoDeMesa());
+    await anular(body.ventaId);
+    expect((await anular(body.ventaId)).status).toBe(400);
+  });
+
+  it('devuelve el stock de los productos limitados', async () => {
+    await abrirCaja();
+    const pedidoId = await mesaListaParaCobrar(1, [item(carta.postre, 2)]);
+    expect((await prisma.producto.findUnique({ where: { id: carta.postre.id } })).stock).toBe(3);
+    const { body } = await cobrar(pedidoId);
+    await anular(body.ventaId);
+    expect((await prisma.producto.findUnique({ where: { id: carta.postre.id } })).stock).toBe(5);
+  });
+
+  it('anular una venta en efectivo de un turno anterior registra el retiro en el turno actual', async () => {
+    await abrirCaja(100);
+    const { body } = await cobrar(await pedidoDeMesa());
+    await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoEsperado: 154.5, efectivoContado: 154.5 });
+    const turnoNuevo = await abrirCaja(100);
+
+    await anular(body.ventaId);
+    const retiro = await prisma.movimientoCaja.findFirst({ where: { turnoId: turnoNuevo.id } });
+    expect(retiro).toMatchObject({ tipo: 'RETIRO', monto: 54.5 });
+    expect((await estado()).resumenEnVivo.efectivoEsperadoEnGaveta).toBe(45.5);
+  });
+});
+
+describe('stock', () => {
+  it('no envía un pedido si no alcanza el stock y no descuenta nada', async () => {
+    const res = await api().post('/api/mesas/1/pedido').send({ mesero: 'Mozo', items: [item(carta.postre, 6)] });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(await prisma.pedido.count()).toBe(0);
+    expect((await prisma.producto.findUnique({ where: { id: carta.postre.id } })).stock).toBe(5);
+  });
+
+  it('dos pedidos simultáneos por el último stock: solo uno se lleva las unidades', async () => {
+    const pedir = (mesa) => api().post(`/api/mesas/${mesa}/pedido`).send({ mesero: 'Mozo', items: [item(carta.postre, 3)] });
+    const respuestas = await Promise.all([pedir(1), pedir(2)]);
+    expect(respuestas.filter((r) => r.status === 200)).toHaveLength(1);
+    expect((await prisma.producto.findUnique({ where: { id: carta.postre.id } })).stock).toBe(2);
+  });
+});
