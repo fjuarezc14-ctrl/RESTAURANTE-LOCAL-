@@ -236,14 +236,22 @@ export default function SalonPage({ currentUser }) {
   const [selections, setSelections] = useState({});
   const [additionalNotes, setAdditionalNotes] = useState('');
 
-  // Cargar mesas desde el API real
+  const isFetchingMesasRef = useRef(false);
+
+  // Cargar mesas desde el API real con semáforo contra ráfagas concurrentes
   const fetchMesas = useCallback(async () => {
+    if (isFetchingMesasRef.current) return;
+    isFetchingMesasRef.current = true;
     try {
       const data = await api.getMesas();
       setMesas(data);
     } catch (err) {
-      console.error('Error cargando mesas:', err);
+      // Si fue abort o timeout, evitar llenar la consola en bucle si ya es un sondeo recurrente
+      if (err?.codigo !== 'TIEMPO_AGOTADO') {
+        console.error('Error cargando mesas:', err);
+      }
     } finally {
+      isFetchingMesasRef.current = false;
       setLoading(false);
     }
   }, []);
@@ -287,23 +295,23 @@ export default function SalonPage({ currentUser }) {
     }
   }, [currentUser]);
 
+  // Carga inicial al montar salón
   useEffect(() => {
     fetchMesas();
     fetchProductos();
     fetchUsuarios();
-    // Sincronización en tiempo real cada 3 segundos (sincroniza mesas y productos para ofertas en vivo)
+  }, [fetchMesas, fetchProductos, fetchUsuarios]);
+
+  // Sondeo en tiempo real de mesas (solo cuando la pestaña está activa para ahorrar red y evitar saturación)
+  useEffect(() => {
     const interval = setInterval(() => {
-      fetchProductos(); // <-- Traer productos para actualizar ofertas en tiempo real
-      if (!modalOpen) {
-        fetchMesas();
-        fetchUsuarios();
-      } else {
-        // Si el modal está abierto, seguimos actualizando las mesas en segundo plano
-        fetchMesas();
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
       }
-    }, 3000);
+      fetchMesas();
+    }, 5000);
     return () => clearInterval(interval);
-  }, [fetchMesas, fetchProductos, fetchUsuarios, modalOpen]);
+  }, [fetchMesas]);
 
   const handleUnirMesa = async (numToJoin) => {
     try {
@@ -778,23 +786,31 @@ export default function SalonPage({ currentUser }) {
   }, [modalOpen, mesaActual?.pedidoData?.pedidoCreadoEn]);
 
   const handleCancelarPedido = async () => {
-    if (!cancelMotivo.trim()) { aviso.advertencia('Por favor escribe un motivo para la cancelación.'); return; }
+    if (!cancelMotivo.trim()) { aviso.advertencia('Por favor escribe o selecciona un motivo para la cancelación.'); return; }
     setCancelandoPedido(true);
+    const mesaNum = mesaActual?.num;
+    const pedidoId = mesaActual?.pedidoData?.pedidoId;
+    const isForce = esReclamo || mesaActual?.estado === 'Servido';
+    const motivoFinal = cancelMotivo.trim();
+    const canceladoPor = supervisorAprobador ? `${supervisorAprobador.nombre} (${supervisorAprobador.rol}) | Mozo: ${meseroGlobal}` : meseroGlobal;
+
+    // ⚡ Actualización optimista inmediata en la interfaz:
+    // La mesa se muestra libre y los modales se cierran al instante sin colgar la UI del mozo
+    setMesas(prev => prev.map(m => m.num === mesaNum ? { ...m, estado: 'Libre', pedidoData: null } : m));
+    setCancelModal(false);
+    setEsReclamo(false);
+    setModalOpen(false);
+    setMesaActual(null);
+    setCancelMotivo('');
+
     try {
-      const pedidoId = mesaActual.pedidoData.pedidoId;
-      const isForce = esReclamo || mesaActual.estado === 'Servido';
       const result = await api.cancelarPedido(pedidoId, {
-        canceladoPor: supervisorAprobador ? `${supervisorAprobador.nombre} (${supervisorAprobador.rol}) | Mozo: ${meseroGlobal}` : meseroGlobal,
-        motivo: cancelMotivo.trim(),
+        canceladoPor,
+        motivo: motivoFinal,
         force: isForce,
       });
       if (result.error) throw new Error(result.error);
-      setCancelModal(false);
-      setEsReclamo(false);
-      setModalOpen(false);
-      const mesaNum = mesaActual.num;
-      setMesaActual(null);
-      setCancelMotivo('');
+      
       await fetchMesas();
       
       if (result.mesaLiberada) {
@@ -804,6 +820,7 @@ export default function SalonPage({ currentUser }) {
       }
     } catch (err) {
       aviso.error('Error al cancelar: ' + err.message);
+      fetchMesas(); // Revertir a la realidad de la BD si ocurrió error
     } finally {
       setCancelandoPedido(false);
     }
@@ -811,26 +828,31 @@ export default function SalonPage({ currentUser }) {
 
   const handleCancelarItem = async (item, supervisor) => {
     const motivo = await pedirDato({
-      titulo: 'Cancelar Ítem',
-      mensaje: `Escribe el motivo de cancelación para ${item.nombre}:`,
+      titulo: 'Cancelar Ítem de Comanda',
+      mensaje: `Motivo de anulación para "${item.nombre}":`,
+      valorInicial: 'Error de digitación / plato equivocado',
       placeholder: 'Ej. Error de comanda, cliente desistió...',
       validar: (v) => v.trim() ? null : 'El motivo es obligatorio'
     });
     if (!motivo) return;
 
-    const cantStr = await pedirDato({
-      titulo: 'Cantidad a Cancelar',
-      mensaje: `Cantidad a cancelar (Máximo ${item.cant}):`,
-      valorInicial: item.cant.toString(),
-      validar: (v) => {
-        const n = parseInt(v, 10);
-        return (!isNaN(n) && n > 0 && n <= item.cant) ? null : `Ingresa entre 1 y ${item.cant}`;
-      }
-    });
-    if (!cantStr) return;
-    const cant = parseInt(cantStr, 10);
+    let cant = item.cant;
+    if (item.cant > 1) {
+      const cantStr = await pedirDato({
+        titulo: 'Cantidad a Cancelar',
+        mensaje: `Cantidad a cancelar de "${item.nombre}" (Máximo ${item.cant}):`,
+        valorInicial: item.cant.toString(),
+        validar: (v) => {
+          const n = parseInt(v, 10);
+          return (!isNaN(n) && n > 0 && n <= item.cant) ? null : `Ingresa entre 1 y ${item.cant}`;
+        }
+      });
+      if (!cantStr) return;
+      cant = parseInt(cantStr, 10);
+    }
 
-    const isForce = mesaActual.estado === 'Servido' || item.historial;
+    const isForce = mesaActual?.estado === 'Servido' || item.historial;
+    const canceladoPor = supervisor ? `${supervisor.nombre} (${supervisor.rol})` : meseroGlobal;
 
     try {
       const res = await api.cancelarItemPedido(item.pedidoId, {

@@ -35,16 +35,44 @@ export default function ModalCancelarPedido({
           </p>
         </div>
 
+        <div className="mb-4">
+          <label className="block text-slate-500 font-bold mb-2 text-[10px] tracking-widest uppercase">
+            Motivos frecuentes (1 toque):
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              'Error de digitación / plato equivocado',
+              'Cliente desistió / canceló',
+              'Demora en cocina',
+              'Mesa equivocada',
+              'Cambio de plato por cliente',
+            ].map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => onMotivoChange(m)}
+                className={`text-[11px] font-bold px-2.5 py-1.5 rounded-xl border transition-all active:scale-95 text-left ${
+                  motivo === m
+                    ? 'bg-red-600 text-white border-red-600 shadow-sm'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                }`}
+              >
+                ⚡ {m}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="mb-5">
           <label className="block text-slate-500 font-bold mb-2 text-[10px] tracking-widest uppercase">
-            Motivo de cancelación (obligatorio):
+            O escribe un motivo personalizado:
           </label>
           <textarea
-            rows={3}
+            rows={2}
             value={motivo}
             onChange={(e) => onMotivoChange(e.target.value)}
-            placeholder="Ej: Cliente cambió de opinión, se equivocó de mesa..."
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-400 resize-none font-medium text-slate-800"
+            placeholder="Escribe el motivo o selecciona uno de los botones arriba..."
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs md:text-sm focus:outline-none focus:border-red-400 resize-none font-medium text-slate-800"
           />
         </div>
 
