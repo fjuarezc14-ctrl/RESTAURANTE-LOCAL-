@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Edit3, Link2, User, X, Utensils, Receipt, Search, List, LayoutGrid, Flame, 
-  Tag, Plus, Minus, PlusCircle, ChevronRight, ShoppingBag, Trash, AlertTriangle, 
+  Tag, Plus, Minus, PlusCircle, ChevronRight, ShoppingBag, Trash, Trash2, AlertTriangle, 
   Lock, ChefHat 
 } from 'lucide-react';
 
@@ -69,19 +69,59 @@ export default function ModalPedidoMesa({
               <p className="text-[10px] md:text-xs text-slate-400">Punto de Venta</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
+            {mesa?.pedidoData && (
+              mesa.estado === 'Cocina' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const algunItemPreparado = ticketActual.some(i => i.yaEnviado && i.historial && i.pedidoId === mesa.pedidoData?.pedidoId);
+                    if (algunItemPreparado) {
+                      aviso.advertencia("No puedes cancelar normalmente porque algunos platos ya han sido preparados. Usa 'Anulación Especial (Reclamo)'.");
+                      return;
+                    }
+                    setSupervisorAprobador(null);
+                    setEsReclamo(false);
+                    setCancelModal(true);
+                  }}
+                  className="flex items-center gap-1 bg-red-600/90 hover:bg-red-600 active:scale-95 text-white font-black text-[10px] md:text-xs px-2.5 md:px-3 py-1.5 md:py-2 rounded-xl shadow transition-all uppercase tracking-wider cursor-pointer"
+                  title="Anular pedido de la mesa"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Anular Pedido</span>
+                  <span className="sm:hidden">Anular</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    requestSupervisorAuth("Autorizar Anulación Especial / Reclamo", (supervisor) => {
+                      setSupervisorAprobador(supervisor);
+                      setEsReclamo(true);
+                      setCancelModal(true);
+                    });
+                  }}
+                  className="flex items-center gap-1 bg-rose-950/80 border border-rose-500/50 hover:bg-rose-900 active:scale-95 text-rose-200 font-black text-[10px] md:text-xs px-2.5 md:px-3 py-1.5 md:py-2 rounded-xl shadow transition-all uppercase tracking-wider cursor-pointer"
+                  title="Anulación especial (Reclamo)"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Reclamo</span>
+                  <span className="sm:hidden">Reclamo</span>
+                </button>
+              )
+            )}
             <button 
               onClick={onAbrirUnion}
-              className="flex items-center gap-1.5 bg-cyan-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black text-[10px] md:text-xs px-3 py-2 rounded-xl shadow-md transition-all uppercase tracking-wider"
+              className="flex items-center gap-1.5 bg-cyan-500 hover:bg-cyan-400 active:scale-95 text-slate-950 font-black text-[10px] md:text-xs px-2.5 md:px-3 py-1.5 md:py-2 rounded-xl shadow-md transition-all uppercase tracking-wider cursor-pointer"
             >
               <Link2 className="w-3.5 h-3.5" />
-              Unir Mesa
+              <span className="hidden sm:inline">Unir Mesa</span>
             </button>
             <div className="hidden md:flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-slate-350 text-xs font-bold font-mono">
               <User className="w-3.5 h-3.5 text-cyan-500" />
               <span>MOZO: <strong className="text-white uppercase">{currentUser?.nombre || meseroGlobal}</strong></span>
             </div>
-            <button onClick={onCerrar} className="bg-slate-800 hover:bg-red-500 text-slate-300 hover:text-white p-2 md:p-2.5 rounded-xl transition-colors">
+            <button onClick={onCerrar} className="bg-slate-800 hover:bg-red-500 text-slate-300 hover:text-white p-2 md:p-2.5 rounded-xl transition-colors cursor-pointer">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -113,7 +153,7 @@ export default function ModalPedidoMesa({
 
         <div className="flex flex-col md:flex-row flex-1 min-h-0 bg-slate-50">
           {/* Panel Izquierdo: Carta y Productos */}
-          <div className={`w-full md:w-3/5 flex-col min-h-0 border-b md:border-b-0 md:border-r border-slate-200 ${mobileTab === 'menu' ? 'flex flex-1' : 'hidden md:flex'}`}>
+          <div className="w-full md:w-3/5 flex flex-col min-h-0 border-b md:border-b-0 md:border-r border-slate-200 flex-1 relative">
             <div className="p-3 bg-white border-b border-slate-100 flex flex-col gap-2.5 shrink-0 z-10 shadow-sm">
               {/* Buscador de platos y selector de vista */}
               <div className="flex items-center gap-2">
@@ -367,33 +407,75 @@ export default function ModalPedidoMesa({
               })}
             </div>
 
-            {/* Barra rápida de acceso a comanda en móvil */}
-            {ticketActual.length > 0 && (
-              <div className="md:hidden p-2.5 bg-slate-900 text-white flex items-center justify-between shrink-0 shadow-lg border-t border-slate-800">
-                <div className="flex items-center gap-2 pl-2">
-                  <Receipt className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs font-black">
-                    {ticketActual.reduce((acc, item) => acc + item.cant, 0)} ítem(s) · S/ {totalTicket.toFixed(2)}
-                  </span>
+            {/* Barra rápida inferior ergonómica en móvil (Bottom Bar persistente) */}
+            {(ticketActual.length > 0 || mesa?.pedidoData) && (
+              <div className="md:hidden p-3 bg-slate-900 text-white flex items-center justify-between shrink-0 shadow-2xl border-t border-slate-800 sticky bottom-0 z-20">
+                <div 
+                  className="flex items-center gap-2.5 pl-1 cursor-pointer select-none" 
+                  onClick={() => setMobileTab('ticket')}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-md">
+                    <Receipt className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-black text-white block leading-tight">
+                      {ticketActual.reduce((acc, item) => acc + item.cant, 0)} {ticketActual.reduce((acc, item) => acc + item.cant, 0) === 1 ? 'plato' : 'platos'} en comanda
+                    </span>
+                    <span className="text-xs font-mono text-amber-400 font-black">
+                      Total: S/ {totalTicket.toFixed(2)}
+                    </span>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setMobileTab('ticket')}
-                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase px-3.5 py-2 rounded-xl transition-all flex items-center gap-1 shadow active:scale-95"
+                  className="bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black text-xs uppercase px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 shadow-lg shadow-amber-500/25 cursor-pointer"
                 >
-                  Ver Comanda
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <span>Revisar Comanda</span>
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             )}
           </div>
 
-          {/* Panel Derecho: Comanda de la Mesa */}
-          <div className={`w-full md:w-2/5 bg-white flex-col min-h-0 ${mobileTab === 'ticket' ? 'flex flex-1' : 'hidden md:flex'}`}>
+          {/* Backdrop oscuro para Drawer móvil */}
+          {mobileTab === 'ticket' && (
+            <div 
+              onClick={() => setMobileTab('menu')}
+              className="md:hidden fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-30 transition-opacity animate-fade-in"
+            />
+          )}
+
+          {/* Panel Derecho: Comanda de la Mesa (Drawer deslizable táctil en móvil / Columna integrada en desktop) */}
+          <div className={`w-full md:w-2/5 bg-white flex flex-col min-h-0 md:static fixed inset-x-0 bottom-0 h-[88vh] md:h-auto z-40 rounded-t-3xl md:rounded-none shadow-2xl md:shadow-none border-t md:border-t-0 border-slate-200 transition-transform duration-300 ease-out ${
+            mobileTab === 'ticket' ? 'translate-y-0' : 'translate-y-full md:translate-y-0'
+          }`}>
+            {/* Tirador táctil solo en móvil */}
+            <div 
+              className="md:hidden pt-2.5 pb-1 bg-amber-50 rounded-t-3xl flex justify-center cursor-pointer select-none" 
+              onClick={() => setMobileTab('menu')}
+              title="Deslizar para volver a la carta"
+            >
+              <div className="w-12 h-1.5 bg-amber-300/80 rounded-full" />
+            </div>
+
             <div className="p-3 md:p-4 border-b border-slate-100 bg-amber-50 shrink-0 flex justify-between items-center">
-              <h3 className="font-black text-amber-800 uppercase text-xs flex items-center gap-2">
-                <Receipt className="w-4 h-4" /> Pedido Actual
-              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMobileTab('menu')}
+                  className="md:hidden text-xs font-black text-slate-800 bg-white hover:bg-slate-100 border border-slate-300 px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                  title="Seguir agregando platos"
+                >
+                  <Utensils className="w-3.5 h-3.5 text-amber-600" />
+                  <span>+ Agregar platos</span>
+                </button>
+                <h3 className="font-black text-amber-900 uppercase text-xs flex items-center gap-1.5">
+                  <Receipt className="w-4 h-4 text-amber-600" />
+                  <span className="hidden sm:inline">Pedido Actual</span>
+                  <span className="sm:hidden">Comanda</span>
+                </h3>
+              </div>
               <div className="flex items-center gap-1.5">
                 {mesa?.pedidoData?.estadoEnsalada === 'Pendiente' && (
                   <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded uppercase animate-pulse">🥗 Ens: Pend.</span>
@@ -506,9 +588,21 @@ export default function ModalPedidoMesa({
                             })()}
                           </div>
                           <div className="flex items-center gap-1 md:gap-2 bg-slate-100 rounded-lg p-1 shrink-0 border border-slate-200">
-                            <button onClick={() => alterarCantidad(idx, '-')} className="w-8 h-8 md:w-7 md:h-7 bg-white rounded-md shadow-sm text-slate-600 font-black text-lg leading-none">-</button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                let nuevos = [...ticketActual];
+                                nuevos.splice(idx, 1);
+                                setTicketActual(nuevos);
+                              }}
+                              className="w-8 h-8 md:w-7 md:h-7 bg-white hover:bg-red-50 text-red-500 rounded-md shadow-sm flex items-center justify-center transition-colors active:scale-95 cursor-pointer"
+                              title="Quitar este plato del pedido"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => alterarCantidad(idx, '-')} className="w-8 h-8 md:w-7 md:h-7 bg-white rounded-md shadow-sm text-slate-600 font-black text-lg leading-none active:scale-95 cursor-pointer">-</button>
                             <span className="font-bold text-slate-900 w-5 text-center text-sm">{item.cant}</span>
-                            <button onClick={() => alterarCantidad(idx, '+')} className="w-8 h-8 md:w-7 md:h-7 bg-white rounded-md shadow-sm text-slate-600 font-black text-lg leading-none">+</button>
+                            <button onClick={() => alterarCantidad(idx, '+')} className="w-8 h-8 md:w-7 md:h-7 bg-white rounded-md shadow-sm text-slate-600 font-black text-lg leading-none active:scale-95 cursor-pointer">+</button>
                           </div>
                         </div>
                         <input 
