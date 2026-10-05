@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ChefHat, CheckCircle, PlusCircle, Receipt, X, Edit3, ShoppingBag, User, AlertTriangle, Clock, Trash, Lock, Tag, Percent, Link2, Bell, Settings, Plus, Utensils, Save, Trash2, Search, Check, ChevronRight, Wifi, WifiOff, LayoutGrid, List, Sparkles, Flame, Minus } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Bell, Wifi, WifiOff, Receipt, ChefHat, CheckCircle, Link2 } from 'lucide-react';
 import { api } from '../api';
-import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
+import { parsePasosOpciones, pasoComplementos, tieneComplementos } from '../utils/combos';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 import { matchProductSemantic, relevanciaBusqueda, ordenarCategorias } from '../utils/busquedaProductos';
-import { useAviso, useConfirmar, usePedirDato } from '../components/ui';
+import { useAviso, useConfirmar } from '../components/ui';
 import {
   ModalCancelarPedido,
   ModalAutorizacionPin,
@@ -152,7 +152,6 @@ const getComboConfig = (nombre) => {
 export default function SalonPage({ currentUser }) {
   const aviso = useAviso();
   const confirmar = useConfirmar();
-  const pedirDato = usePedirDato();
   const [mesas, setMesas] = useState([]);
   const [productos, setProductos] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -1345,7 +1344,7 @@ export default function SalonPage({ currentUser }) {
           setSelectedProduct(null);
         }}
         onConfirmarItem={(item, notas, extras) => {
-          agregarItemDirecto(item, notas, extras);
+          agregarAlTicketDirecto(item, notas, extras);
           setOptionsModalOpen(false);
           setSelectedProduct(null);
         }}

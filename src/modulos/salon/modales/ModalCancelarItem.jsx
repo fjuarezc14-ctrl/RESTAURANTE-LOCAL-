@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Trash2, Plus, Minus, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Trash2, Plus, Minus, X } from 'lucide-react';
 
 const MOTIVOS_FRECUENTES = [
   'Error de digitación / plato equivocado',
