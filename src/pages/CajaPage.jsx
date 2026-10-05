@@ -24,6 +24,8 @@ import {
   ModalDetalleMesa,
   ModalDetallePedidoLlevar,
   ModalDetalleVenta,
+  ModalTodasCategorias,
+  ModalOpcionesProducto,
 } from '../modulos/caja/modales';
 
 // Desactivado por defecto (se emite en portal SUNAT SOL o ticket de control interno)
@@ -3647,55 +3649,17 @@ export default function CajaPage({ currentUser }) {
       />
 
       {/* MODAL: TODAS LAS CATEGORÍAS DEL NUEVO PEDIDO */}
-      {deliveryModal && deliveryCategoriasModalOpen && (
-        <div
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] z-[120] flex items-end md:items-center justify-center md:p-6 animate-fade-in"
-          onClick={() => setDeliveryCategoriasModalOpen(false)}
-        >
-          <div
-            className="bg-white w-full max-w-lg max-h-[85dvh] rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-4 border-b border-slate-100">
-              <div className="min-w-0">
-                <p className="text-lg font-semibold text-slate-900">Categorías</p>
-                <p className="text-sm text-slate-500">Toca una para ver sus productos</p>
-              </div>
-              <button type="button" onClick={() => setDeliveryCategoriasModalOpen(false)} className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 grid grid-cols-2 gap-2 content-start">
-              {deliveryCategoriasOrdenadas.map(cat => {
-                const activa = deliveryCategoriaFiltro === cat;
-                const isMasPedidos = cat === '🔥 Más Pedidos';
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => { setDeliveryCategoriaFiltro(cat); setDeliveryCategoriasModalOpen(false); }}
-                    className={`min-h-[3.5rem] px-3 py-2.5 rounded-xl border text-left flex flex-col justify-center transition active:scale-95 ${
-                      activa
-                        ? 'bg-sky-600 border-sky-600 text-white shadow-sm'
-                        : isMasPedidos
-                          ? 'bg-amber-50 border-amber-200 text-amber-900'
-                          : 'bg-white border-slate-200 text-slate-700 hover:border-sky-300'
-                    }`}
-                  >
-                    <span className="text-sm font-medium leading-tight flex items-center gap-1.5">
-                      {isMasPedidos && <Flame className={`w-3.5 h-3.5 shrink-0 ${activa ? 'text-white' : 'text-amber-500'}`} />}
-                      {isMasPedidos ? 'Más pedidos' : cat}
-                    </span>
-                    <span className={`text-[11px] mt-0.5 ${activa ? 'text-sky-100' : 'text-slate-400'}`}>
-                      {contarProductosCategoriaDelivery(cat)} productos
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalTodasCategorias
+        abierto={deliveryModal && deliveryCategoriasModalOpen}
+        onCerrar={() => setDeliveryCategoriasModalOpen(false)}
+        categorias={deliveryCategoriasOrdenadas}
+        categoriaFiltro={deliveryCategoriaFiltro}
+        onSeleccionar={(cat) => {
+          setDeliveryCategoriaFiltro(cat);
+          setDeliveryCategoriasModalOpen(false);
+        }}
+        contarProductos={contarProductosCategoriaDelivery}
+      />
 
       {/* MODAL PEDIDOS YA */}
       {deliveryModal && (() => {
@@ -4377,351 +4341,20 @@ export default function CajaPage({ currentUser }) {
       })()}
 
       {/* MODAL DE SELECCIÓN DE OPCIONES Y COMBOS (INTERACTIVO PARA DELIVERY) */}
-      {optionsModalOpen && selectedProduct && (() => {
-        const steps = getProductSteps(selectedProduct, selections);
-        if (!steps || steps.length === 0) return null;
-        
-        const safeStepIdx = Math.max(0, Math.min(currentStepIdx, steps.length - 1));
-        const currentStep = steps[safeStepIdx] || steps[0];
-        if (!currentStep) return null;
-
-        const esUltimoPaso = safeStepIdx >= steps.length - 1;
-        const seleccionActual = selections[currentStep.key];
-        
-        const handleSelectOption = (val) => {
-          setSelections(prev => ({ ...prev, [currentStep.key]: val }));
-          
-          if (!esUltimoPaso) {
-            setTimeout(() => {
-              setCurrentStepIdx(prev => Math.min(steps.length - 1, prev + 1));
-            }, 150);
-          }
-        };
-        
-        const handleConfirm = () => {
-          const hasCustomConfig = selectedProduct.opcionesConfig && (() => {
-            try {
-              const p = typeof selectedProduct.opcionesConfig === 'string' 
-                ? JSON.parse(selectedProduct.opcionesConfig) 
-                : selectedProduct.opcionesConfig;
-              return Array.isArray(p) && p.length > 0;
-            } catch { return false; }
-          })();
-
-          // Acompañamientos quitados y complementos agregados por el mozo
-          const compl = resolverComplementos(selectedProduct, selections);
-          const soloComplementos = !hasCustomConfig && steps.length === 1 && steps[0].tipo === 'complementos';
-
-          if (selectedProduct.esAgrupado) {
-            const prodVariante = selections["producto_variante"];
-            if (!prodVariante) {
-              alert("Por favor, selecciona una opción de carne.");
-              return;
-            }
-            agregarItemDeliveryDirecto(prodVariante, additionalNotes);
-          } else if (soloComplementos) {
-            const notas = [...compl.notas];
-            if (additionalNotes.trim()) notas.push(`(Nota: ${additionalNotes.trim()})`);
-            agregarItemDeliveryDirecto(selectedProduct, notas.join(' · '), { opciones: [], precioExtra: compl.precioExtra });
-          } else if (hasCustomConfig) {
-            const notesArray = [];
-            steps.forEach(step => {
-              if (step.tipo === 'complementos') return;
-              const val = selections[step.key];
-              if (val) {
-                const valLower = String(val).toLowerCase();
-                if (valLower.includes('sin ') || valLower.includes('omitir')) return;
-                const stepLower = step.name.toLowerCase();
-                if (stepLower.includes('bebida')) {
-                  notesArray.push(`[Bebida: ${val}]`);
-                } else if (stepLower.includes('entrada')) {
-                  notesArray.push(`[Entrada: ${val}]`);
-                } else if (stepLower.includes('guarnicion') || stepLower.includes('acompañamiento')) {
-                  notesArray.push(`[Guarnición: ${val}]`);
-                } else {
-                  notesArray.push(`${step.name}: ${val}`);
-                }
-              }
-            });
-            notesArray.push(...compl.notas);
-            if (additionalNotes.trim()) {
-              notesArray.push(`(Nota: ${additionalNotes.trim()})`);
-            }
-            const finalNotes = notesArray.join(' · ');
-            const sel = resolverSeleccion(steps, selections);
-            agregarItemDeliveryDirecto(selectedProduct, finalNotes, { ...sel, precioExtra: sel.precioExtra + compl.precioExtra });
-          } else if (selectedProduct.categoria === 'Menú' || selectedProduct.categoria?.toLowerCase().includes('menú')) {
-            const notesArray = [];
-            const entr = selections["entrada_menu"];
-            const beb = selections["bebida"];
-            const guarn = selections["guarnicion_menu"];
-            
-            if (entr && !entr.toLowerCase().includes('sin entrada') && !entr.toLowerCase().includes('omitir')) {
-              notesArray.push(`[Entrada: ${entr}]`);
-            }
-            if (beb && !beb.toLowerCase().includes('sin bebida') && !beb.toLowerCase().includes('omitir')) {
-              notesArray.push(`[Bebida: ${beb}]`);
-            }
-            if (guarn && !guarn.toLowerCase().includes('estándar') && !guarn.toLowerCase().includes('sin guarnición') && !guarn.toLowerCase().includes('omitir')) {
-              notesArray.push(`[Guarnición: ${guarn}]`);
-            }
-            
-            if (additionalNotes.trim()) {
-              notesArray.push(`(Nota: ${additionalNotes.trim()})`);
-            }
-            const finalNotes = notesArray.join(' · ');
-            agregarItemDeliveryDirecto(selectedProduct, finalNotes);
-          } else if (getComboConfig(selectedProduct.nombre)) {
-            const notesArray = [];
-            const fondo = selections["fondo"];
-            const proteina = selections["proteina"];
-            const entrada = selections["entrada"];
-            const bebida = selections["bebida"];
-            
-            if (fondo) {
-              if (proteina) {
-                const cleanFondoName = fondo.replace(' (pollo o carne)', '');
-                notesArray.push(`Fondo: ${cleanFondoName} de ${proteina}`);
-              } else {
-                notesArray.push(`Fondo: ${fondo}`);
-              }
-            }
-            if (entrada) {
-              notesArray.push(`[Entrada: ${entrada}]`);
-            }
-            
-            notesArray.push(`+ Refresco + Postre`);
-
-            if (bebida && !bebida.toLowerCase().includes('sin bebida') && !bebida.toLowerCase().includes('omitir')) {
-              notesArray.push(`[Bebida: ${bebida}]`);
-            }
-
-            const cantidadEnsaladas = selections["cantidad_ensaladas"];
-            if (cantidadEnsaladas && !cantidadEnsaladas.toLowerCase().includes('sin ensalada')) {
-              notesArray.push(cantidadEnsaladas);
-            }
-            
-            if (additionalNotes.trim()) {
-              notesArray.push(`(Nota: ${additionalNotes.trim()})`);
-            }
-            const finalNotes = notesArray.join(' · ');
-            agregarItemDeliveryDirecto(selectedProduct, finalNotes);
-          } else {
-            const notesArray = [];
-            steps.forEach(step => {
-              const val = selections[step.key];
-              if (val) {
-                const valLower = String(val).toLowerCase();
-                if (valLower.includes('sin bebida') || valLower.includes('sin ensalada') || valLower.includes('omitir') || valLower.includes('sin acompañamiento') || valLower.includes('sin guarnicion')) {
-                  return;
-                }
-                const stepLower = step.name.toLowerCase();
-                if (stepLower.includes('bebida')) {
-                  notesArray.push(`[Bebida: ${val}]`);
-                } else if (stepLower.includes('ensalada')) {
-                  notesArray.push(val);
-                } else if (stepLower.includes('guarnicion') || stepLower.includes('acompañamiento')) {
-                  notesArray.push(`[Guarnición: ${val}]`);
-                } else if (stepLower.includes('fondo')) {
-                  notesArray.push(`Fondo: ${val}`);
-                } else if (stepLower.includes('entrada')) {
-                  notesArray.push(`[Entrada: ${val}]`);
-                } else {
-                  notesArray.push(`${step.name}: ${val}`);
-                }
-              }
-            });
-            if (additionalNotes.trim()) {
-              notesArray.push(`(Nota: ${additionalNotes.trim()})`);
-            }
-            const finalNotes = notesArray.join(' · ');
-            agregarItemDeliveryDirecto(selectedProduct, finalNotes);
-          }
-          
+      <ModalOpcionesProducto
+        abierto={optionsModalOpen && !!selectedProduct}
+        producto={selectedProduct}
+        onCerrar={() => {
           setOptionsModalOpen(false);
           setSelectedProduct(null);
-        };
-        
-        return (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[250] flex items-center justify-center md:p-4">
-            <div className="bg-slate-900 border border-slate-800 w-full max-w-lg md:rounded-3xl shadow-2xl overflow-hidden flex flex-col h-full max-h-[100vh] md:h-auto md:max-h-[90vh] animate-slide-up">
-              <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/40">
-                <div>
-                  <h3 className="text-white font-black text-base uppercase tracking-tight leading-none">
-                    {selectedProduct.esAgrupado ? "Seleccionar Variante" : "Personalizar Plato"}
-                  </h3>
-                  <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest mt-1">
-                    {selectedProduct.nombre}
-                  </p>
-                </div>
-                <button 
-                  onClick={() => {
-                    setOptionsModalOpen(false);
-                    setSelectedProduct(null);
-                  }}
-                  className="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-2 rounded-xl transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              
-              <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-6">
-                {steps.length > 1 && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                      <span>Paso {safeStepIdx + 1} de {steps.length}</span>
-                      <span className="text-amber-400">{currentStep.name}</span>
-                    </div>
-                    <div className="h-1.5 bg-slate-850 rounded-full overflow-hidden flex border border-slate-800">
-                      {steps.map((_, idx) => (
-                        <div 
-                          key={idx} 
-                          className={`h-full flex-1 border-r border-slate-900 last:border-0 transition-all ${
-                            idx <= safeStepIdx ? 'bg-cyan-500' : 'bg-slate-800'
-                          }`}
-                        ></div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                <div className="space-y-3">
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                    {currentStep.name}:
-                  </h4>
-                  {currentStep.tipo === 'complementos' ? (
-                    <div className="space-y-2">
-                      <p className="text-[10px] text-slate-400">
-                        Toca para quitar lo que el cliente no quiere o agregar un extra. Quitar algo incluido no cambia el precio.
-                      </p>
-                      {currentStep.complementos.map(c => {
-                        const sel = selections.complementos || { quitados: [], agregados: [] };
-                        const quitado = (sel.quitados || []).includes(c.nombre);
-                        const agregado = (sel.agregados || []).includes(c.nombre);
-                        const activo = c.incluido ? !quitado : agregado;
-                        const alternar = () => setSelections(prev => {
-                          const actual = prev.complementos || { quitados: [], agregados: [] };
-                          const quitados = [...(actual.quitados || [])];
-                          const agregados = [...(actual.agregados || [])];
-                          if (c.incluido) {
-                            const i = quitados.indexOf(c.nombre);
-                            if (i >= 0) quitados.splice(i, 1); else quitados.push(c.nombre);
-                          } else {
-                            const i = agregados.indexOf(c.nombre);
-                            if (i >= 0) agregados.splice(i, 1); else agregados.push(c.nombre);
-                          }
-                          return { ...prev, complementos: { quitados, agregados } };
-                        });
-                        return (
-                          <button
-                            key={c.nombre}
-                            onClick={alternar}
-                            className={`w-full p-3 rounded-2xl border text-left flex items-center gap-3 transition-all ${
-                              activo
-                                ? 'bg-emerald-500/10 border-emerald-500/40 text-white'
-                                : 'bg-slate-800 border-slate-700 text-slate-400 line-through decoration-rose-500/70'
-                            }`}
-                          >
-                            <span className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 ${activo ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-500'}`}>
-                              {activo ? <Check className="w-3.5 h-3.5 stroke-[3px]" /> : <X className="w-3.5 h-3.5 stroke-[3px]" />}
-                            </span>
-                            <span className="font-black text-xs uppercase flex-1">{c.nombre}</span>
-                            {!c.incluido && (
-                              <span className={`text-[11px] font-black ${activo ? 'text-emerald-300' : 'text-slate-500'}`}>
-                                + S/ {c.precio.toFixed(2)}
-                              </span>
-                            )}
-                            {c.incluido && <span className="text-[10px] font-bold text-slate-500 uppercase">Incluido</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    {currentStep.options.map((opt, oIdx) => {
-                      const isSelected = selectedProduct.esAgrupado 
-                        ? (seleccionActual && seleccionActual.id === opt.value.id)
-                        : (seleccionActual === opt.value);
-                        
-                      return (
-                        <button
-                          key={oIdx}
-                          onClick={() => handleSelectOption(opt.value)}
-                          className={`p-4 rounded-2xl border text-left flex flex-col justify-between transition-all group relative overflow-hidden min-h-[75px] ${
-                            isSelected
-                              ? 'bg-cyan-500 border-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 scale-[0.98]'
-                              : 'bg-slate-800 border-slate-700 text-slate-100 hover:bg-slate-750 hover:border-slate-600'
-                          }`}
-                        >
-                          <span className="font-black text-xs leading-snug pr-6 uppercase">{opt.label}</span>
-                          {isSelected && (
-                            <Check className="w-4 h-4 text-slate-950 absolute top-4 right-4 stroke-[3px]" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  )}
-                </div>
-                
-                {esUltimoPaso && (
-                  <div className="border-t border-slate-800 pt-5 space-y-3">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
-                      Especificaciones Especiales / Notas
-                    </label>
-                    <textarea
-                      placeholder="Ejemplo: sin cebolla, papas bien doradas, etc."
-                      value={additionalNotes}
-                      onChange={(e) => setAdditionalNotes(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-2xl p-4 text-xs font-bold text-slate-100 focus:outline-none focus:bg-slate-950 custom-scrollbar h-20 resize-none"
-                    ></textarea>
-                  </div>
-                )}
-              </div>
-              
-              <div className="p-5 border-t border-slate-800 bg-slate-950/40 flex justify-between gap-3 shrink-0">
-                <button
-                  onClick={() => setCurrentStepIdx(prev => Math.max(0, prev - 1))}
-                  disabled={safeStepIdx === 0}
-                  className={`px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                    safeStepIdx === 0
-                      ? 'bg-slate-850 text-slate-600 border border-slate-850 opacity-40 cursor-not-allowed shadow-none'
-                      : 'bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-750 hover:text-white'
-                  }`}
-                >
-                  Atrás
-                </button>
-                
-                {esUltimoPaso ? (
-                  <button
-                    onClick={handleConfirm}
-                    disabled={!seleccionActual && (currentStep.options?.length > 0 || currentStep.key === 'producto_variante')}
-                    className={`px-6 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg ${
-                      (seleccionActual || (!currentStep.options?.length && currentStep.key !== 'producto_variante'))
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 shadow-emerald-500/20'
-                        : 'bg-slate-850 text-slate-600 border border-slate-800 cursor-not-allowed shadow-none'
-                    }`}
-                  >
-                    Agregar Pedido
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setCurrentStepIdx(prev => Math.min(steps.length - 1, prev + 1))}
-                    disabled={!seleccionActual && (currentStep.options?.length > 0 || currentStep.key === 'producto_variante')}
-                    className={`px-6 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg ${
-                      (seleccionActual || (!currentStep.options?.length && currentStep.key !== 'producto_variante'))
-                        ? 'bg-cyan-500 hover:bg-amber-600 text-slate-950'
-                        : 'bg-slate-850 text-slate-600 border border-slate-800 cursor-not-allowed shadow-none'
-                    }`}
-                  >
-                    Siguiente
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+        }}
+        onConfirmarItem={(item, notas, extras) => {
+          agregarItemDeliveryDirecto(item, notas, extras);
+          setOptionsModalOpen(false);
+          setSelectedProduct(null);
+        }}
+        getProductSteps={getProductSteps}
+      />
 
       {/* MODAL DE CIERRE DE CAJA (ARQUEO DE TURNO) */}
       <ModalCierreCaja
