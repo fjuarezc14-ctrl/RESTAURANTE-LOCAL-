@@ -6,3 +6,4 @@ export { default as ModalPrecuentaMesa } from './ModalPrecuentaMesa';
 export { default as ModalPedidoMesa } from './ModalPedidoMesa';
 export { default as DrawerBandejaDespacho } from './DrawerBandejaDespacho';
 export { default as ModalAdminMesas } from './ModalAdminMesas';
+export { default as ModalCancelarItem } from './ModalCancelarItem';

@@ -14,6 +14,7 @@ import {
   ModalPedidoMesa,
   DrawerBandejaDespacho,
   ModalAdminMesas,
+  ModalCancelarItem,
 } from '../modulos/salon/modales';
 import ModalOpcionesProducto from '../modulos/caja/modales/ModalOpcionesProducto';
 
@@ -165,6 +166,11 @@ export default function SalonPage({ currentUser }) {
   const [cancelMotivo, setCancelMotivo] = useState('');
   const [cancelandoPedido, setCancelandoPedido] = useState(false);
   const [tiempoRestante, setTiempoRestante] = useState(LIMITE_CANCELACION_MS);
+
+  // Anulación individual de ítem
+  const [itemACancelar, setItemACancelar] = useState(null);
+  const [supervisorItem, setSupervisorItem] = useState(null);
+  const [cancelandoItem, setCancelandoItem] = useState(false);
 
   // Modal de Autorización PIN
   const [authModal, setAuthModal] = useState({ open: false, pin: '', error: '', callback: null, promptText: '' });
@@ -826,58 +832,67 @@ export default function SalonPage({ currentUser }) {
     }
   };
 
-  const handleCancelarItem = async (item, supervisor) => {
-    const motivo = await pedirDato({
-      titulo: 'Cancelar Ítem de Comanda',
-      mensaje: `Motivo de anulación para "${item.nombre}":`,
-      valorInicial: 'Error de digitación / plato equivocado',
-      placeholder: 'Ej. Error de comanda, cliente desistió...',
-      validar: (v) => v.trim() ? null : 'El motivo es obligatorio'
-    });
-    if (!motivo) return;
+  const handleCancelarItem = (item, supervisor) => {
+    setItemACancelar(item);
+    setSupervisorItem(supervisor);
+  };
 
-    let cant = item.cant;
-    if (item.cant > 1) {
-      const cantStr = await pedirDato({
-        titulo: 'Cantidad a Cancelar',
-        mensaje: `Cantidad a cancelar de "${item.nombre}" (Máximo ${item.cant}):`,
-        valorInicial: item.cant.toString(),
-        validar: (v) => {
-          const n = parseInt(v, 10);
-          return (!isNaN(n) && n > 0 && n <= item.cant) ? null : `Ingresa entre 1 y ${item.cant}`;
-        }
-      });
-      if (!cantStr) return;
-      cant = parseInt(cantStr, 10);
-    }
+  const confirmarCancelacionItem = async ({ cantidad, motivo }) => {
+    if (!itemACancelar) return;
+    setCancelandoItem(true);
 
-    const isForce = mesaActual?.estado === 'Servido' || item.historial;
-    const canceladoPor = supervisor ? `${supervisor.nombre} (${supervisor.rol})` : meseroGlobal;
+    const mesaNum = mesaActual?.num || mesaActual?.numero || 'de la mesa';
+    const isForce = mesaActual?.estado === 'Servido' || itemACancelar.historial;
+    const canceladoPor = supervisorItem ? `${supervisorItem.nombre} (${supervisorItem.rol})` : meseroGlobal;
+    const pedidoId = itemACancelar.pedidoId;
+    const itemId = itemACancelar.itemId;
+    const productoId = itemACancelar.id;
+    const nombreProd = itemACancelar.nombre;
 
     try {
-      const res = await api.cancelarItemPedido(item.pedidoId, {
-        productoId: item.id,
-        cantidadACancelar: cant,
-        motivo: motivo.trim(),
-        canceladoPor: supervisor ? `${supervisor.nombre} (${supervisor.rol})` : meseroGlobal,
+      const res = await api.cancelarItemPedido(pedidoId, {
+        productoId,
+        itemId,
+        cantidadACancelar: cantidad,
+        motivo,
+        canceladoPor,
         force: isForce,
       });
       if (res.error) throw new Error(res.error);
-      
-      await fetchMesas();
-      setModalOpen(false);
-      
+
+      setItemACancelar(null);
+      setSupervisorItem(null);
+
       if (res.pedidoVacio) {
+        setModalOpen(false);
+        await fetchMesas();
         if (res.mesaLiberada) {
-          aviso.exito(`Comanda anulada por completo. Mesa ${mesaActual.num} ahora está libre.`);
+          aviso.exito(`Comanda anulada por completo. Mesa ${mesaNum} ha sido liberada.`);
         } else {
-          aviso.exito(`Comanda anulada por completo. Mesa ${mesaActual.num} sigue activa.`);
+          aviso.exito(`Comanda anulada por completo. Mesa ${mesaNum} sigue activa.`);
         }
       } else {
-        aviso.exito(`Se cancelaron ${cant} unidades de "${item.nombre}" correctamente.`);
+        // Mantener la pantalla de la mesa abierta y actualizar la comanda en vivo
+        setTicketActual(prev => {
+          let nuevos = [...prev];
+          const idx = nuevos.findIndex(t => (itemId && t.itemId === itemId) || (String(t.id) === String(productoId) && t.yaEnviado));
+          if (idx >= 0) {
+            if (nuevos[idx].cant <= cantidad) {
+              nuevos.splice(idx, 1);
+            } else {
+              nuevos[idx] = { ...nuevos[idx], cant: nuevos[idx].cant - cantidad };
+            }
+          }
+          return nuevos;
+        });
+        aviso.exito(`Se canceló "${nombreProd}" (${cantidad} un.) correctamente.`);
+        // Refrescar en segundo plano sin cerrar la pantalla del mozo
+        fetchMesas();
       }
     } catch (err) {
-      aviso.error("Error al cancelar ítem: " + err.message);
+      aviso.error("Error al anular ítem: " + err.message);
+    } finally {
+      setCancelandoItem(false);
     }
   };
 
@@ -1307,6 +1322,15 @@ export default function SalonPage({ currentUser }) {
         onCerrar={() => { setCancelModal(false); setCancelMotivo(''); }}
         onConfirmar={handleCancelarPedido}
         cancelando={cancelandoPedido}
+      />
+
+      {/* MODAL DE ANULACIÓN DE ÍTEM INDIVIDUAL */}
+      <ModalCancelarItem
+        abierto={!!itemACancelar}
+        item={itemACancelar}
+        onCerrar={() => { setItemACancelar(null); setSupervisorItem(null); }}
+        onConfirmar={confirmarCancelacionItem}
+        cancelando={cancelandoItem}
       />
 
       {/* MODAL DE SELECCIÓN DE OPCIONES Y COMBOS (INTERACTIVO) */}

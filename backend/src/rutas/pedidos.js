@@ -496,7 +496,7 @@ router.delete('/api/barra/cancelaciones/:id', (req, res) => {
 
 router.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
   const id = parseInt(req.params.id);
-  const { productoId, cantidadACancelar, motivo, canceladoPor, force } = req.body;
+  const { productoId, itemId, cantidadACancelar, motivo, canceladoPor, force } = req.body;
 
   try {
     const pedido = await prisma.pedido.findUnique({
@@ -518,9 +518,11 @@ router.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
       }
     }
 
-    const item = force
-      ? pedido.items.find(i => String(i.productoId) === String(productoId))
-      : pedido.items.find(i => String(i.productoId) === String(productoId) && !i.historial);
+    const item = itemId
+      ? pedido.items.find(i => i.id === parseInt(itemId))
+      : (force
+          ? pedido.items.find(i => String(i.productoId) === String(productoId))
+          : pedido.items.find(i => String(i.productoId) === String(productoId) && !i.historial));
 
     if (!item) return res.status(404).json({ error: 'El ítem seleccionado no se encuentra en la comanda activa.' });
 
