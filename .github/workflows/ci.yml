@@ -29,8 +29,8 @@ jobs:
     env:
       DATABASE_URL_TEST: postgresql://test:test@localhost:5446/restaurante_test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
