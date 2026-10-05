@@ -3,9 +3,8 @@ import { Link } from 'react-router-dom';
 import { PlusCircle, Utensils, CupSoda, Wine, Trash2, Save, X, Tag, ToggleLeft, ToggleRight, Edit2, ChevronDown, ChevronUp, Percent, DollarSign, Search, Flame, GlassWater, Package, Plus, Minus, Boxes, MessageCircleQuestion, Infinity as InfinityIcon } from 'lucide-react';
 import { api } from '../api';
 import { parseComponentes, calcularPrecioComponentes, normalizarOpcion, extractIngredientesTexto } from '../utils/combos';
-import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
 import { ordenarCategorias } from '../utils/categorias';
-import { Button, Input, Label, Badge, Dialog, DialogHeader, DialogFooter } from '../components/ui';
+import { Button, Input, Label, Badge, Dialog, DialogHeader, DialogFooter, useAviso, useConfirmar } from '../components/ui';
 import { cn } from '../utils/cn';
 
 // --- SISTEMA DE BÚSQUEDA INTELIGENTE Y FONÉTICA ---
@@ -159,6 +158,8 @@ function BuscadorProductos({ productos, onElegir, onTextoLibre, placeholder, ace
 }
 
 export default function CartaPage({ currentUser }) {
+  const aviso = useAviso();
+  const confirmar = useConfirmar();
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [categoriaActiva, setCategoriaActiva] = useState('Todos');
@@ -341,14 +342,20 @@ export default function CartaPage({ currentUser }) {
 
   const guardarProducto = async () => {
     const precio = parseFloat(editProd.precio);
-    if (!editProd.nombre.trim() || isNaN(precio)) { alert('Ingresa un nombre y precio válido.'); return; }
-    if (!editProd.categoria) { alert('Elige una categoría.'); return; }
+    if (!editProd.nombre.trim() || isNaN(precio)) {
+      aviso.advertencia('Ingresa un nombre y precio válido.');
+      return;
+    }
+    if (!editProd.categoria) {
+      aviso.advertencia('Elige una categoría.');
+      return;
+    }
 
     // Preguntas al mozo: se ignoran las que están totalmente vacías
     const preguntas = (editProd.opcionesConfig || []).filter(s => s.name.trim() || s.respuestas.length > 0);
     const incompleta = preguntas.findIndex(s => !s.name.trim() || s.respuestas.length === 0);
     if (incompleta >= 0) {
-      alert(`La pregunta ${incompleta + 1} necesita un nombre y al menos una respuesta.`);
+      aviso.advertencia(`La pregunta ${incompleta + 1} necesita un nombre y al menos una respuesta.`);
       return;
     }
     const opcionesPayload = preguntas.length > 0
@@ -379,25 +386,35 @@ export default function CartaPage({ currentUser }) {
       };
       if (editProd.id) {
         await api.editarProducto(editProd.id, body);
+        aviso.exito('Producto actualizado en la carta.');
       } else {
         await api.crearProducto(body);
+        aviso.exito('Producto agregado a la carta.');
       }
       await Promise.all([fetchProductos(), fetchCategorias()]);
       setModalOpen(false);
     } catch (err) {
-      alert('Error guardando producto: ' + err.message);
+      aviso.error('Error guardando producto: ' + err.message);
     } finally {
       setGuardando(false);
     }
   };
 
   const eliminarProducto = async (id) => {
-    if (window.confirm('¿Estás seguro de eliminar este producto de la carta?')) {
+    const seguro = await confirmar({
+      titulo: 'Eliminar producto',
+      mensaje: '¿Estás seguro de eliminar este producto de la carta?',
+      peligro: true,
+      botonConfirmar: 'Sí, eliminar',
+      botonCancelar: 'Cancelar',
+    });
+    if (seguro) {
       try {
         await api.eliminarProducto(id);
+        aviso.exito('Producto eliminado correctamente.');
         await fetchProductos();
       } catch (err) {
-        alert('Error eliminando producto: ' + err.message);
+        aviso.error('Error eliminando producto: ' + err.message);
       }
     }
   };

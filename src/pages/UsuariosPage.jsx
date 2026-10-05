@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { UserPlus, X, Trash2, Edit, Eye, EyeOff, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, UsersRound, Save, Salad, BookOpen, Wallet, Tags } from 'lucide-react';
 import { api } from '../api';
 import { safeJsonParse } from '../utils/safeJson';
+import { useAviso, useConfirmar } from '../components/ui';
 
 // El Administrador siempre tiene acceso a todos los módulos
 const TODOS_LOS_PERMISOS = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
 
 export default function UsuariosPage({ currentUser: currentUserProp }) {
+  const aviso = useAviso();
+  const confirmar = useConfirmar();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -65,11 +68,11 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
 
   const guardarUsuario = async () => {
     if (!newUser.nombre || !newUser.rol || !newUser.pin || newUser.permisos.length === 0) {
-      alert('Completa todos los campos y asigna al menos un permiso.');
+      aviso.advertencia('Completa todos los campos y asigna al menos un permiso.');
       return;
     }
     if (editingUser && editingUser.id === currentUser?.id && newUser.rol !== editingUser.rol) {
-      alert('⚠️ No puedes cambiar tu propio rol.');
+      aviso.advertencia('No puedes cambiar tu propio rol.');
       return;
     }
     const datos = newUser.rol === 'Administrador' ? { ...newUser, permisos: [...TODOS_LOS_PERMISOS] } : newUser;
@@ -79,16 +82,18 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
         // Modo Edición
         const res = await api.editarUsuario(editingUser.id, datos);
         if (res.error) throw new Error(res.error);
+        aviso.exito('Usuario actualizado correctamente.');
       } else {
         // Modo Creación
         const res = await api.crearUsuario(datos);
         if (res.error) throw new Error(res.error);
+        aviso.exito('Usuario creado correctamente.');
       }
       await fetchUsuarios();
       setModalOpen(false);
       setEditingUser(null);
     } catch (err) {
-      alert('Error guardando usuario: ' + err.message);
+      aviso.error('Error guardando usuario: ' + err.message);
     } finally {
       setGuardando(false);
     }
@@ -96,16 +101,24 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
 
   const eliminarUsuario = async (id) => {
     if (id === currentUser.id) {
-      alert('⚠️ No puedes eliminar tu propio usuario de la sesión activa.');
+      aviso.advertencia('No puedes eliminar tu propio usuario de la sesión activa.');
       return;
     }
-    if (window.confirm('¿Estás seguro de eliminar este usuario?')) {
+    const confirmado = await confirmar({
+      titulo: 'Eliminar colaborador',
+      mensaje: '¿Estás seguro de eliminar este usuario del sistema?',
+      peligro: true,
+      botonConfirmar: 'Sí, eliminar',
+      botonCancelar: 'Cancelar',
+    });
+    if (confirmado) {
       try {
         const res = await api.eliminarUsuario(id);
         if (res.error) throw new Error(res.error);
+        aviso.exito('Usuario eliminado correctamente.');
         await fetchUsuarios();
       } catch (err) {
-        alert('Error al eliminar: ' + err.message);
+        aviso.error('Error al eliminar: ' + err.message);
       }
     }
   };

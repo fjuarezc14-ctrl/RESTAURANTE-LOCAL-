@@ -6,6 +6,7 @@ import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
 import { exportarReporteExcel, construirCreditosPlanilla, montosVenta } from '../utils/exportarReporteExcel';
+import { useAviso, usePedirDato } from '../components/ui';
 
 // Igual que en Caja: el sistema solo emite tickets de venta
 const FACTURACION_ELECTRONICA = false;
@@ -61,6 +62,8 @@ const parsearCreditoSplit = (ofertaDescripcion, defaultClienteId, defaultMonto) 
 
 export default function ReportesPage() {
   const { empresa: COMPANY_CONFIG } = useCompany();
+  const aviso = useAviso();
+  const pedirDato = usePedirDato();
   const getPrimerDiaMes = () => {
     const ahora = new Date();
     const yyyy = ahora.getFullYear();
@@ -246,15 +249,20 @@ export default function ReportesPage() {
     }, 400);
   };
 
-  const enviarPorWhatsApp = (v) => {
+  const enviarPorWhatsApp = async (v) => {
     if (!v) return;
-    const telefono = prompt("Ingresa el número de WhatsApp del cliente (Ej. 999888777):");
+    const telefono = await pedirDato({
+      titulo: 'Enviar por WhatsApp',
+      mensaje: 'Ingresa el número de WhatsApp del cliente (Ej. 999888777):',
+      placeholder: '999888777',
+      tipo: 'tel',
+    });
     if (!telefono) return;
     
     // Validar celular peruano de 9 dígitos
     const cleanedPhone = telefono.replace(/\D/g, '');
     if (cleanedPhone.length !== 9) {
-      alert("Por favor, ingresa un número de celular válido de 9 dígitos.");
+      aviso.advertencia("Por favor, ingresa un número de celular válido de 9 dígitos.");
       return;
     }
     
@@ -311,7 +319,7 @@ export default function ReportesPage() {
 
   const handleFiltrar = () => {
     if (!fechaDesde || !fechaHasta) {
-      alert('Por favor selecciona ambas fechas.');
+      aviso.advertencia('Por favor selecciona ambas fechas.');
       return;
     }
     fetchReportes(fechaDesde, fechaHasta);
@@ -319,7 +327,7 @@ export default function ReportesPage() {
 
   const exportarLibroContableRCE = async () => {
     if (!fechaDesde || !fechaHasta) {
-      alert('Por favor selecciona ambas fechas.');
+      aviso.advertencia('Por favor selecciona ambas fechas.');
       return;
     }
     try {
@@ -348,8 +356,9 @@ export default function ReportesPage() {
         parseDeliveryInfo,
         parsearCreditoSplit,
       });
+      aviso.exito('Reporte contable exportado a Excel exitosamente.');
     } catch (err) {
-      alert('Error al generar el Excel: ' + err.message);
+      aviso.error('Error al generar el Excel: ' + err.message);
     } finally {
       setFiltrando(false);
     }

@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, X, Search, Wallet, Phone, MapPin, UserRound, Briefcase, ArrowDownCircle, Eye, Pencil, Trash2, CreditCard, Banknote, Smartphone, CheckCircle, ChevronLeft, ChevronRight, Contact, Clock, ShoppingBag } from 'lucide-react';
 import { api } from '../api';
+import { useConfirmar, useAviso } from '../components/ui';
 
 const METODOS_PAGO = ['Efectivo', 'Tarjeta', 'Yape', 'Mixto'];
 
 export default function CreditosPage({ currentUser }) {
+  const confirmar = useConfirmar();
+  const aviso = useAviso();
   const [clientes, setClientes] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -117,13 +120,20 @@ export default function CreditosPage({ currentUser }) {
   };
 
   const eliminarCliente = async (id) => {
-    if (!confirm('¿Seguro que deseas eliminar este cliente?')) return;
+    const si = await confirmar({
+      titulo: 'Eliminar cliente',
+      mensaje: '¿Seguro que deseas eliminar este cliente? Se borrarán sus datos asociados.',
+      peligro: true,
+      botonConfirmar: 'Sí, eliminar',
+      botonCancelar: 'Cancelar',
+    });
+    if (!si) return;
     try {
       await api.eliminarCliente(id);
-      showToast('✅ Cliente eliminado.');
+      aviso.exito('Cliente eliminado con éxito.');
       await Promise.all([fetchTodo(), fetchDirectorio(pageDirectorio, searchDirectorio)]);
     } catch (err) {
-      showToast('❌ Error: ' + err.message, 'error');
+      aviso.error('Error al eliminar cliente: ' + err.message);
     }
   };
 

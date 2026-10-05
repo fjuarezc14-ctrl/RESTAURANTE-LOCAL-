@@ -17,12 +17,15 @@ import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { CompanyProvider } from './context/CompanyContext.jsx'
+import { AvisoProvider } from './components/ui/index.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
       <CompanyProvider>
-        <App />
+        <AvisoProvider>
+          <App />
+        </AvisoProvider>
       </CompanyProvider>
     </ErrorBoundary>
   </StrictMode>,
