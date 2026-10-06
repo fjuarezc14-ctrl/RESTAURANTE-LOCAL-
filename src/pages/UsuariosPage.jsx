@@ -52,13 +52,21 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
 
   const abrirModalNuevo = () => {
     setEditingUser(null);
-    setNewUser({ nombre: '', rol: '', pin: '', permisos: [] });
+    setNewUser({ nombre: '', rol: '', pin: '', permisos: [], usuario: '', correo: '', contrasena: '' });
     setModalOpen(true);
   };
 
   const abrirModalEditar = (u) => {
     setEditingUser(u);
-    setNewUser({ nombre: u.nombre, rol: u.rol, pin: u.pin || '', permisos: u.rol === 'Administrador' ? [...TODOS_LOS_PERMISOS] : (u.permisos || []) });
+    setNewUser({
+      nombre: u.nombre,
+      rol: u.rol,
+      pin: '',
+      permisos: u.rol === 'Administrador' ? [...TODOS_LOS_PERMISOS] : (u.permisos || []),
+      usuario: u.usuario || '',
+      correo: u.correo || '',
+      contrasena: '',
+    });
     setModalOpen(true);
   };
 
@@ -68,10 +76,12 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
       aviso.advertencia(validacionNombre.error.issues?.[0]?.message || 'El nombre es obligatorio.');
       return;
     }
-    const validacionPin = pinEsquema.safeParse(newUser.pin);
-    if (!validacionPin.success) {
-      aviso.advertencia(validacionPin.error.issues?.[0]?.message || 'El PIN debe tener exactamente 4 dígitos numéricos.');
-      return;
+    if (!editingUser || newUser.pin) {
+      const validacionPin = pinEsquema.safeParse(newUser.pin);
+      if (!validacionPin.success) {
+        aviso.advertencia(validacionPin.error.issues?.[0]?.message || 'El PIN debe tener exactamente 4 dígitos numéricos.');
+        return;
+      }
     }
     if (!newUser.rol || newUser.permisos.length === 0) {
       aviso.advertencia('Selecciona un rol y asigna al menos un permiso.');
@@ -81,7 +91,16 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
       aviso.advertencia('No puedes cambiar tu propio rol.');
       return;
     }
-    const datos = newUser.rol === 'Administrador' ? { ...newUser, permisos: [...TODOS_LOS_PERMISOS] } : newUser;
+
+    const datos = {
+      ...newUser,
+      permisos: newUser.rol === 'Administrador' ? [...TODOS_LOS_PERMISOS] : newUser.permisos,
+    };
+    if (editingUser && !datos.pin) delete datos.pin;
+    if (!datos.usuario?.trim()) delete datos.usuario;
+    if (!datos.correo?.trim()) delete datos.correo;
+    if (!datos.contrasena?.trim()) delete datos.contrasena;
+
     setGuardando(true);
     try {
       if (editingUser) {
@@ -287,7 +306,9 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
                 })()}
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">PIN de Acceso (4 dígitos únicos)</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                  PIN de Acceso (4 dígitos) {editingUser && <span className="text-slate-400 font-normal">(en blanco para conservar el actual)</span>}
+                </label>
                 <input 
                   type="text" 
                   inputMode="numeric"
@@ -298,10 +319,53 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
                     const val = e.target.value.replace(/\D/g, '');
                     setNewUser({ ...newUser, pin: val });
                   }} 
-                  placeholder="Ej. 1234" 
+                  placeholder={editingUser ? '•••• (sin cambios)' : 'Ej. 1234'} 
                   className="w-full sm:w-1/2 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 font-mono tracking-widest text-center text-lg font-black" 
                   maxLength="4" 
                 />
+              </div>
+
+              {/* Acceso para vincular dispositivos (usuario, correo, contraseña) */}
+              <div className="border-t border-slate-100 pt-4">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-xs font-black text-slate-800 uppercase tracking-wide">Acceso para Vincular Equipos</span>
+                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Opcional</span>
+                </div>
+                <p className="text-xs text-slate-500 mb-3">
+                  Permite activar tablets y PCs con este usuario y contraseña (recomendado para administradores).
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Usuario</label>
+                    <input 
+                      type="text"
+                      value={newUser.usuario || ''}
+                      onChange={e => setNewUser({ ...newUser, usuario: e.target.value })}
+                      placeholder="ej. admin"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Correo</label>
+                    <input 
+                      type="email"
+                      value={newUser.correo || ''}
+                      onChange={e => setNewUser({ ...newUser, correo: e.target.value })}
+                      placeholder="ej. admin@local.pe"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Contraseña</label>
+                    <input 
+                      type="password"
+                      value={newUser.contrasena || ''}
+                      onChange={e => setNewUser({ ...newUser, contrasena: e.target.value })}
+                      placeholder={editingUser ? 'Sin cambios' : 'Mínimo 8 caracteres'}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="border-t border-slate-100 pt-4">
                 <label className="block text-xs font-black text-slate-800 uppercase tracking-wide mb-1">Permisos de Acceso</label>
