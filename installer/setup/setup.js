@@ -207,6 +207,8 @@ async function main() {
       `PORT=${APP_PORT}`,
       'IGV_RATE=0.105',
       'INITIAL_ADMIN_PIN=1234',
+      // Con este secreto se guardan los PIN como hash: único por instalación y no debe cambiar (docs/SOPORTE.md)
+      `PIN_SECRET="${crypto.randomBytes(32).toString('base64')}"`,
       '',
     ].join(os.EOL));
   }
@@ -225,6 +227,16 @@ async function main() {
     cwd: BACKEND_DIR,
     env: prismaEnv,
   });
+
+  // Actualización de una instalación anterior sin PIN_SECRET: se agrega solo si ningún PIN fue guardado como
+  // hash todavía (los convierte el servidor al arrancar). Si ya hay alguno, cambiar el secreto los rompería.
+  const envActual = fs.readFileSync(ENV_FILE, 'utf8');
+  if (!/^PIN_SECRET=/m.test(envActual)) {
+    const conHash = parseInt(psql(password, 'SELECT count(*) FROM "Usuario" WHERE "pinHash" IS NOT NULL', DB_NAME), 10);
+    if (conHash === 0) {
+      fs.appendFileSync(ENV_FILE, `${envActual.endsWith(os.EOL) ? '' : os.EOL}PIN_SECRET="${crypto.randomBytes(32).toString('base64')}"${os.EOL}`);
+    }
+  }
 
   // 5. Datos iniciales solo si la base está vacía (nunca borra ventas existentes)
   const usuarios = parseInt(psql(password, 'SELECT count(*) FROM "Usuario"', DB_NAME), 10);

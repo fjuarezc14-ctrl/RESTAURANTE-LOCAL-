@@ -146,7 +146,7 @@ async function main() {
 
   // 4. Backend con motores de Prisma para Windows
   console.log('📦 Empaquetando backend...');
-  for (const f of ['server.js', 'src', 'shared', 'config', 'prisma', 'package.json', 'package-lock.json']) {
+  for (const f of ['server.js', 'src', 'shared', 'scripts', 'config', 'prisma', 'package.json', 'package-lock.json']) {
     copy(path.join(REPO, 'backend', f), path.join(BACKEND, f));
   }
   fs.rmSync(path.join(BACKEND, 'prisma', 'seed.js'), { force: true }); // seed de demostración: borra ventas
