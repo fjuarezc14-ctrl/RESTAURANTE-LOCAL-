@@ -4,6 +4,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const fs = require('fs');
 const path = require('path');
 
@@ -17,7 +18,14 @@ const app = express();
 // confiar en X-Forwarded-For permitiría falsear la IP.
 if (process.env.MODO_INSTALACION === 'web') app.set('trust proxy', 1);
 
-app.use(cors());
+// Cabeceras de seguridad. La CSP queda apagada hasta probarla con la web servida desde dist/ (instalador Windows);
+// HSTS solo detrás de HTTPS.
+app.use(helmet({ contentSecurityPolicy: false, hsts: process.env.MODO_INSTALACION === 'web' }));
+
+// Mismo origen por defecto: en desarrollo Vite hace de proxy y en Windows el backend sirve la web.
+// Solo si la web vive en otro dominio se habilita CORS para esos orígenes (CORS_ORIGIN=https://a.pe,https://b.pe).
+const origenesPermitidos = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
+if (origenesPermitidos.length) app.use(cors({ origin: origenesPermitidos, credentials: true }));
 // Las compras pueden traer el XML de SUNAT completo; el resto de la API, como máximo 100 KB
 app.use('/api/compras', express.json({ limit: '2mb' }));
 app.use(express.json({ limit: '100kb' }));

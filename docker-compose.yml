@@ -49,6 +49,7 @@ services:
       - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-}
       - AUTH_OBLIGATORIA=${AUTH_OBLIGATORIA:-false}
       - MODO_INSTALACION=${MODO_INSTALACION:-local}
+      - CORS_ORIGIN=${CORS_ORIGIN:-}
     depends_on:
       db:
         condition: service_healthy
