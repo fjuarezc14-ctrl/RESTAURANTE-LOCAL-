@@ -4,7 +4,8 @@ const { prisma } = require('../db');
 const { alertasCancelacion } = require('../servicios/cancelaciones');
 const { BARRA_CATEGORIAS } = require('../servicios/empresa');
 const { ErrorApp } = require('../middlewares/errores');
-const { validarIdsEnUrl } = require('../middlewares/validar');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { cancelacionItem, cancelacionPedido, notasItem, preparacion } = require('../../shared/esquemas/pedidos.js');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -167,7 +168,7 @@ router.patch('/api/pedidos/items/:itemId/preparar', async (req, res, next) => {
 });
 
 // PATCH /api/pedidos/:id/preparar → Cocinero o Barman marca listo su sección
-router.patch('/api/pedidos/:id/preparar', async (req, res, next) => {
+router.patch('/api/pedidos/:id/preparar', validar({ body: preparacion }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { seccion } = req.body; // "cocina" o "barra"
 
@@ -306,7 +307,7 @@ router.patch('/api/pedidos/:id/entregar-todo', async (req, res, next) => {
 });
 
 // Actualizar notas de un ítem de pedido individual
-router.patch('/api/pedidos/items/:id/notas', async (req, res, next) => {
+router.patch('/api/pedidos/items/:id/notas', validar({ body: notasItem }), async (req, res, next) => {
   const { id } = req.params;
   const { notas } = req.body;
   try {
@@ -324,7 +325,7 @@ router.patch('/api/pedidos/items/:id/notas', async (req, res, next) => {
 // CANCELACIÓN DE PEDIDOS (Solo Mozo, límite 5 min)
 // ============================================================
 
-router.patch('/api/pedidos/:id/cancelar', async (req, res, next) => {
+router.patch('/api/pedidos/:id/cancelar', validar({ body: cancelacionPedido }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { canceladoPor, motivo, force } = req.body;
 
@@ -495,7 +496,7 @@ router.delete('/api/barra/cancelaciones/:id', (req, res, next) => {
   res.json({ ok: true });
 });
 
-router.patch('/api/pedidos/:id/cancelar-item', async (req, res, next) => {
+router.patch('/api/pedidos/:id/cancelar-item', validar({ body: cancelacionItem }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { productoId, itemId, cantidadACancelar, motivo, canceladoPor, force } = req.body;
 

@@ -93,3 +93,64 @@ describe('caja', () => {
     esperarError(res, 400, 'VALIDACION', 'hasta');
   });
 });
+
+describe('pedidos: precio contra la carta', () => {
+  const pedir = (items) => api().post('/api/mesas/1/pedido').send({ mesero: 'Mozo', items });
+
+  it('acepta el precio de la carta', async () => {
+    expect((await pedir([item(carta.lomo, 1)])).status).toBe(200);
+  });
+
+  it('rechaza un precio menor al de la carta y no crea el pedido', async () => {
+    const res = await pedir([{ ...item(carta.lomo, 1), precio: 1 }]);
+    esperarError(res, 400, 'VALIDACION', 'items');
+    expect(res.body.error.datos).toMatchObject({ productoId: carta.lomo.id, precioCarta: 25.5 });
+    expect(await prisma.pedido.count()).toBe(0);
+  });
+
+  it('rechaza un producto que no está en la carta (antes se cobraba como el primero de la carta)', async () => {
+    esperarError(await pedir([{ nombre: 'Plato inventado', precio: 0.5, cant: 1 }]), 400, 'VALIDACION', 'items');
+    expect(await prisma.pedido.count()).toBe(0);
+  });
+
+  it('acepta los extras que el producto permite y rechaza pasarse de ellos', async () => {
+    const parrilla = await prisma.producto.create({
+      data: {
+        nombre: 'Parrilla', categoria: 'Platos de Fondo', precio: 40,
+        opcionesConfig: JSON.stringify([{ name: 'Término', options: ['Jugoso', { label: 'Con chorizo', precioExtra: 6 }] }]),
+        complementos: JSON.stringify([{ nombre: 'Huevo', incluido: false, precio: 2 }]),
+      },
+    });
+    expect((await pedir([{ ...item(parrilla, 1), precio: 48 }])).status).toBe(200); // 40 + 6 + 2
+    esperarError(await pedir([{ ...item(parrilla, 1), precio: 48.5 }]), 400, 'VALIDACION', 'items');
+  });
+
+  it('valida cantidad y precio de cada ítem', async () => {
+    esperarError(await pedir([{ ...item(carta.lomo, 1), cantidad: 0 }]), 400, 'VALIDACION', 'items.0.cantidad');
+    esperarError(await pedir([{ ...item(carta.lomo, 1), precio: 'gratis' }]), 400, 'VALIDACION', 'items.0.precio');
+  });
+});
+
+describe('delivery', () => {
+  const llevar = (datos) => api().post('/api/pedidos/llevar').send({ tipoDelivery: 'ParaLlevar', cajero: 'Carla', ...datos });
+  const itemsDelivery = () => [{ nombre: 'Lomo Saltado', precio: 25.5, cant: 2 }]; // S/ 51
+
+  it('acepta una cortesía (precio 0 con la marca) y rechaza un precio 0 sin ella', async () => {
+    await abrirCaja();
+    const cortesia = await llevar({ metodoPago: 'Efectivo', items: [...itemsDelivery(), { nombre: 'Inca Kola', precio: 0, cant: 1, notas: '[CORTESÍA]' }] });
+    expect(cortesia.status).toBe(200);
+    esperarError(await llevar({ metodoPago: 'Efectivo', items: [{ nombre: 'Inca Kola', precio: 0, cant: 1 }] }), 400, 'VALIDACION', 'items');
+  });
+
+  it('mixto: las partes tienen que sumar el total (con el costo de envío)', async () => {
+    await abrirCaja();
+    esperarError(await llevar({ metodoPago: 'Mixto', items: itemsDelivery(), montoDelivery: 5, montoEfectivo: 20, montoYape: 20 }), 400, 'PAGO_NO_CUADRA');
+    const ok = await llevar({ metodoPago: 'Mixto', items: itemsDelivery(), montoDelivery: 5, montoEfectivo: 26, montoYape: 30 });
+    expect(ok.status).toBe(200);
+  });
+
+  it('rechaza un descuento de más de 100%', async () => {
+    await abrirCaja();
+    esperarError(await llevar({ metodoPago: 'Efectivo', items: itemsDelivery(), descuentoPorcentaje: 150 }), 400, 'VALIDACION', 'descuentoPorcentaje');
+  });
+});

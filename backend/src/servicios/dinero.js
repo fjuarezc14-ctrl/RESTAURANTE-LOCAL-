@@ -1,5 +1,6 @@
 // Cálculos de dinero: IGV, montos por medio de pago y créditos repartidos
 const { configEnCache } = require('./empresa');
+const { ErrorApp } = require('../middlewares/errores');
 
 // Helper para parsear la distribución de crédito en ventas con múltiples clientes
 function parsearCreditoSplit(ofertaDescripcion, defaultClienteId, defaultMonto) {
@@ -99,4 +100,12 @@ const limpiarCodigoPago = (codigoPago, metodoPago, montoTarjeta, montoYape) => {
   return usaDigital && codigo ? codigo : null;
 };
 
-module.exports = { parsearCreditoSplit, getIgvDivisor, calcularSubtotalEIgv, obtenerMontosVenta, limpiarCodigoPago };
+// En un pago mixto las partes tienen que sumar el total cobrado (el vuelto no se envía)
+function verificarPagoMixto({ efectivo = 0, tarjeta = 0, yape = 0, credito = 0 }, total) {
+  const suma = efectivo + tarjeta + yape + credito;
+  if (Math.abs(suma - total) > 0.05) {
+    throw new ErrorApp('PAGO_NO_CUADRA', `La suma de los medios de pago (S/ ${suma.toFixed(2)}) no coincide con el total (S/ ${total.toFixed(2)}).`, { campo: 'montoEfectivo' });
+  }
+}
+
+module.exports = { parsearCreditoSplit, getIgvDivisor, calcularSubtotalEIgv, obtenerMontosVenta, limpiarCodigoPago, verificarPagoMixto };

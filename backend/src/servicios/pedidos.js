@@ -54,6 +54,41 @@ function parseJsonSafe(txt, fallback) {
   }
 }
 
+// Precio válido de un ítem: el de la carta más los extras que el producto permite elegir.
+// Las elecciones llegan como texto en las notas, así que se valida el rango posible.
+function rangoDePrecio(producto) {
+  const base = Number(producto.precio) || 0;
+  let min = base;
+  let max = base;
+  const pasos = parseJsonSafe(producto.opcionesConfig, []);
+  for (const paso of Array.isArray(pasos) ? pasos : []) {
+    const extras = (paso?.options || []).map((o) => (o && typeof o === 'object' ? parseFloat(o.precioExtra) || 0 : 0));
+    if (extras.length) {
+      min += Math.min(0, ...extras);
+      max += Math.max(0, ...extras);
+    }
+  }
+  const complementos = parseJsonSafe(producto.complementos, []);
+  for (const c of Array.isArray(complementos) ? complementos : []) {
+    if (c && c.incluido === false) max += Math.max(0, parseFloat(c.precio) || 0);
+  }
+  return { base, min: Math.max(0, min), max };
+}
+
+// Una cortesía de delivery llega con precio 0 y la marca [CORTESÍA] en las notas
+const esCortesia = (item) => Number(item.precio) === 0 && String(item.notas || '').includes('[CORTESÍA]');
+
+function verificarPrecioItem(item, producto) {
+  if (esCortesia(item)) return;
+  const precio = Number(item.precio);
+  const { base, min, max } = rangoDePrecio(producto);
+  if (precio >= min - 0.01 && precio <= max + 0.01) return;
+  const esperado = min === max ? `S/ ${base.toFixed(2)}` : `entre S/ ${min.toFixed(2)} y S/ ${max.toFixed(2)}`;
+  throw new ErrorApp('VALIDACION', `El precio de "${producto.nombre}" (S/ ${precio.toFixed(2)}) no coincide con la carta (${esperado}).`, {
+    campo: 'items', datos: { productoId: producto.id, precioCarta: base },
+  });
+}
+
 async function expandPedidoItemsForDb(itemsList) {
   const expandedList = [];
   const defaultProduct = await prisma.producto.findFirst({ where: { activo: true }, orderBy: { id: 'asc' } });
@@ -75,9 +110,11 @@ async function expandPedidoItemsForDb(itemsList) {
       });
     }
 
+    // Antes se usaba el primer producto de la carta sin avisar: ahora el ítem tiene que existir
     if (!validProd) {
-      validProd = defaultProduct;
+      throw new ErrorApp('VALIDACION', `"${i.nombre || 'El producto'}" no está en la carta.`, { campo: 'items' });
     }
+    verificarPrecioItem(i, validProd);
 
     const prodId = validProd.id;
     const prodNombre = String(i.nombre || validProd.nombre);
