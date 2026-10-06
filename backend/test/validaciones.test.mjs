@@ -211,3 +211,11 @@ describe('restricciones de la base de datos', () => {
     expect(res.body.cierre.diferencia).toBe(-10);
   });
 });
+
+describe('compatibilidad', () => {
+  it('check de sesión con un ID inválido sigue respondiendo exists:false (la pantalla cierra la sesión)', async () => {
+    const res = await api().get('/api/usuarios/check/undefined');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ exists: false });
+  });
+});

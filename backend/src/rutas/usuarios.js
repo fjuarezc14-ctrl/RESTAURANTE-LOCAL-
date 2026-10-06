@@ -145,9 +145,11 @@ router.post('/api/usuarios/validate-auth', validar({ body: loginPin }), async (r
   }
 });
 
-router.get('/api/usuarios/check/:id', async (req, res, next) => {
+// :usuarioId (no :id) para no pasar por validarIdsEnUrl: con un ID inválido responde exists:false y la pantalla
+// cierra la sesión (si respondiera error, la pantalla asumiría que el usuario sigue activo). Se reemplaza en la tarea 7.
+router.get('/api/usuarios/check/:usuarioId', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.usuarioId);
     if (isNaN(id)) return res.json({ exists: false });
     const user = await prisma.usuario.findUnique({
       where: { id }
