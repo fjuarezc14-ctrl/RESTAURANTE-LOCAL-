@@ -4,8 +4,10 @@ const { prisma } = require('../db');
 const { alertasCancelacion } = require('../servicios/cancelaciones');
 const { BARRA_CATEGORIAS } = require('../servicios/empresa');
 const { ErrorApp } = require('../middlewares/errores');
+const { validarIdsEnUrl } = require('../middlewares/validar');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // COCINA — Endpoint unificado (salon + delivery)

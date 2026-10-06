@@ -4,8 +4,10 @@ const { prisma } = require('../db');
 const { calcularSubtotalEIgv, limpiarCodigoPago } = require('../servicios/dinero');
 const { evaluarEstadoEnsalada, expandPedidoItemsForDb } = require('../servicios/pedidos');
 const { ErrorApp } = require('../middlewares/errores');
+const { validarIdsEnUrl } = require('../middlewares/validar');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 router.post('/api/pedidos/llevar', async (req, res, next) => {
   const {

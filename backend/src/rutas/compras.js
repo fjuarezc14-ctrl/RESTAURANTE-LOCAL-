@@ -2,8 +2,10 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { ErrorApp } = require('../middlewares/errores');
+const { validarIdsEnUrl } = require('../middlewares/validar');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // COMPRAS (RCE)

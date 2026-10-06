@@ -13,7 +13,7 @@ const { manejarErrores, rutaNoEncontrada } = require('./middlewares/errores');
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 
 // Un router por módulo (ver src/rutas/)
 app.use(require('./rutas/configuracion'));

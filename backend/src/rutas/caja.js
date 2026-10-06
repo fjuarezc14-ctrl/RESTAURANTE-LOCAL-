@@ -3,8 +3,10 @@ const express = require('express');
 const { prisma } = require('../db');
 const { obtenerMontosVenta } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
+const { validarIdsEnUrl } = require('../middlewares/validar');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // CIERRES DE CAJA Y ARQUEOS PERSISTENTES (PostgreSQL)

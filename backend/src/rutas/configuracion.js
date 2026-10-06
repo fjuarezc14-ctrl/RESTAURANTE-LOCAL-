@@ -4,8 +4,10 @@ const os = require('os');
 const { prisma } = require('../db');
 const { DEFAULT_BARRA_CATEGORIAS, getEmpresaConfig, guardarConfigEnCache } = require('../servicios/empresa');
 const { interfacesIPv4, ipRutaPorDefecto, puntajeIp } = require('../servicios/red');
+const { validarIdsEnUrl } = require('../middlewares/validar');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // GET /api/empresa -> Obtener datos actuales de la empresa
 router.get('/api/empresa', async (req, res, next) => {

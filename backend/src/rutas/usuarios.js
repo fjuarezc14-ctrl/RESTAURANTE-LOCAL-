@@ -4,8 +4,10 @@ const { prisma } = require('../db');
 const { loginRateLimiter, registerLoginFailure, registerLoginSuccess } = require('../middlewares/limiteLogin');
 const { generarPinSignature } = require('../servicios/auth');
 const { ErrorApp } = require('../middlewares/errores');
+const { validarIdsEnUrl } = require('../middlewares/validar');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // USUARIOS

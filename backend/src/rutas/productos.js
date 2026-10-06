@@ -1,8 +1,10 @@
 // Rutas de productos de la carta
 const express = require('express');
 const { prisma } = require('../db');
+const { validarIdsEnUrl } = require('../middlewares/validar');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // PRODUCTOS (CARTA)

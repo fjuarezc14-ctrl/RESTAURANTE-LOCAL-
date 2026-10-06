@@ -3,8 +3,10 @@ const express = require('express');
 const { prisma } = require('../db');
 const { evaluarEstadoEnsalada, expandPedidoItemsForDb } = require('../servicios/pedidos');
 const { ErrorApp } = require('../middlewares/errores');
+const { validarIdsEnUrl } = require('../middlewares/validar');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // MESAS — Consolidado con todos los pedidos activos

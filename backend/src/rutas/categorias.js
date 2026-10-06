@@ -4,8 +4,10 @@ const { prisma } = require('../db');
 const { COLORES_CATEGORIA, actualizarDestinoCategoria, mismoNombre, renombrarCategoriaEnOfertas, sincronizarCategorias } = require('../servicios/categorias');
 const { getEmpresaConfig, isBarraCategoria } = require('../servicios/empresa');
 const { ErrorApp } = require('../middlewares/errores');
+const { validarIdsEnUrl } = require('../middlewares/validar');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // GET /api/categorias → Categorías con destino y cantidad de productos
 router.get('/api/categorias', async (req, res, next) => {

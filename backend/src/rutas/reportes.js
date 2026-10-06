@@ -2,8 +2,10 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
+const { validarIdsEnUrl } = require('../middlewares/validar');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // REPORTES
