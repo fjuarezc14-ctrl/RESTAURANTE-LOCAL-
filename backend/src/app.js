@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { prisma } = require('./db');
+const { manejarErrores, rutaNoEncontrada } = require('./middlewares/errores');
 
 const app = express();
 
@@ -29,6 +30,9 @@ app.use(require('./rutas/caja'));
 app.use(require('./rutas/compras'));
 app.use(require('./rutas/reportes'));
 
+// Cualquier otra ruta /api/* responde 404 en JSON
+app.use('/api', rutaNoEncontrada);
+
 // ============================================================
 // FRONTEND COMPILADO (INSTALADOR WINDOWS)
 // Si existe la carpeta dist, el backend sirve la app en el mismo puerto.
@@ -42,5 +46,8 @@ if (fs.existsSync(path.join(FRONTEND_DIST, 'index.html'))) {
   });
   console.log(`🖥️ Sirviendo frontend desde ${FRONTEND_DIST}`);
 }
+
+// Formato único de errores: va al final, después de todas las rutas
+app.use(manejarErrores);
 
 module.exports = { app, prisma };

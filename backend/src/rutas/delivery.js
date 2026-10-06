@@ -3,10 +3,11 @@ const express = require('express');
 const { prisma } = require('../db');
 const { calcularSubtotalEIgv, limpiarCodigoPago } = require('../servicios/dinero');
 const { evaluarEstadoEnsalada, expandPedidoItemsForDb } = require('../servicios/pedidos');
+const { ErrorApp } = require('../middlewares/errores');
 
 const router = express.Router();
 
-router.post('/api/pedidos/llevar', async (req, res) => {
+router.post('/api/pedidos/llevar', async (req, res, next) => {
   const {
     codigoPedidosYa,
     cajero,
@@ -36,10 +37,7 @@ router.post('/api/pedidos/llevar', async (req, res) => {
     // 0. Validar si la caja se encuentra abierta (BUG-05)
     const turnoActivo = await prisma.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
     if (!turnoActivo) {
-      return res.status(400).json({
-        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de registrar pedidos para llevar o delivery.',
-        cajaCerrada: true,
-      });
+      return next(new ErrorApp('CAJA_CERRADA', 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de registrar pedidos para llevar o delivery.'));
     }
 
     const isTakeout = tipoDelivery === 'ParaLlevar';
@@ -47,7 +45,7 @@ router.post('/api/pedidos/llevar', async (req, res) => {
 
     // Validación defensiva: no crear pedidos sin ítems
     if (!items || items.length === 0) {
-      return res.status(400).json({ error: 'No se puede crear un pedido sin ítems.' });
+      return next(new ErrorApp('VALIDACION', 'No se puede crear un pedido sin ítems.', { campo: 'items' }));
     }
 
     const shippingFee = parseFloat(montoDelivery || 0);
@@ -68,7 +66,7 @@ router.post('/api/pedidos/llevar', async (req, res) => {
     // Validar crédito antes de crear el pedido para no dejar comandas huérfanas sin venta
     const tieneCredito = finalMetodoPago === 'Crédito' || (finalMetodoPago === 'Mixto' && parseFloat(montoCredito || 0) > 0);
     if (tieneCredito && !clienteCreditoId) {
-      return res.status(400).json({ error: 'Debe seleccionar un cliente para registrar la venta a crédito.' });
+      return next(new ErrorApp('VALIDACION', 'Debe seleccionar un cliente para registrar la venta a crédito.', { campo: 'clienteCreditoId' }));
     }
 
     const expandedItems = await expandPedidoItemsForDb(items);
@@ -97,7 +95,7 @@ router.post('/api/pedidos/llevar', async (req, res) => {
     }
 
     if (finalMontoCredito > 0 && !clienteCreditoId) {
-      return res.status(400).json({ error: 'Debe seleccionar un cliente para registrar la venta a crédito.' });
+      return next(new ErrorApp('VALIDACION', 'Debe seleccionar un cliente para registrar la venta a crédito.', { campo: 'clienteCreditoId' }));
     }
 
     let finalNombreCliente = nombreCliente;
@@ -144,7 +142,7 @@ router.post('/api/pedidos/llevar', async (req, res) => {
         if (updateResult.count === 0) {
           const prodCheck = await tx.producto.findUnique({ where: { id: item.productoId } });
           if (prodCheck && prodCheck.tipoStock === 'limitado' && prodCheck.stock < item.cantidad) {
-            throw new Error(`Stock insuficiente para "${prodCheck.nombre}". Stock disponible: ${prodCheck.stock}, solicitado: ${item.cantidad}`);
+            throw new ErrorApp('STOCK_INSUFICIENTE', `Stock insuficiente para "${prodCheck.nombre}". Stock disponible: ${prodCheck.stock}, solicitado: ${item.cantidad}`, { datos: { disponible: prodCheck.stock } });
           }
         }
       }
@@ -199,12 +197,12 @@ router.post('/api/pedidos/llevar', async (req, res) => {
       venta: resultado.venta
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/pedidos/llevar → Pedidos de delivery activos para CajaPage
-router.get('/api/pedidos/llevar', async (req, res) => {
+router.get('/api/pedidos/llevar', async (req, res, next) => {
   try {
     const pedidos = await prisma.pedido.findMany({
       where: { tipoEntrega: { in: ['llevar', 'delivery'] }, estado: { in: ['Cocina', 'Servido'] } },
@@ -247,12 +245,12 @@ router.get('/api/pedidos/llevar', async (req, res) => {
 
     res.json(formateados);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT /api/pedidos/llevar/:id → Modificar un pedido de llevar/delivery activo
-router.put('/api/pedidos/llevar/:id', async (req, res) => {
+router.put('/api/pedidos/llevar/:id', async (req, res, next) => {
   const id = parseInt(req.params.id);
   const {
     codigoPedidosYa,
@@ -306,11 +304,11 @@ router.put('/api/pedidos/llevar/:id', async (req, res) => {
     });
 
     if (!pedido) {
-      return res.status(404).json({ error: 'Pedido no encontrado.' });
+      return next(new ErrorApp('NO_ENCONTRADO', 'Pedido no encontrado.'));
     }
 
     if (pedido.estado !== 'Cocina' && pedido.estado !== 'Servido') {
-      return res.status(400).json({ error: 'No se puede modificar un pedido que ya fue cobrado o cancelado.' });
+      return next(new ErrorApp('CONFLICTO', 'No se puede modificar un pedido que ya fue cobrado o cancelado.'));
     }
 
     // 2. Ejecutar actualización en una transacción
@@ -390,7 +388,7 @@ router.put('/api/pedidos/llevar/:id', async (req, res) => {
       }
 
       if (finalMontoCredito > 0 && !clienteCreditoId) {
-        throw new Error('Debe seleccionar un cliente para registrar la venta a crédito.');
+        throw new ErrorApp('VALIDACION', 'Debe seleccionar un cliente para registrar la venta a crédito.', { campo: 'clienteCreditoId' });
       }
 
       let finalNombreCliente = nombreCliente;
@@ -427,12 +425,12 @@ router.put('/api/pedidos/llevar/:id', async (req, res) => {
 
     res.json({ ok: true, venta });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /api/pedidos/:id/entregar → Caja confirma entrega del delivery
-router.patch('/api/pedidos/:id/entregar', async (req, res) => {
+router.patch('/api/pedidos/:id/entregar', async (req, res, next) => {
   try {
     await prisma.pedido.update({
       where: { id: parseInt(req.params.id) },
@@ -440,7 +438,7 @@ router.patch('/api/pedidos/:id/entregar', async (req, res) => {
     });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

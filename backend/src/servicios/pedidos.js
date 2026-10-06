@@ -1,5 +1,6 @@
 // Pedidos: expansión de ítems y combos para guardarlos en la BD
 const { prisma } = require('../db');
+const { ErrorApp } = require('../middlewares/errores');
 
 const LIMITE_CANCELACION_MS = 5 * 60 * 1000; // 5 minutos
 
@@ -57,7 +58,7 @@ async function expandPedidoItemsForDb(itemsList) {
   const expandedList = [];
   const defaultProduct = await prisma.producto.findFirst({ where: { activo: true }, orderBy: { id: 'asc' } });
   if (!defaultProduct) {
-    throw new Error('No hay productos registrados en la carta. Carga productos antes de realizar pedidos.');
+    throw new ErrorApp('VALIDACION', 'No hay productos registrados en la carta. Carga productos antes de realizar pedidos.');
   }
 
   for (const i of itemsList) {

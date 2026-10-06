@@ -1,7 +1,7 @@
 // Créditos: abonos de clientes con deuda (POST /api/clientes/:id/abonar)
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  PIN_ADMIN, abrirCaja, api, cobrar, crearBase, crearCliente, item, limpiarBD, mesaListaParaCobrar, prisma,
+  PIN_ADMIN, abrirCaja, api, cobrar, crearBase, crearCliente, esperarError, item, limpiarBD, mesaListaParaCobrar, prisma,
 } from './helpers.mjs';
 
 let carta;
@@ -24,21 +24,19 @@ beforeEach(async () => {
 
 describe('requisitos', () => {
   it('no registra abonos con la caja cerrada', async () => {
-    const res = await abonar({ monto: 10 });
-    expect(res.status).toBe(400);
-    expect(res.body.cajaCerrada).toBe(true);
+    esperarError(await abonar({ monto: 10 }), 409, 'CAJA_CERRADA');
   });
 
   it('rechaza montos de 0 o negativos', async () => {
     await abrirCaja();
     await dejarDeuda();
-    expect((await abonar({ monto: 0 })).status).toBe(400);
-    expect((await abonar({ monto: -5 })).status).toBe(400);
+    esperarError(await abonar({ monto: 0 }), 400, 'VALIDACION', 'monto');
+    esperarError(await abonar({ monto: -5 }), 400, 'VALIDACION', 'monto');
   });
 
   it('responde 404 si el cliente no existe', async () => {
     await abrirCaja();
-    expect((await abonar({ monto: 10 }, 9999)).status).toBe(404);
+    esperarError(await abonar({ monto: 10 }, 9999), 404, 'NO_ENCONTRADO');
   });
 
   it('rechaza el abono de un cliente sin deuda', async () => {
@@ -63,7 +61,7 @@ describe('saldo', () => {
   it('no permite abonar más que la deuda', async () => {
     await abrirCaja();
     await dejarDeuda();
-    expect((await abonar({ monto: 60 })).status).toBe(400);
+    esperarError(await abonar({ monto: 60 }), 400, 'VALIDACION', 'monto');
     expect(await prisma.abonoCredito.count()).toBe(0);
   });
 
@@ -102,8 +100,7 @@ describe('medios de pago del abono', () => {
   it('mixto: rechaza si la suma de las partes no coincide con el monto', async () => {
     await abrirCaja();
     await dejarDeuda();
-    const res = await abonar({ monto: 30, metodoPago: 'Mixto', montoEfectivo: 10, montoTarjeta: 10 });
-    expect(res.status).toBe(400);
+    esperarError(await abonar({ monto: 30, metodoPago: 'Mixto', montoEfectivo: 10, montoTarjeta: 10 }), 400, 'PAGO_NO_CUADRA');
     expect(await prisma.abonoCredito.count()).toBe(0);
   });
 

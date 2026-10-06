@@ -8,17 +8,17 @@ const { interfacesIPv4, ipRutaPorDefecto, puntajeIp } = require('../servicios/re
 const router = express.Router();
 
 // GET /api/empresa -> Obtener datos actuales de la empresa
-router.get('/api/empresa', async (req, res) => {
+router.get('/api/empresa', async (req, res, next) => {
   try {
     const config = await getEmpresaConfig();
     res.json(config);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT /api/empresa -> Actualizar datos de la empresa desde la app
-router.put('/api/empresa', async (req, res) => {
+router.put('/api/empresa', async (req, res, next) => {
   try {
     const { name, brandShort, tagline, legalName, ruc, address, phone, email, ticketFooter, tipoNegocio, barraCategorias } = req.body;
     let conf = await prisma.empresaConfig.findFirst();
@@ -55,14 +55,14 @@ router.put('/api/empresa', async (req, res) => {
     guardarConfigEnCache(conf);
     res.json({ ok: true, config: conf });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // ============================================================
 // ESTADO DEL SERVIDOR
 // ============================================================
-router.get('/api/status', async (req, res) => {
+router.get('/api/status', async (req, res, next) => {
   const token = process.env.APISUNAT_TOKEN;
   const modoDemo = !token || token.includes('tu_token') || token.trim() === '';
   const emp = await getEmpresaConfig();
@@ -75,7 +75,7 @@ router.get('/api/status', async (req, res) => {
 });
 
 // GET /api/red/direcciones -> Direcciones para conectar celulares y tablets (se calculan al momento)
-router.get('/api/red/direcciones', async (req, res) => {
+router.get('/api/red/direcciones', async (req, res, next) => {
   try {
     const puerto = process.env.PORT || 3003;
     const ipFija = (process.env.IP_SERVIDOR || '').trim();
@@ -99,7 +99,7 @@ router.get('/api/red/direcciones', async (req, res) => {
       urlHostname: `http://${os.hostname()}:${puerto}`,
     });
   } catch (err) {
-    res.status(500).json({ error: 'No se pudieron obtener las direcciones de red.' });
+    next(err);
   }
 });
 
