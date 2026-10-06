@@ -197,3 +197,17 @@ describe('carta, usuarios, compras y configuración', () => {
     esperarError(await api().get(`/api/reportes/${reporte}?desde=2026-10-05&hasta=2026-10-01`), 400, 'VALIDACION', 'hasta');
   });
 });
+
+describe('restricciones de la base de datos', () => {
+  it('rechaza montos negativos aunque alguien se salte la API', async () => {
+    await expect(prisma.producto.update({ where: { id: carta.lomo.id }, data: { precio: -1 } })).rejects.toThrow(/Producto_precio_no_negativo/);
+    await expect(prisma.movimientoCaja.create({ data: { monto: -5, motivo: 'x', cajeroNombre: 'x' } })).rejects.toThrow(/MovimientoCaja_monto_positivo/);
+    await expect(prisma.producto.update({ where: { id: carta.postre.id }, data: { stock: -1 } })).rejects.toThrow(/Producto_stock_no_negativo/);
+  });
+
+  it('permite un faltante (diferencia negativa) en el cierre de caja', async () => {
+    await abrirCaja(100);
+    const res = await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoEsperado: 100, efectivoContado: 90 });
+    expect(res.body.cierre.diferencia).toBe(-10);
+  });
+});
