@@ -29,6 +29,8 @@ import {
   ModalCobroMesa,
   ModalNuevoPedidoDelivery,
 } from '../modulos/caja/modales';
+import { CalculadoraEfectivoPEN, DENOMINACIONES_PEN } from '../modulos/caja/componentes/CalculadoraEfectivoPEN';
+import { useTurnoCaja, useVentasTurno, useCobroMesa } from '../modulos/caja/hooks';
 
 // Desactivado por defecto (se emite en portal SUNAT SOL o ticket de control interno)
 const FACTURACION_ELECTRONICA = false;
@@ -61,152 +63,12 @@ const parsearCreditoSplit = (ofertaDescripcion, defaultClienteId, defaultMonto) 
 };
 
 // Helper seguro para parsear montos ingresados por el usuario
-// Billetes y monedas en circulación en Perú (los de 1 y 5 céntimos ya no circulan)
-const DENOMINACIONES_PEN = [
-  { valor: 200, etiqueta: 'S/ 200', tipo: 'billete', color: 'bg-purple-100 text-purple-800' },
-  { valor: 100, etiqueta: 'S/ 100', tipo: 'billete', color: 'bg-sky-100 text-sky-800' },
-  { valor: 50, etiqueta: 'S/ 50', tipo: 'billete', color: 'bg-orange-100 text-orange-800' },
-  { valor: 20, etiqueta: 'S/ 20', tipo: 'billete', color: 'bg-amber-100 text-amber-800' },
-  { valor: 10, etiqueta: 'S/ 10', tipo: 'billete', color: 'bg-emerald-100 text-emerald-800' },
-  { valor: 5, etiqueta: 'S/ 5', tipo: 'moneda', color: 'bg-yellow-100 text-yellow-800 rounded-full' },
-  { valor: 2, etiqueta: 'S/ 2', tipo: 'moneda', color: 'bg-yellow-100 text-yellow-800 rounded-full' },
-  { valor: 1, etiqueta: 'S/ 1', tipo: 'moneda', color: 'bg-slate-200 text-slate-700 rounded-full' },
-  { valor: 0.5, etiqueta: '50 cént.', tipo: 'moneda', color: 'bg-amber-50 text-amber-700 rounded-full' },
-  { valor: 0.2, etiqueta: '20 cént.', tipo: 'moneda', color: 'bg-amber-50 text-amber-700 rounded-full' },
-  { valor: 0.1, etiqueta: '10 cént.', tipo: 'moneda', color: 'bg-amber-50 text-amber-700 rounded-full' },
-];
-
 const parseMonto = (val) => {
   if (val === null || val === undefined || val === '') return 0;
   const s = String(val).trim().replace(',', '.');
   const n = parseFloat(s);
   return isNaN(n) ? 0 : Math.max(0, n);
 };
-
-// Componente de Calculadora de Billetes y Monedas en 2 Columnas
-function CalculadoraEfectivoPEN({
-  conteo = {},
-  onChangeCantidad,
-  onLimpiar,
-  mostrarTitulo = true,
-  titulo = "Conteo de efectivo",
-}) {
-  const safeConteo = conteo || {};
-  const billetes = DENOMINACIONES_PEN.filter(d => d.tipo === 'billete');
-  const monedas = DENOMINACIONES_PEN.filter(d => d.tipo === 'moneda');
-
-  const subtotalBilletes = billetes.reduce((s, d) => s + d.valor * (Number(safeConteo[d.valor]) || 0), 0);
-  const subtotalMonedas = monedas.reduce((s, d) => s + d.valor * (Number(safeConteo[d.valor]) || 0), 0);
-  const hayConteo = DENOMINACIONES_PEN.some(d => Number(safeConteo[d.valor]) > 0);
-
-  const renderFila = (d) => {
-    const cant = Number(safeConteo[d.valor]) || 0;
-    const subtotal = d.valor * cant;
-    return (
-      <div
-        key={d.valor}
-        className={`flex items-center gap-1.5 rounded-xl px-2 py-1 transition-all ${
-          cant > 0 ? 'bg-emerald-50/90 border border-emerald-200/80 shadow-2xs' : 'hover:bg-slate-50/80 border border-transparent'
-        }`}
-      >
-        <span className={`w-14 h-7.5 rounded-lg grid place-items-center text-xs font-bold font-mono shrink-0 shadow-2xs ${d.color}`}>
-          {d.etiqueta}
-        </span>
-        <div className="flex items-center rounded-lg border border-slate-200 bg-white shrink-0 shadow-2xs overflow-hidden">
-          <button
-            type="button"
-            onClick={() => onChangeCantidad(d.valor, cant - 1)}
-            disabled={cant === 0}
-            className="w-7 h-7.5 grid place-items-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-25 text-base font-bold leading-none cursor-pointer transition-colors"
-            aria-label={`Quitar ${d.etiqueta}`}
-          >
-            −
-          </button>
-          <input
-            type="number"
-            inputMode="numeric"
-            min="0"
-            value={cant || ''}
-            placeholder="0"
-            onChange={(e) => onChangeCantidad(d.valor, e.target.value)}
-            onFocus={(e) => e.target.select()}
-            className="w-10 h-7.5 text-center text-xs font-bold font-mono text-slate-900 bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            aria-label={`Cantidad de ${d.etiqueta}`}
-          />
-          <button
-            type="button"
-            onClick={() => onChangeCantidad(d.valor, cant + 1)}
-            className="w-7 h-7.5 grid place-items-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 text-base font-bold leading-none cursor-pointer transition-colors"
-            aria-label={`Agregar ${d.etiqueta}`}
-          >
-            +
-          </button>
-        </div>
-        <span className={`flex-1 text-right font-mono text-xs tabular-nums truncate ${cant > 0 ? 'text-slate-900 font-bold' : 'text-slate-300'}`}>
-          S/ {subtotal.toFixed(2)}
-        </span>
-      </div>
-    );
-  };
-
-  return (
-    <div className="space-y-2">
-      {mostrarTitulo && (
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
-            <Coins className="w-4 h-4 text-amber-500" /> {titulo}
-          </p>
-          {hayConteo && onLimpiar && (
-            <button
-              type="button"
-              onClick={onLimpiar}
-              className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 inline-flex items-center gap-1 transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" /> Limpiar
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Grid de 2 Columnas: Billetes a la izquierda, Monedas a la derecha */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Columna Billetes */}
-        <div className="bg-slate-50/70 p-2.5 rounded-2xl border border-slate-200/70 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-1.5 px-1 pb-1 border-b border-slate-200/60">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                <Banknote className="w-3.5 h-3.5 text-emerald-600" /> Billetes
-              </span>
-              <span className="text-[10px] font-bold font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                S/ {subtotalBilletes.toFixed(2)}
-              </span>
-            </div>
-            <div className="space-y-0.5">
-              {billetes.map(renderFila)}
-            </div>
-          </div>
-        </div>
-
-        {/* Columna Monedas */}
-        <div className="bg-slate-50/70 p-2.5 rounded-2xl border border-slate-200/70 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-1.5 px-1 pb-1 border-b border-slate-200/60">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                <Coins className="w-3.5 h-3.5 text-amber-500" /> Monedas
-              </span>
-              <span className="text-[10px] font-bold font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
-                S/ {subtotalMonedas.toFixed(2)}
-              </span>
-            </div>
-            <div className="space-y-0.5">
-              {monedas.map(renderFila)}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 
 
@@ -350,73 +212,56 @@ export default function CajaPage({ currentUser }) {
   const [deliveryNumDocumento, setDeliveryNumDocumento] = useState('');
 
 
-  // Modal Anular / Registrar Devolución de Venta Entregada
-  const [anularVentaModal, setAnularVentaModal] = useState(false);
-  const [ventaAAnular, setVentaAAnular] = useState(null);
-  const [anularPin, setAnularPin] = useState('');
-  const [anularMotivo, setAnularMotivo] = useState('');
-  const [anularError, setAnularError] = useState('');
-  const [anularCargando, setAnularCargando] = useState(false);
+  // Gestión de Turnos de Caja (Hook modular desacoplado)
+  const {
+    cajaEstado,
+    setCajaEstado,
+    ultimoCierre,
+    setUltimoCierre,
+    modalAperturaOpen,
+    setModalAperturaOpen,
+    cierreModalOpen,
+    setCierreModalOpen,
+    modalSalidaCajaOpen,
+    setModalSalidaCajaOpen,
+    tipoMovimientoCaja,
+    setTipoMovimientoCaja,
+    historialCierresModalOpen,
+    setHistorialCierresModalOpen,
+    historialCierres,
+    cargandoHistorialCierres,
+    cierreAImprimir,
+    setCierreAImprimir,
+    abrirHistorialCierres,
+    abrirMovimientoGaveta,
+  } = useTurnoCaja({ onNotificar: (msg, tipo) => aviso[tipo] ? aviso[tipo](msg) : aviso.info(msg) });
 
-  // Historial de Ventas y Arqueo/Cierre de Caja
-  const [ventas, setVentas] = useState([]);
-  const [cierreModalOpen, setCierreModalOpen] = useState(false);
+  // Gestión de Ventas del Turno y Modales de Corrección/Anulación (Hook modular desacoplado)
+  const {
+    ventas,
+    setVentas,
+    filtroMetodoPago,
+    setFiltroMetodoPago,
+    anularVentaModal,
+    setAnularVentaModal,
+    ventaAAnular,
+    setVentaAAnular,
+    cambioMetodoModal,
+    setCambioMetodoModal,
+    ventaACambiar,
+    setVentaACambiar,
+    cambioTipoEntregaModal,
+    setCambioTipoEntregaModal,
+    ventaATipoCambiar,
+    setVentaATipoCambiar,
+    abrirAnulacionVenta,
+    abrirCambioMetodo,
+    abrirCambioTipoEntrega,
+  } = useVentasTurno();
 
-  // Control de Turno y Apertura de Caja (PostgreSQL)
-  const [cajaEstado, setCajaEstado] = useState({ abierto: false, turno: null, cargando: true });
-  const [modalAperturaOpen, setModalAperturaOpen] = useState(false);
-  const [montoInicialInput, setMontoInicialInput] = useState('');
-  const [conteoApertura, setConteoApertura] = useState({}); // { valorDenominacion: cantidad } para fondo inicial
-  const [notaAperturaInput, setNotaAperturaInput] = useState('');
-  const [guardandoApertura, setGuardandoApertura] = useState(false);
-  const [errorApertura, setErrorApertura] = useState('');
-
-  // Salidas / Retiros de Efectivo de Caja en Turno
-  const [modalSalidaCajaOpen, setModalSalidaCajaOpen] = useState(false);
-  const [montoSalidaCaja, setMontoSalidaCaja] = useState('');
-  const [motivoSalidaCaja, setMotivoSalidaCaja] = useState('');
-  const [guardandoSalidaCaja, setGuardandoSalidaCaja] = useState(false);
-  const [errorSalidaCaja, setErrorSalidaCaja] = useState('');
-  const [tipoMovimientoCaja, setTipoMovimientoCaja] = useState('RETIRO'); // 'RETIRO' | 'INGRESO'
-
-  const [ultimoCierre, setUltimoCierre] = useState(() => {
-    const stored = localStorage.getItem('ultimoCierre');
-    if (stored) {
-      if (new Date(stored) <= new Date()) return stored;
-      localStorage.removeItem('ultimoCierre');
-    }
-    const d = new Date();
-    if (d.getHours() < 3) {
-      d.setDate(d.getDate() - 1);
-    }
-    d.setHours(3, 0, 0, 0);
-    return d.toISOString();
-  });
-  const [filtroMetodoPago, setFiltroMetodoPago] = useState('Todos');
   const [consumoPin, setConsumoPin] = useState('');
   const [consumoPinError, setConsumoPinError] = useState('');
   const [comprasTurno, setComprasTurno] = useState([]);
-  const [efectivoFisicoContado, setEfectivoFisicoContado] = useState('');
-  const [conteoBilletes, setConteoBilletes] = useState({}); // { valorDenominacion: cantidad }
-  const [historialCierresModalOpen, setHistorialCierresModalOpen] = useState(false);
-  const [historialCierres, setHistorialCierres] = useState([]);
-  const [cargandoHistorialCierres, setCargandoHistorialCierres] = useState(false);
-  const [guardandoCierre, setGuardandoCierre] = useState(false);
-  const [cierreAImprimir, setCierreAImprimir] = useState(null);
-
-  const abrirHistorialCierres = async () => {
-    setHistorialCierresModalOpen(true);
-    setCargandoHistorialCierres(true);
-    try {
-      const res = await api.getHistorialCierres(50);
-      const list = Array.isArray(res) ? res : (res?.cierres || []);
-      setHistorialCierres(list);
-    } catch (err) {
-      console.error('Error al cargar historial de cierres:', err);
-    } finally {
-      setCargandoHistorialCierres(false);
-    }
-  };
 
   // Créditos y Clientes
   const [clientes, setClientes] = useState([]);
@@ -433,33 +278,6 @@ export default function CajaPage({ currentUser }) {
   // Búsqueda de clientes en selectores de crédito
   const [busquedaClienteCredito, setBusquedaClienteCredito] = useState('');
   const [pagaConEfectivoMesa, setPagaConEfectivoMesa] = useState('');
-
-
-  // Modal cambiar método de pago
-  const [cambioMetodoModal, setCambioMetodoModal] = useState(false);
-  const [ventaACambiar, setVentaACambiar] = useState(null);
-  const [cambioPin, setCambioPin] = useState('');
-  const [cambioNuevoMetodo, setCambioNuevoMetodo] = useState('Efectivo');
-  const [cambiando, setCambiando] = useState(false);
-  const [cambioError, setCambioError] = useState('');
-
-  // Modal cambiar tipo de entrega
-  const [cambioTipoEntregaModal, setCambioTipoEntregaModal] = useState(false);
-  const [ventaATipoCambiar, setVentaATipoCambiar] = useState(null);
-  const [cambioNuevoTipo, setCambioNuevoTipo] = useState('ParaLlevar');
-  const [cambioCodigoPY, setCambioCodigoPY] = useState('');
-  const [cambioNombreCliente, setCambioNombreCliente] = useState('');
-  const [cambioTelefono, setCambioTelefono] = useState('');
-  const [cambioDireccion, setCambioDireccion] = useState('');
-  const [cambioMontoDelivery, setCambioMontoDelivery] = useState('');
-  const [cambioMontoConCuanto, setCambioMontoConCuanto] = useState('');
-  const [cambioMetodoPago, setCambioMetodoPago] = useState('Efectivo');
-  const [cambioMixtoEfectivo, setCambioMixtoEfectivo] = useState('');
-  const [cambioMixtoTarjeta, setCambioMixtoTarjeta] = useState('');
-  const [cambioMixtoYape, setCambioMixtoYape] = useState('');
-  const [cambioTipoPin, setCambioTipoPin] = useState('');
-  const [cambioTipoError, setCambioTipoError] = useState('');
-  const [cambioTipoCambiando, setCambioTipoCambiando] = useState(false);
 
   // Mostrar solo las ventas del turno activo por defecto (false = Turno, true = Día)
   const [mostrarTodoElDia, setMostrarTodoElDia] = useState(false);
@@ -650,90 +468,7 @@ export default function CajaPage({ currentUser }) {
     }
   }, []);
 
-  const cambiarCantidadApertura = (valor, cantidad) => {
-    const n = Math.max(0, Math.floor(Number(cantidad) || 0));
-    const siguiente = { ...conteoApertura, [valor]: n };
-    setConteoApertura(siguiente);
-    const total = DENOMINACIONES_PEN.reduce((s, d) => s + d.valor * (Number(siguiente[d.valor]) || 0), 0);
-    setMontoInicialInput(DENOMINACIONES_PEN.some(d => Number(siguiente[d.valor]) > 0) ? total.toFixed(2) : '');
-  };
 
-  const handleAbrirCaja = async (e) => {
-    e?.preventDefault();
-    setErrorApertura('');
-    const cajero = cajeroNombre || currentUser?.nombre || 'Cajero';
-    const monto = parseMonto(montoInicialInput);
-    if (isNaN(monto) || monto < 0) {
-      setErrorApertura('El fondo inicial debe ser un número válido mayor o igual a 0.');
-      return;
-    }
-
-    setGuardandoApertura(true);
-    try {
-      const res = await api.abrirCaja({
-        cajeroNombre: cajero,
-        montoInicial: Math.max(0, monto),
-        notaApertura: notaAperturaInput.trim() || null,
-      });
-
-      if (res.error) {
-        setErrorApertura(res.error);
-        return;
-      }
-
-      setModalAperturaOpen(false);
-      setModoOtroCajero(false);
-      setConteoApertura({});
-      setMontoInicialInput('');
-      setNotaAperturaInput('');
-      await fetchCajaData();
-      addToast(`🔓 Turno iniciado exitosamente por ${cajero}. Fondo inicial: S/ ${monto.toFixed(2)}`, 'success');
-    } catch (err) {
-      setErrorApertura('Error al abrir caja: ' + err.message);
-    } finally {
-      setGuardandoApertura(false);
-    }
-  };
-
-  const handleRegistrarSalidaCaja = async (e) => {
-    e?.preventDefault();
-    setErrorSalidaCaja('');
-    const monto = parseMonto(montoSalidaCaja);
-    if (isNaN(monto) || monto <= 0) {
-      setErrorSalidaCaja('Ingresa un monto válido mayor a S/ 0.00');
-      return;
-    }
-    const esIngreso = tipoMovimientoCaja === 'INGRESO';
-    if (!motivoSalidaCaja.trim()) {
-      setErrorSalidaCaja(esIngreso ? 'Ingresa el motivo del ingreso de dinero.' : 'Ingresa el motivo del retiro o salida de dinero.');
-      return;
-    }
-
-    setGuardandoSalidaCaja(true);
-    try {
-      const res = await api.registrarMovimientoCaja({
-        monto,
-        motivo: motivoSalidaCaja.trim(),
-        tipo: esIngreso ? 'INGRESO' : 'RETIRO',
-        cajeroNombre: usuarioOperador
-      });
-      if (res.error) {
-        setErrorSalidaCaja(res.error);
-        return;
-      }
-      setModalSalidaCajaOpen(false);
-      setMontoSalidaCaja('');
-      setMotivoSalidaCaja('');
-      await fetchCajaData();
-      addToast(esIngreso
-        ? `💵 Ingreso de S/ ${monto.toFixed(2)} registrado en caja`
-        : `💸 Salida de S/ ${monto.toFixed(2)} registrada correctamente de caja`, 'success');
-    } catch (err) {
-      setErrorSalidaCaja('Error al registrar el movimiento: ' + err.message);
-    } finally {
-      setGuardandoSalidaCaja(false);
-    }
-  };
 
   useEffect(() => {
     // Carga inicial completa de todo el turno
@@ -1288,208 +1023,7 @@ export default function CajaPage({ currentUser }) {
   };
 
   // --- Cambiar método de pago de una venta existente ---
-  const handleCambiarMetodoPago = async () => {
-    if (!cambioPin.trim()) { setCambioError('Ingresa el PIN de Administrador.'); return; }
-    if (!cambioNuevoMetodo) { setCambioError('Selecciona el nuevo método de pago.'); return; }
-    
-    let finalMontoEfectivo = 0;
-    let finalMontoTarjeta = 0;
-    let finalMontoYape = 0;
-    const total = ventaACambiar.total;
 
-    if (cambioNuevoMetodo === 'Mixto') {
-      const efecVal = parseFloat(cambioMixtoEfectivo || 0);
-      const tarjVal = parseFloat(cambioMixtoTarjeta || 0);
-      const yapeVal = parseFloat(cambioMixtoYape || 0);
-
-      if (efecVal < 0 || tarjVal < 0 || yapeVal < 0) {
-        setCambioError('Los montos de pago no pueden ser valores negativos.');
-        return;
-      }
-
-      if (tarjVal + yapeVal > total) {
-        setCambioError('La suma de Tarjeta y Yape / Plin no puede superar el total a pagar.');
-        return;
-      }
-
-      const restante = total - (tarjVal + yapeVal);
-      if (efecVal < restante) {
-        setCambioError(`Monto insuficiente. Debes cubrir el total de S/ ${total.toFixed(2)}. Faltan S/ ${(restante - efecVal).toFixed(2)}`);
-        return;
-      }
-
-      finalMontoEfectivo = restante;
-      finalMontoTarjeta = tarjVal;
-      finalMontoYape = yapeVal;
-    }
-
-    setCambiando(true);
-    setCambioError('');
-    try {
-      const res = await api.cambiarMetodoPago(ventaACambiar.id, cambioNuevoMetodo, cambioPin.trim(), {
-        montoEfectivo: finalMontoEfectivo,
-        montoTarjeta: finalMontoTarjeta,
-        montoYape: finalMontoYape
-      });
-      if (res.error) { setCambioError(res.error); return; }
-      // Actualizar el estado local de ventas sin recargar
-      setVentas(prev => prev.map(v => v.id === ventaACambiar.id ? { 
-        ...v, 
-        metodoPago: cambioNuevoMetodo,
-        montoEfectivo: finalMontoEfectivo,
-        montoTarjeta: finalMontoTarjeta,
-        montoYape: finalMontoYape 
-      } : v));
-      setCambioMetodoModal(false);
-      setVentaACambiar(null);
-      setCambioPin('');
-      setCambioNuevoMetodo('Efectivo');
-      setCambioMixtoEfectivo('');
-      setCambioMixtoTarjeta('');
-      setCambioMixtoYape('');
-      await fetchCajaData();
-    } catch (err) {
-      setCambioError('Error de conexión: ' + err.message);
-    } finally {
-      setCambiando(false);
-    }
-  };
-
-  // --- Cambiar tipo de entrega de una venta existente ---
-  const abrirCambioTipoEntregaModal = (v) => {
-    setVentaATipoCambiar(v);
-    setCambioTipoPin('');
-    setCambioTipoError('');
-    
-    let currentType = 'ParaLlevar';
-    let currentCodePY = '';
-    let currentName = '';
-    let currentPhone = '';
-    let currentDir = '';
-    let currentFee = '';
-    let currentPayWith = '';
-    let currentMethod = v.metodoPago || 'Efectivo';
-
-    if (v.codigoPedidosYa) {
-      if (v.codigoPedidosYa.startsWith('DELIVERY -')) {
-        currentType = 'DeliveryPropio';
-        const parsed = parseDeliveryInfo(v.codigoPedidosYa);
-        if (parsed) {
-          currentName = parsed.nombre;
-          currentPhone = parsed.telefono;
-          currentDir = parsed.direccion;
-          currentFee = parsed.montoDelivery || '';
-          currentPayWith = parsed.conCuanto || '';
-        }
-      } else if (v.codigoPedidosYa.startsWith('LLEVAR -')) {
-        currentType = 'ParaLlevar';
-        currentName = v.codigoPedidosYa.replace('LLEVAR - ', '');
-      } else {
-        currentType = 'PedidosYa';
-        currentCodePY = v.codigoPedidosYa;
-        currentName = 'PEDIDOS YA';
-        currentMethod = 'PedidosYa';
-      }
-    }
-
-    setCambioNuevoTipo(currentType);
-    setCambioCodigoPY(currentCodePY);
-    setCambioNombreCliente(currentName);
-    setCambioTelefono(currentPhone);
-    setCambioDireccion(currentDir);
-    setCambioMontoDelivery(currentFee);
-    setCambioMontoConCuanto(currentPayWith);
-    setCambioMetodoPago(currentMethod === 'PedidosYa' ? 'Efectivo' : currentMethod);
-    setCambioTipoEntregaModal(true);
-  };
-
-  const handleCambiarTipoEntrega = async () => {
-    if (!cambioTipoPin.trim()) { setCambioTipoError('Ingresa el PIN de Administrador.'); return; }
-    
-    if (cambioNuevoTipo === 'PedidosYa' && !cambioCodigoPY.trim()) {
-      setCambioTipoError('Ingresa el Código de PedidosYa.');
-      return;
-    }
-    if ((cambioNuevoTipo === 'ParaLlevar' || cambioNuevoTipo === 'DeliveryPropio') && !cambioNombreCliente.trim()) {
-      setCambioTipoError('Ingresa el nombre del cliente.');
-      return;
-    }
-    if (cambioNuevoTipo === 'DeliveryPropio' && !cambioDireccion.trim()) {
-      setCambioTipoError('Ingresa la dirección de envío.');
-      return;
-    }
-
-    setCambioTipoCambiando(true);
-    setCambioTipoError('');
-
-    try {
-      const res = await api.cambiarTipoEntrega(ventaATipoCambiar.id, {
-        tipoEntrega: cambioNuevoTipo,
-        codigoPedidosYa: cambioCodigoPY.trim(),
-        nombreCliente: cambioNombreCliente.trim(),
-        telefono: cambioTelefono.trim(),
-        direccion: cambioDireccion.trim(),
-        montoDelivery: parseFloat(cambioMontoDelivery || 0),
-        montoConCuanto: parseFloat(cambioMontoConCuanto || 0),
-        metodoPago: cambioMetodoPago,
-        pin: cambioTipoPin.trim()
-      });
-
-      if (res.error) {
-        setCambioTipoError(res.error);
-        return;
-      }
-
-      await fetchCajaData();
-      setCambioTipoEntregaModal(false);
-      setVentaATipoCambiar(null);
-      setCambioTipoPin('');
-      aviso.exito('Tipo de entrega corregido exitosamente.');
-    } catch (err) {
-      setCambioTipoError('Error de conexión: ' + err.message);
-    } finally {
-      setCambioTipoCambiando(false);
-    }
-  };
-
-  const abrirAnularVentaModal = (v) => {
-    setVentaAAnular(v);
-    setAnularPin('');
-    setAnularMotivo('');
-    setAnularError('');
-    setAnularCargando(false);
-    setAnularVentaModal(true);
-  };
-
-  const procesarAnulacionVenta = async () => {
-    if (!anularPin) {
-      setAnularError('Por favor ingresa el PIN de Administrador.');
-      return;
-    }
-    if (!anularMotivo.trim()) {
-      setAnularError('Por favor ingresa el motivo de la devolución / anulación.');
-      return;
-    }
-    setAnularCargando(true);
-    setAnularError('');
-    try {
-      const res = await api.anularVenta(ventaAAnular.id, anularPin, anularMotivo);
-      if (res.error) {
-        setAnularError(res.error);
-        return;
-      }
-      setAnularVentaModal(false);
-      setVentaAAnular(null);
-      setAnularPin('');
-      setAnularMotivo('');
-      await fetchCajaData();
-      aviso.exito('Devolución / Anulación registrada con éxito. La venta ha sido ajustada a S/ 0.00 en caja.');
-    } catch (err) {
-      setAnularError('Error al procesar devolución: ' + err.message);
-    } finally {
-      setAnularCargando(false);
-    }
-  };
 
   // --- Modal PedidosYa ---
   const abrirDeliveryModal = async () => {
@@ -2566,13 +2100,7 @@ export default function CajaPage({ currentUser }) {
             {cajaEstado.abierto && (
               <button
                 type="button"
-                onClick={() => {
-                  setMontoSalidaCaja('');
-                  setMotivoSalidaCaja('');
-                  setErrorSalidaCaja('');
-                  setTipoMovimientoCaja('RETIRO');
-                  setModalSalidaCajaOpen(true);
-                }}
+                onClick={() => abrirMovimientoGaveta('RETIRO')}
                 className="h-10 px-3.5 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs active:scale-[0.98] shrink-0 whitespace-nowrap"
                 title="Retirar o ingresar dinero en la gaveta física"
               >
@@ -2592,13 +2120,7 @@ export default function CajaPage({ currentUser }) {
             ) : (
               <button
                 type="button"
-                onClick={() => {
-                  setConteoApertura({});
-                  setMontoInicialInput('');
-                  setNotaAperturaInput('');
-                  setErrorApertura('');
-                  setModalAperturaOpen(true);
-                }}
+                onClick={() => setModalAperturaOpen(true)}
                 className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-sm font-bold text-white shadow-sm shadow-emerald-600/25 transition-all active:scale-[0.98] shrink-0 whitespace-nowrap"
                 title="Iniciar turno y registrar fondo de sencillo"
               >
@@ -2993,17 +2515,11 @@ export default function CajaPage({ currentUser }) {
       <ModalDetalleVenta
         venta={ventaDetalle}
         onCerrar={() => setVentaDetalleId(null)}
-        onAbrirAnulacion={(v) => abrirAnularVentaModal(v)}
+        onAbrirAnulacion={(v) => abrirAnulacionVenta(v)}
         onEnviarWhatsApp={(v) => enviarPorWhatsApp(v)}
         onReimprimir={(v) => reimprimirComprobante(v)}
-        onEditarMetodoPago={(v) => {
-          setVentaACambiar(v);
-          setCambioNuevoMetodo(v.metodoPago);
-          setCambioPin('');
-          setCambioError('');
-          setCambioMetodoModal(true);
-        }}
-        onEditarTipoEntrega={(v) => abrirCambioTipoEntregaModal(v)}
+        onEditarMetodoPago={(v) => abrirCambioMetodo(v)}
+        onEditarTipoEntrega={(v) => abrirCambioTipoEntrega(v)}
         estiloMetodo={estiloMetodo}
         itemsDeVenta={itemsDeVenta}
         clienteDeVenta={clienteDeVenta}
