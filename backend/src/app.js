@@ -13,7 +13,9 @@ const { manejarErrores, rutaNoEncontrada } = require('./middlewares/errores');
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+// Las compras pueden traer el XML de SUNAT completo; el resto de la API, como máximo 100 KB
+app.use('/api/compras', express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '100kb' }));
 
 // Un router por módulo (ver src/rutas/)
 app.use(require('./rutas/configuracion'));

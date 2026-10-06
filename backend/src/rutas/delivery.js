@@ -1,13 +1,16 @@
 // Rutas de pedidos para llevar y delivery
 const express = require('express');
 const { prisma } = require('../db');
-const { calcularSubtotalEIgv, limpiarCodigoPago } = require('../servicios/dinero');
+const { calcularSubtotalEIgv, limpiarCodigoPago, verificarPagoMixto } = require('../servicios/dinero');
 const { evaluarEstadoEnsalada, expandPedidoItemsForDb } = require('../servicios/pedidos');
 const { ErrorApp } = require('../middlewares/errores');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { pedidoLlevar } = require('../../shared/esquemas/pedidos.js');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
-router.post('/api/pedidos/llevar', async (req, res, next) => {
+router.post('/api/pedidos/llevar', validar({ body: pedidoLlevar }), async (req, res, next) => {
   const {
     codigoPedidosYa,
     cajero,
@@ -92,6 +95,9 @@ router.post('/api/pedidos/llevar', async (req, res, next) => {
       finalMontoYape = grandTotal;
     } else if (finalMetodoPago === 'Crédito') {
       finalMontoCredito = grandTotal;
+    }
+    if (finalMetodoPago === 'Mixto') {
+      verificarPagoMixto({ efectivo: finalMontoEfectivo, tarjeta: finalMontoTarjeta, yape: finalMontoYape, credito: finalMontoCredito }, grandTotal);
     }
 
     if (finalMontoCredito > 0 && !clienteCreditoId) {
@@ -250,7 +256,7 @@ router.get('/api/pedidos/llevar', async (req, res, next) => {
 });
 
 // PUT /api/pedidos/llevar/:id → Modificar un pedido de llevar/delivery activo
-router.put('/api/pedidos/llevar/:id', async (req, res, next) => {
+router.put('/api/pedidos/llevar/:id', validar({ body: pedidoLlevar }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const {
     codigoPedidosYa,
@@ -385,6 +391,9 @@ router.put('/api/pedidos/llevar/:id', async (req, res, next) => {
         finalMontoYape = grandTotal;
       } else if (finalMetodoPago === 'Crédito') {
         finalMontoCredito = grandTotal;
+      }
+      if (finalMetodoPago === 'Mixto') {
+        verificarPagoMixto({ efectivo: finalMontoEfectivo, tarjeta: finalMontoTarjeta, yape: finalMontoYape, credito: finalMontoCredito }, grandTotal);
       }
 
       if (finalMontoCredito > 0 && !clienteCreditoId) {

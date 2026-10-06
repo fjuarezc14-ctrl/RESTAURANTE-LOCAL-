@@ -4,8 +4,11 @@ const { prisma } = require('../db');
 const { loginRateLimiter, registerLoginFailure, registerLoginSuccess } = require('../middlewares/limiteLogin');
 const { generarPinSignature } = require('../servicios/auth');
 const { ErrorApp } = require('../middlewares/errores');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { loginPin, usuarioEdicion, usuarioNuevo } = require('../../shared/esquemas/usuarios.js');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // USUARIOS
@@ -23,7 +26,7 @@ router.get('/api/usuarios', async (req, res, next) => {
 // El rol Administrador siempre tiene acceso a todos los módulos
 const PERMISOS_ADMINISTRADOR = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
 
-router.post('/api/usuarios', async (req, res, next) => {
+router.post('/api/usuarios', validar({ body: usuarioNuevo }), async (req, res, next) => {
   try {
     // Validar PIN único
     const duplicate = await prisma.usuario.findFirst({
@@ -49,7 +52,7 @@ router.post('/api/usuarios', async (req, res, next) => {
   }
 });
 
-router.put('/api/usuarios/:id', async (req, res, next) => {
+router.put('/api/usuarios/:id', validar({ body: usuarioEdicion }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   try {
     const target = await prisma.usuario.findUnique({ where: { id } });
@@ -103,7 +106,7 @@ router.put('/api/usuarios/:id', async (req, res, next) => {
   }
 });
 
-router.post('/api/usuarios/login', loginRateLimiter, async (req, res, next) => {
+router.post('/api/usuarios/login', loginRateLimiter, validar({ body: loginPin }), async (req, res, next) => {
   const { pin } = req.body;
   try {
     const user = await prisma.usuario.findFirst({
@@ -122,7 +125,7 @@ router.post('/api/usuarios/login', loginRateLimiter, async (req, res, next) => {
   }
 });
 
-router.post('/api/usuarios/validate-auth', async (req, res, next) => {
+router.post('/api/usuarios/validate-auth', validar({ body: loginPin }), async (req, res, next) => {
   const { pin } = req.body;
   try {
     const user = await prisma.usuario.findFirst({
@@ -142,9 +145,11 @@ router.post('/api/usuarios/validate-auth', async (req, res, next) => {
   }
 });
 
-router.get('/api/usuarios/check/:id', async (req, res, next) => {
+// :usuarioId (no :id) para no pasar por validarIdsEnUrl: con un ID inválido responde exists:false y la pantalla
+// cierra la sesión (si respondiera error, la pantalla asumiría que el usuario sigue activo). Se reemplaza en la tarea 7.
+router.get('/api/usuarios/check/:usuarioId', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.usuarioId);
     if (isNaN(id)) return res.json({ exists: false });
     const user = await prisma.usuario.findUnique({
       where: { id }

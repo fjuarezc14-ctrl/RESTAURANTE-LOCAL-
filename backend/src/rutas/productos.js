@@ -1,8 +1,11 @@
 // Rutas de productos de la carta
 const express = require('express');
 const { prisma } = require('../db');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { productoEdicion, productoNuevo } = require('../../shared/esquemas/carta.js');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // PRODUCTOS (CARTA)
@@ -25,7 +28,7 @@ router.get('/api/productos', async (req, res, next) => {
   }
 });
 
-router.post('/api/productos', async (req, res, next) => {
+router.post('/api/productos', validar({ body: productoNuevo }), async (req, res, next) => {
   try {
     const { nombre, categoria, precio, tipoStock, stock, requiereGuarnicion, opcionesConfig, componentes, complementos } = req.body;
 
@@ -48,7 +51,7 @@ router.post('/api/productos', async (req, res, next) => {
   }
 });
 
-router.put('/api/productos/:id', async (req, res, next) => {
+router.put('/api/productos/:id', validar({ body: productoEdicion }), async (req, res, next) => {
   try {
     const data = {};
     if (req.body.nombre !== undefined) data.nombre = String(req.body.nombre);
