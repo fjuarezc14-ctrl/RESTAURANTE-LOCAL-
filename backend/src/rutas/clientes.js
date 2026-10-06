@@ -2,6 +2,7 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { parsearCreditoSplit } = require('../servicios/dinero');
+const { ErrorApp } = require('../middlewares/errores');
 
 const router = express.Router();
 
@@ -10,7 +11,7 @@ const router = express.Router();
 // ============================================================
 
 // GET /api/clientes → Listar clientes autorizados con crédito activo
-router.get('/api/clientes', async (req, res) => {
+router.get('/api/clientes', async (req, res, next) => {
   try {
     const clientes = await prisma.cliente.findMany({
       where: { activo: true, tieneCredito: true },
@@ -68,12 +69,12 @@ router.get('/api/clientes', async (req, res) => {
 
     res.json(formateados);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/clientes/directorio → Directorio general de clientes de consumo (paginado + buscador)
-router.get('/api/clientes/directorio', async (req, res) => {
+router.get('/api/clientes/directorio', async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 15));
@@ -171,16 +172,16 @@ router.get('/api/clientes/directorio', async (req, res) => {
       totalPages: Math.ceil(total / limit) || 1,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /api/clientes → Crear un nuevo cliente
-router.post('/api/clientes', async (req, res) => {
+router.post('/api/clientes', async (req, res, next) => {
   try {
     const { nombre, tipoDoc, numDoc, telefono, direccion, esTrabajador, usuarioId, tieneCredito } = req.body;
     if (!nombre) {
-      return res.status(400).json({ error: 'El nombre del cliente es obligatorio.' });
+      return next(new ErrorApp('VALIDACION', 'El nombre del cliente es obligatorio.', { campo: 'nombre' }));
     }
     const cliente = await prisma.cliente.create({
       data: {
@@ -196,12 +197,12 @@ router.post('/api/clientes', async (req, res) => {
     });
     res.json(cliente);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT /api/clientes/:id → Editar un cliente
-router.put('/api/clientes/:id', async (req, res) => {
+router.put('/api/clientes/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const data = {};
@@ -217,30 +218,30 @@ router.put('/api/clientes/:id', async (req, res) => {
     const cliente = await prisma.cliente.update({ where: { id }, data });
     res.json(cliente);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /api/clientes/:id → Desactivar un cliente
-router.delete('/api/clientes/:id', async (req, res) => {
+router.delete('/api/clientes/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     await prisma.cliente.update({ where: { id }, data: { activo: false } });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/clientes/:id → Ver detalle de cuenta corriente de un cliente
-router.get('/api/clientes/:id', async (req, res) => {
+router.get('/api/clientes/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const cliente = await prisma.cliente.findUnique({
       where: { id },
       include: { AbonosCredito: { orderBy: { creadoEn: 'desc' } } },
     });
-    if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado.' });
+    if (!cliente) return next(new ErrorApp('NO_ENCONTRADO', 'Cliente no encontrado.'));
 
     // Buscar todas las ventas que contengan crédito para este cliente (directo o por split)
     const ventasPosibles = await prisma.venta.findMany({
@@ -292,31 +293,28 @@ router.get('/api/clientes/:id', async (req, res) => {
       ventasCredito,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /api/clientes/:id/abonar → Registrar un abono al crédito
-router.post('/api/clientes/:id/abonar', async (req, res) => {
+router.post('/api/clientes/:id/abonar', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const { monto, metodoPago, montoEfectivo, montoTarjeta, montoYape, registradoPor, nota } = req.body;
 
     if (!monto || parseFloat(monto) <= 0) {
-      return res.status(400).json({ error: 'El monto del abono debe ser mayor a 0.' });
+      return next(new ErrorApp('VALIDACION', 'El monto del abono debe ser mayor a 0.', { campo: 'monto' }));
     }
 
     // 1. Validar que la caja esté abierta (BUG-05)
     const turnoActivo = await prisma.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
     if (!turnoActivo) {
-      return res.status(400).json({
-        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de registrar abonos.',
-        cajaCerrada: true,
-      });
+      return next(new ErrorApp('CAJA_CERRADA', 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de registrar abonos.'));
     }
 
     const cliente = await prisma.cliente.findUnique({ where: { id } });
-    if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado.' });
+    if (!cliente) return next(new ErrorApp('NO_ENCONTRADO', 'Cliente no encontrado.'));
 
     const montoNum = Math.round(parseFloat(monto) * 100) / 100;
 
@@ -353,15 +351,11 @@ router.post('/api/clientes/:id/abonar', async (req, res) => {
     const saldoPendiente = Math.round((totalConsumido - totalAbonado) * 100) / 100;
 
     if (saldoPendiente <= 0) {
-      return res.status(400).json({
-        error: `El cliente "${cliente.nombre}" no tiene saldo pendiente por pagar (Saldo: S/ 0.00).`
-      });
+      return next(new ErrorApp('VALIDACION', `El cliente "${cliente.nombre}" no tiene saldo pendiente por pagar (Saldo: S/ 0.00).`, { campo: 'monto' }));
     }
 
     if (montoNum > (saldoPendiente + 0.05)) {
-      return res.status(400).json({
-        error: `El monto del abono (S/ ${montoNum.toFixed(2)}) supera la deuda pendiente del cliente (S/ ${saldoPendiente.toFixed(2)}).`
-      });
+      return next(new ErrorApp('VALIDACION', `El monto del abono (S/ ${montoNum.toFixed(2)}) supera la deuda pendiente del cliente (S/ ${saldoPendiente.toFixed(2)}).`, { campo: 'monto' }));
     }
 
     const finalMetodo = metodoPago || 'Efectivo';
@@ -373,9 +367,7 @@ router.post('/api/clientes/:id/abonar', async (req, res) => {
       finalYape = parseFloat(montoYape || 0);
       const sumaPartes = Math.round((finalEfectivo + finalTarjeta + finalYape) * 100) / 100;
       if (Math.abs(sumaPartes - montoNum) > 0.05) {
-        return res.status(400).json({
-          error: `En pago mixto, la suma de Efectivo (S/ ${finalEfectivo.toFixed(2)}), Tarjeta (S/ ${finalTarjeta.toFixed(2)}) y Yape (S/ ${finalYape.toFixed(2)}) es S/ ${sumaPartes.toFixed(2)}, pero el total a abonar es S/ ${montoNum.toFixed(2)}. Deben coincidir exactamente.`
-        });
+        return next(new ErrorApp('PAGO_NO_CUADRA', `En pago mixto, la suma de Efectivo (S/ ${finalEfectivo.toFixed(2)}), Tarjeta (S/ ${finalTarjeta.toFixed(2)}) y Yape (S/ ${finalYape.toFixed(2)}) es S/ ${sumaPartes.toFixed(2)}, pero el total a abonar es S/ ${montoNum.toFixed(2)}. Deben coincidir exactamente.`, { campo: 'montoEfectivo' }));
       }
     } else if (finalMetodo === 'Efectivo') {
       finalEfectivo = montoNum;
@@ -400,12 +392,12 @@ router.post('/api/clientes/:id/abonar', async (req, res) => {
 
     res.json({ ok: true, abono });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/abonos → Listar todos los abonos registrados (opcional: filtrar por fecha desde)
-router.get('/api/abonos', async (req, res) => {
+router.get('/api/abonos', async (req, res, next) => {
   const { desde } = req.query;
   try {
     const where = {};
@@ -419,12 +411,12 @@ router.get('/api/abonos', async (req, res) => {
     });
     res.json(abonos);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/clientes/ventas/credito → Historial de ventas a crédito (para reportes)
-router.get('/api/clientes/ventas/credito', async (req, res) => {
+router.get('/api/clientes/ventas/credito', async (req, res, next) => {
   try {
     const ventas = await prisma.venta.findMany({
       where: { clienteCreditoId: { not: null }, anulado: false },
@@ -446,14 +438,14 @@ router.get('/api/clientes/ventas/credito', async (req, res) => {
 
     res.json(formateadas);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // ============================================================
 // CONSULTA RUC/DNI SEGURA (APIsNetPe / Decolecta)
 // ============================================================
-router.get('/api/clientes/consulta/:doc', async (req, res) => {
+router.get('/api/clientes/consulta/:doc', async (req, res, next) => {
   const { doc } = req.params;
   const cleaned = doc.trim();
 

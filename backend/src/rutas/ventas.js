@@ -2,6 +2,7 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { calcularSubtotalEIgv, limpiarCodigoPago, obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
+const { ErrorApp } = require('../middlewares/errores');
 
 const router = express.Router();
 
@@ -10,24 +11,24 @@ const router = express.Router();
 // ============================================================
 
 // PATCH /api/ventas/:ventaId/metodo-pago → Corregir método de pago (requiere PIN Administrador)
-router.patch('/api/ventas/:ventaId/metodo-pago', async (req, res) => {
+router.patch('/api/ventas/:ventaId/metodo-pago', async (req, res, next) => {
   const { ventaId } = req.params;
   const { metodoPago, pin, montoEfectivo, montoTarjeta, montoYape, montoCredito, clienteCreditoId } = req.body;
 
   const metodosPermitidos = ['Efectivo', 'Tarjeta', 'Yape', 'PedidosYa', 'Consumo', 'Cortesía', 'Mixto', 'Crédito'];
   if (!metodoPago || !metodosPermitidos.includes(metodoPago)) {
-    return res.status(400).json({ error: `Método de pago inválido. Opciones: ${metodosPermitidos.join(', ')}` });
+    return next(new ErrorApp('VALIDACION', `Método de pago inválido. Opciones: ${metodosPermitidos.join(', ')}`, { campo: 'metodoPago' }));
   }
   if (!pin) {
-    return res.status(400).json({ error: 'Se requiere PIN de Administrador.' });
+    return next(new ErrorApp('AUTORIZACION_REQUERIDA', 'Se requiere PIN de Administrador.', { campo: 'pin' }));
   }
 
   try {
     // Validar PIN
     const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
-    if (!admin) return res.status(401).json({ error: 'PIN incorrecto.' });
+    if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
-      return res.status(403).json({ error: 'Solo el Administrador puede cambiar el método de pago.' });
+      return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar el método de pago.'));
     }
 
     // Obtener la venta con su pedido
@@ -35,10 +36,10 @@ router.patch('/api/ventas/:ventaId/metodo-pago', async (req, res) => {
       where: { id: parseInt(ventaId) },
       include: { pedido: { include: { items: true } } }
     });
-    if (!venta) return res.status(404).json({ error: 'Venta no encontrada.' });
+    if (!venta) return next(new ErrorApp('NO_ENCONTRADO', 'Venta no encontrada.'));
 
     const pedido = venta.pedido;
-    if (!pedido) return res.status(404).json({ error: 'Pedido asociado no encontrado.' });
+    if (!pedido) return next(new ErrorApp('NO_ENCONTRADO', 'Pedido asociado no encontrado.'));
 
     const metodoPagoAnterior = venta.metodoPago;
 
@@ -80,7 +81,7 @@ router.patch('/api/ventas/:ventaId/metodo-pago', async (req, res) => {
     }
 
     if (finalMontoCredito > 0 && !clienteCreditoId) {
-      return res.status(400).json({ error: 'Debe seleccionar un cliente para registrar la venta a crédito.' });
+      return next(new ErrorApp('VALIDACION', 'Debe seleccionar un cliente para registrar la venta a crédito.', { campo: 'clienteCreditoId' }));
     }
 
     // Actualizar Venta
@@ -111,12 +112,12 @@ router.patch('/api/ventas/:ventaId/metodo-pago', async (req, res) => {
 
     res.json({ ok: true, ventaId: ventaActualizada.id, metodoPago: ventaActualizada.metodoPago, cambiadoPor: admin.nombre });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /api/ventas/:ventaId/tipo-entrega → Corregir tipo de entrega (PedidosYa, Para Llevar, Delivery)
-router.patch('/api/ventas/:ventaId/tipo-entrega', async (req, res) => {
+router.patch('/api/ventas/:ventaId/tipo-entrega', async (req, res, next) => {
   const { ventaId } = req.params;
   const {
     tipoEntrega, // "ParaLlevar", "DeliveryPropio", "PedidosYa"
@@ -131,15 +132,15 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', async (req, res) => {
   } = req.body;
 
   if (!pin) {
-    return res.status(400).json({ error: 'Se requiere PIN de Administrador.' });
+    return next(new ErrorApp('AUTORIZACION_REQUERIDA', 'Se requiere PIN de Administrador.', { campo: 'pin' }));
   }
 
   try {
     // Validar PIN
     const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
-    if (!admin) return res.status(401).json({ error: 'PIN incorrecto.' });
+    if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
-      return res.status(403).json({ error: 'Solo el Administrador puede cambiar el tipo de entrega.' });
+      return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar el tipo de entrega.'));
     }
 
     // Obtener la venta con su pedido
@@ -147,10 +148,10 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', async (req, res) => {
       where: { id: parseInt(ventaId) },
       include: { pedido: { include: { items: true } } }
     });
-    if (!venta) return res.status(404).json({ error: 'Venta no encontrada.' });
+    if (!venta) return next(new ErrorApp('NO_ENCONTRADO', 'Venta no encontrada.'));
 
     const pedido = venta.pedido;
-    if (!pedido) return res.status(404).json({ error: 'Pedido asociado no encontrado.' });
+    if (!pedido) return next(new ErrorApp('NO_ENCONTRADO', 'Pedido asociado no encontrado.'));
 
     // Calcular el costo base de los ítems del pedido
     const baseItemsTotal = pedido.items.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
@@ -182,7 +183,7 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', async (req, res) => {
       finalCodigo = `DELIVERY - ${finalNombre.toUpperCase()} [T:${tVal}] [D:${dVal}] [E:${eVal}] [C:${cVal}]`;
       finalNombre = `DELIVERY - ${finalNombre.toUpperCase()} [T:${tVal}] [D:${dVal}] [E:${eVal}] [C:${cVal}]`;
     } else {
-      return res.status(400).json({ error: 'Tipo de entrega inválido.' });
+      return next(new ErrorApp('VALIDACION', 'Tipo de entrega inválido.', { campo: 'tipoEntrega' }));
     }
 
     const { subtotal, igv } = calcularSubtotalEIgv(nuevoTotal);
@@ -215,12 +216,12 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', async (req, res) => {
     res.json({ ok: true, ventaId: ventaActualizada.id, cambiadoPor: admin.nombre });
   } catch (err) {
     console.error('Error al cambiar tipo de entrega:', err);
-    res.status(500).json({ error: 'Error interno: ' + err.message });
+    next(err);
   }
 });
 
 // PATCH /api/ventas/:ventaId/datos-cliente → Corregir datos de facturación / datos de cliente de una venta
-router.patch('/api/ventas/:ventaId/datos-cliente', async (req, res) => {
+router.patch('/api/ventas/:ventaId/datos-cliente', async (req, res, next) => {
   const { ventaId } = req.params;
   const {
     tipoComprobante, // "Boleta" | "Factura" | "Ticket"
@@ -231,22 +232,22 @@ router.patch('/api/ventas/:ventaId/datos-cliente', async (req, res) => {
   } = req.body;
 
   if (!pin) {
-    return res.status(400).json({ error: 'Se requiere PIN de Administrador.' });
+    return next(new ErrorApp('AUTORIZACION_REQUERIDA', 'Se requiere PIN de Administrador.', { campo: 'pin' }));
   }
 
   try {
     // Validar PIN
     const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
-    if (!admin) return res.status(401).json({ error: 'PIN incorrecto.' });
+    if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
-      return res.status(403).json({ error: 'Solo el Administrador puede cambiar los datos del cliente.' });
+      return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar los datos del cliente.'));
     }
 
     // Obtener la venta
     const venta = await prisma.venta.findUnique({
       where: { id: parseInt(ventaId) }
     });
-    if (!venta) return res.status(404).json({ error: 'Venta no encontrada.' });
+    if (!venta) return next(new ErrorApp('NO_ENCONTRADO', 'Venta no encontrada.'));
 
     // Actualizar datos
     const ventaActualizada = await prisma.$transaction(async (tx) => {
@@ -276,24 +277,24 @@ router.patch('/api/ventas/:ventaId/datos-cliente', async (req, res) => {
     res.json({ ok: true, venta: ventaActualizada, cambiadoPor: admin.nombre });
   } catch (err) {
     console.error('Error al cambiar datos de cliente:', err);
-    res.status(500).json({ error: 'Error interno: ' + err.message });
+    next(err);
   }
 });
 
 // PATCH /api/ventas/:ventaId/anular → Anular / Registrar devolución de un pedido entregado
-router.patch('/api/ventas/:ventaId/anular', async (req, res) => {
+router.patch('/api/ventas/:ventaId/anular', async (req, res, next) => {
   const { ventaId } = req.params;
   const { pin, motivo } = req.body;
 
   if (!pin) {
-    return res.status(400).json({ error: 'Se requiere PIN de Administrador.' });
+    return next(new ErrorApp('AUTORIZACION_REQUERIDA', 'Se requiere PIN de Administrador.', { campo: 'pin' }));
   }
 
   try {
     const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
-    if (!admin) return res.status(401).json({ error: 'PIN incorrecto.' });
+    if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
-      return res.status(403).json({ error: 'Solo el Administrador puede anular o registrar devolución de ventas.' });
+      return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede anular o registrar devolución de ventas.'));
     }
 
     const venta = await prisma.venta.findUnique({
@@ -306,10 +307,10 @@ router.patch('/api/ventas/:ventaId/anular', async (req, res) => {
         }
       }
     });
-    if (!venta) return res.status(404).json({ error: 'Venta no encontrada.' });
+    if (!venta) return next(new ErrorApp('NO_ENCONTRADO', 'Venta no encontrada.'));
 
     if (venta.anulado || venta.pedido?.estado === 'Cancelado') {
-      return res.status(400).json({ error: 'Esta venta ya se encuentra anulada / devuelta.' });
+      return next(new ErrorApp('CONFLICTO', 'Esta venta ya se encuentra anulada / devuelta.'));
     }
 
     const motivoFinal = motivo ? String(motivo).trim() : 'Devolución de pedido por cliente';
@@ -390,12 +391,12 @@ router.patch('/api/ventas/:ventaId/anular', async (req, res) => {
     });
   } catch (err) {
     console.error('Error al anular venta:', err);
-    res.status(500).json({ error: 'Error al anular venta: ' + err.message });
+    next(err);
   }
 });
 
 // POST /api/ventas → Cobrar mesa (acepta pedidoIds array o pedidoId simple)
-router.post('/api/ventas', async (req, res) => {
+router.post('/api/ventas', async (req, res, next) => {
   const {
     pedidoId,
     pedidoIds,
@@ -425,10 +426,7 @@ router.post('/api/ventas', async (req, res) => {
     // 0. Validar si la caja se encuentra abierta para procesar cobros (BUG-05)
     const turnoActivo = await prisma.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
     if (!turnoActivo) {
-      return res.status(400).json({
-        error: 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de realizar cobros.',
-        cajaCerrada: true,
-      });
+      return next(new ErrorApp('CAJA_CERRADA', 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de realizar cobros.'));
     }
 
     // 1. Validar si ya existe una venta asociada a estos pedidos (evita error de doble cobro por concurrencia)
@@ -454,10 +452,7 @@ router.post('/api/ventas', async (req, res) => {
     });
     if (enPreparacion.length > 0) {
       const pendientes = enPreparacion.reduce((s, p) => s + p.items.reduce((a, i) => a + i.cantidad, 0), 0);
-      return res.status(409).json({
-        error: `La mesa todavía tiene ${pendientes > 0 ? `${pendientes} plato(s)` : 'pedidos'} en preparación. Cóbrala cuando cocina y barra marquen todo como listo.`,
-        enPreparacion: true,
-      });
+      return next(new ErrorApp('PEDIDO_NO_SERVIDO', `La mesa todavía tiene ${pendientes > 0 ? `${pendientes} plato(s)` : 'pedidos'} en preparación. Cóbrala cuando cocina y barra marquen todo como listo.`));
     }
 
     // 1.0b Tampoco se cobra si hay platos listos que el mozo aún no llevó a la mesa
@@ -467,10 +462,7 @@ router.post('/api/ventas', async (req, res) => {
     });
     if (porServir.length > 0) {
       const detalle = porServir.map(i => `${i.cantidad}x ${i.nombre}`).join(', ');
-      return res.status(409).json({
-        error: `La mesa tiene platos que el mozo aún no ha servido: ${detalle}. Cóbrala cuando el mozo los marque como servidos.`,
-        porServir: true,
-      });
+      return next(new ErrorApp('PEDIDO_NO_SERVIDO', `La mesa tiene platos que el mozo aún no ha servido: ${detalle}. Cóbrala cuando el mozo los marque como servidos.`));
     }
 
     const venta = await prisma.$transaction(async (tx) => {
@@ -603,7 +595,7 @@ router.post('/api/ventas', async (req, res) => {
       }
 
       if (finalMontoCredito > 0 && !finalClienteCreditoId) {
-        throw new Error('Debe seleccionar al menos un cliente para registrar la venta a crédito.');
+        throw new ErrorApp('VALIDACION', 'Debe seleccionar al menos un cliente para registrar la venta a crédito.', { campo: 'clienteCreditoId' });
       }
 
       // Solo se emiten tickets de venta: la boleta o factura la emite la empresa en el portal de SUNAT
@@ -749,12 +741,12 @@ router.post('/api/ventas', async (req, res) => {
         });
       }
     }
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/ventas → Historial detallado de las ventas del día o rango de fechas (hora Perú)
-router.get('/api/ventas', async (req, res) => {
+router.get('/api/ventas', async (req, res, next) => {
   const { desde, hasta } = req.query;
   try {
     let filtroFecha = {};
@@ -843,12 +835,12 @@ router.get('/api/ventas', async (req, res) => {
 
     res.json(formateadas);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/ventas/resumen → Estadísticas del día (hora Perú)
-router.get('/api/ventas/resumen', async (req, res) => {
+router.get('/api/ventas/resumen', async (req, res, next) => {
   try {
     const { desde } = req.query;
     let filterDate;
@@ -959,7 +951,7 @@ router.get('/api/ventas/resumen', async (req, res) => {
       igvVentas: totalIGVVentas,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

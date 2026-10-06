@@ -1,7 +1,7 @@
 // Cobro de mesas: POST /api/ventas
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  abrirCaja, api, cobrar, crearBase, crearCliente, enviarPedido, item, limpiarBD, mesaListaParaCobrar, prisma,
+  abrirCaja, api, cobrar, crearBase, crearCliente, enviarPedido, esperarError, item, limpiarBD, mesaListaParaCobrar, prisma,
 } from './helpers.mjs';
 
 let carta;
@@ -15,18 +15,14 @@ beforeEach(async () => {
 describe('requisitos para cobrar', () => {
   it('no cobra con la caja cerrada', async () => {
     const pedidoId = await pedidoDeMesa();
-    const res = await cobrar(pedidoId);
-    expect(res.status).toBe(400);
-    expect(res.body.cajaCerrada).toBe(true);
+    esperarError(await cobrar(pedidoId), 409, 'CAJA_CERRADA');
     expect(await prisma.venta.count()).toBe(0);
   });
 
   it('no cobra una mesa con platos en preparación', async () => {
     await abrirCaja();
     const pedidoId = await enviarPedido(1, [item(carta.lomo, 1)]);
-    const res = await cobrar(pedidoId);
-    expect(res.status).toBe(409);
-    expect(res.body.enPreparacion).toBe(true);
+    esperarError(await cobrar(pedidoId), 409, 'PEDIDO_NO_SERVIDO');
     expect(await prisma.venta.count()).toBe(0);
   });
 
@@ -34,9 +30,7 @@ describe('requisitos para cobrar', () => {
     await abrirCaja();
     const pedidoId = await enviarPedido(1, [item(carta.lomo, 1)]);
     await api().patch(`/api/pedidos/${pedidoId}/servir`);
-    const res = await cobrar(pedidoId);
-    expect(res.status).toBe(409);
-    expect(res.body.porServir).toBe(true);
+    esperarError(await cobrar(pedidoId), 409, 'PEDIDO_NO_SERVIDO');
   });
 });
 
@@ -129,8 +123,7 @@ describe('medios de pago', () => {
   it('crédito sin cliente: no registra la venta', async () => {
     await abrirCaja();
     const pedidoId = await pedidoDeMesa();
-    const res = await cobrar(pedidoId, { metodoPago: 'Crédito' });
-    expect(res.status).toBeGreaterThanOrEqual(400);
+    esperarError(await cobrar(pedidoId, { metodoPago: 'Crédito' }), 400, 'VALIDACION', 'clienteCreditoId');
     expect(await prisma.venta.count()).toBe(0);
     expect((await prisma.pedido.findUnique({ where: { id: pedidoId } })).estado).toBe('Servido');
   });

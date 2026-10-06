@@ -8,7 +8,7 @@ const router = express.Router();
 // PRODUCTOS (CARTA)
 // ============================================================
 
-router.get('/api/productos', async (req, res) => {
+router.get('/api/productos', async (req, res, next) => {
   try {
     const productos = await prisma.producto.findMany({
       where: { activo: true },
@@ -21,11 +21,11 @@ router.get('/api/productos', async (req, res) => {
 
     res.json(productosEnriquecidos);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-router.post('/api/productos', async (req, res) => {
+router.post('/api/productos', async (req, res, next) => {
   try {
     const { nombre, categoria, precio, tipoStock, stock, requiereGuarnicion, opcionesConfig, componentes, complementos } = req.body;
 
@@ -44,11 +44,11 @@ router.post('/api/productos', async (req, res) => {
     });
     res.json(prod);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-router.put('/api/productos/:id', async (req, res) => {
+router.put('/api/productos/:id', async (req, res, next) => {
   try {
     const data = {};
     if (req.body.nombre !== undefined) data.nombre = String(req.body.nombre);
@@ -74,11 +74,11 @@ router.put('/api/productos/:id', async (req, res) => {
     });
     res.json(prod);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-router.delete('/api/productos/:id', async (req, res) => {
+router.delete('/api/productos/:id', async (req, res, next) => {
   try {
     await prisma.producto.update({
       where: { id: parseInt(req.params.id) },
@@ -86,7 +86,7 @@ router.delete('/api/productos/:id', async (req, res) => {
     });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

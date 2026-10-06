@@ -14,6 +14,13 @@ export const { app, prisma } = require('../src/app.js');
 
 export const api = () => request(app);
 
+// Verifica el formato único de error: { error: { codigo, mensaje, campo?, datos? } }
+export function esperarError(res, status, codigo, campo) {
+  expect(res.status).toBe(status);
+  expect(res.body.error).toMatchObject({ codigo, mensaje: expect.any(String) });
+  if (campo) expect(res.body.error.campo).toBe(campo);
+}
+
 export const PIN_ADMIN = '1234';
 export const PIN_CAJERO = '2222';
 

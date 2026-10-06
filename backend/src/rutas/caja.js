@@ -2,6 +2,7 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { obtenerMontosVenta } = require('../servicios/dinero');
+const { ErrorApp } = require('../middlewares/errores');
 
 const router = express.Router();
 
@@ -10,7 +11,7 @@ const router = express.Router();
 // ============================================================
 
 // GET /api/caja/estado → Estado en vivo de la caja (ABIERTO / CERRADO) y supervisión en tiempo real
-router.get('/api/caja/estado', async (req, res) => {
+router.get('/api/caja/estado', async (req, res, next) => {
   try {
     const turnoAbierto = await prisma.cierreCaja.findFirst({
       where: { estado: 'ABIERTO' },
@@ -126,20 +127,20 @@ router.get('/api/caja/estado', async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /api/caja/movimientos → Registrar salida (retiro de emergencia) o ingreso extra en la gaveta
-router.post('/api/caja/movimientos', async (req, res) => {
+router.post('/api/caja/movimientos', async (req, res, next) => {
   try {
     const { monto, motivo, tipo = 'RETIRO', cajeroNombre } = req.body;
     const parsedMonto = parseFloat(monto || 0);
     if (isNaN(parsedMonto) || parsedMonto <= 0) {
-      return res.status(400).json({ error: 'El monto debe ser un número válido mayor a 0.' });
+      return next(new ErrorApp('VALIDACION', 'El monto debe ser un número válido mayor a 0.', { campo: 'monto' }));
     }
     if (!motivo || !String(motivo).trim()) {
-      return res.status(400).json({ error: 'Debe especificar el motivo del retiro o salida de caja.' });
+      return next(new ErrorApp('VALIDACION', 'Debe especificar el motivo del retiro o salida de caja.', { campo: 'motivo' }));
     }
 
     const turnoAbierto = await prisma.cierreCaja.findFirst({
@@ -147,7 +148,7 @@ router.post('/api/caja/movimientos', async (req, res) => {
       orderBy: { fechaApertura: 'desc' },
     });
     if (!turnoAbierto) {
-      return res.status(400).json({ error: 'No se pueden registrar salidas de dinero con la caja cerrada.' });
+      return next(new ErrorApp('CAJA_CERRADA', 'No se pueden registrar salidas de dinero con la caja cerrada.'));
     }
 
     const mov = await prisma.movimientoCaja.create({
@@ -163,12 +164,12 @@ router.post('/api/caja/movimientos', async (req, res) => {
     console.log(`💸 Movimiento de Caja registrado [${mov.tipo}]: S/ ${mov.monto.toFixed(2)} - "${mov.motivo}" por ${mov.cajeroNombre}`);
     res.json({ ok: true, movimiento: mov });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/caja/movimientos → Listar salidas y movimientos del turno activo o histórico
-router.get('/api/caja/movimientos', async (req, res) => {
+router.get('/api/caja/movimientos', async (req, res, next) => {
   try {
     const { turnoId, desde, hasta } = req.query;
     let whereClause = {};
@@ -206,17 +207,17 @@ router.get('/api/caja/movimientos', async (req, res) => {
     });
     res.json({ ok: true, movimientos });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /api/caja/apertura → Registrar la apertura formal de turno con fondo inicial
-router.post('/api/caja/apertura', async (req, res) => {
+router.post('/api/caja/apertura', async (req, res, next) => {
   try {
     const { cajeroNombre, montoInicial, notaApertura } = req.body;
 
     if (!cajeroNombre || !String(cajeroNombre).trim()) {
-      return res.status(400).json({ error: 'El nombre del cajero es obligatorio para abrir la caja.' });
+      return next(new ErrorApp('VALIDACION', 'El nombre del cajero es obligatorio para abrir la caja.', { campo: 'cajeroNombre' }));
     }
 
     // Verificar si ya existe un turno abierto
@@ -225,10 +226,7 @@ router.post('/api/caja/apertura', async (req, res) => {
     });
 
     if (turnoExistente) {
-      return res.status(400).json({
-        error: `Ya existe un turno abierto por "${turnoExistente.cajeroNombre}" desde las ${new Date(turnoExistente.fechaApertura).toLocaleTimeString('es-PE')}. Debe cerrarse antes de abrir uno nuevo.`,
-        turno: turnoExistente,
-      });
+      return next(new ErrorApp('CAJA_YA_ABIERTA', `Ya existe un turno abierto por "${turnoExistente.cajeroNombre}" desde las ${new Date(turnoExistente.fechaApertura).toLocaleTimeString('es-PE')}. Debe cerrarse antes de abrir uno nuevo.`));
     }
 
     const fondo = parseFloat(montoInicial || 0);
@@ -251,12 +249,12 @@ router.post('/api/caja/apertura', async (req, res) => {
     console.log(`🔓 Turno de Caja ABIERTO por ${cajeroNombre} con Fondo Inicial S/ ${nuevoTurno.montoInicial.toFixed(2)}`);
     res.json({ ok: true, turno: nuevoTurno });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /api/caja/cierre → Registrar un arqueo y cierre de turno
-router.post('/api/caja/cierre', async (req, res) => {
+router.post('/api/caja/cierre', async (req, res, next) => {
   try {
     const {
       fechaApertura,
@@ -277,7 +275,7 @@ router.post('/api/caja/cierre', async (req, res) => {
     } = req.body;
 
     if (!cajeroNombre) {
-      return res.status(400).json({ error: 'El nombre del cajero es obligatorio.' });
+      return next(new ErrorApp('VALIDACION', 'El nombre del cajero es obligatorio.', { campo: 'cajeroNombre' }));
     }
 
     // Buscar si hay un turno ABIERTO para cerrarlo
@@ -287,7 +285,7 @@ router.post('/api/caja/cierre', async (req, res) => {
     });
 
     if (!turnoAbierto) {
-      return res.status(400).json({ error: 'No hay un turno de caja abierto para cerrar. Debe abrir la caja primero.' });
+      return next(new ErrorApp('CAJA_CERRADA', 'No hay un turno de caja abierto para cerrar. Debe abrir la caja primero.'));
     }
 
     // Validación de que ningún valor monetario sea negativo
@@ -306,9 +304,7 @@ router.post('/api/caja/cierre', async (req, res) => {
 
     const campoInvalido = camposMonetarios.find(c => c.val !== undefined && c.val !== null && parseFloat(c.val) < 0);
     if (campoInvalido) {
-      return res.status(400).json({ 
-        error: `El valor de "${campoInvalido.nombre}" no puede ser negativo. Debe ser 0 o mayor a cero.` 
-      });
+      return next(new ErrorApp('VALIDACION', `El valor de "${campoInvalido.nombre}" no puede ser negativo. Debe ser 0 o mayor a cero.`));
     }
 
     const mInicial = Math.max(0, parseFloat(montoInicial !== undefined && montoInicial !== null ? montoInicial : turnoAbierto.montoInicial || 0));
@@ -347,17 +343,17 @@ router.post('/api/caja/cierre', async (req, res) => {
     console.log(`🔒 Cierre de Caja registrado exitosamente por ${cajeroNombre}: Esperado S/ ${cierre.efectivoEsperado.toFixed(2)}, Contado S/ ${cierre.efectivoContado.toFixed(2)}, Dif: S/ ${cierre.diferencia.toFixed(2)}`);
     res.json({ ok: true, cierre });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /api/caja/cierre-forzado → Cierre administrativo por parte del Administrador
-router.post('/api/caja/cierre-forzado', async (req, res) => {
+router.post('/api/caja/cierre-forzado', async (req, res, next) => {
   try {
     const { adminNombre, adminPin, motivo } = req.body;
 
     if (!adminPin || typeof adminPin !== 'string' || !adminPin.trim()) {
-      return res.status(400).json({ error: 'El PIN de Administrador es obligatorio.' });
+      return next(new ErrorApp('AUTORIZACION_REQUERIDA', 'El PIN de Administrador es obligatorio.', { campo: 'pin' }));
     }
 
     // Validar PIN de administrador
@@ -370,7 +366,7 @@ router.post('/api/caja/cierre-forzado', async (req, res) => {
     });
 
     if (!admin) {
-      return res.status(403).json({ error: 'PIN de Administrador inválido o no autorizado.' });
+      return next(new ErrorApp('SIN_PERMISO', 'PIN de Administrador inválido o no autorizado.', { campo: 'pin' }));
     }
 
     const turnoAbierto = await prisma.cierreCaja.findFirst({
@@ -379,7 +375,7 @@ router.post('/api/caja/cierre-forzado', async (req, res) => {
     });
 
     if (!turnoAbierto) {
-      return res.status(400).json({ error: 'No hay ninguna caja abierta en este momento.' });
+      return next(new ErrorApp('CAJA_CERRADA', 'No hay ninguna caja abierta en este momento.'));
     }
 
     const now = new Date();
@@ -396,12 +392,12 @@ router.post('/api/caja/cierre-forzado', async (req, res) => {
     console.log(`⚠️ Turno #${turnoAbierto.id} cerrado administrativamente por Admin ${admin.nombre}`);
     res.json({ ok: true, mensaje: 'Turno cerrado forzosamente por Administrador con éxito.', cierre });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/caja/ultimo-cierre → Obtener el último cierre de caja registrado
-router.get('/api/caja/ultimo-cierre', async (req, res) => {
+router.get('/api/caja/ultimo-cierre', async (req, res, next) => {
   try {
     const ultimo = await prisma.cierreCaja.findFirst({
       where: { estado: 'CERRADO' },
@@ -409,12 +405,12 @@ router.get('/api/caja/ultimo-cierre', async (req, res) => {
     });
     res.json({ ok: true, ultimoCierre: ultimo });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/caja/cierres → Historial de los últimos cierres de caja
-router.get('/api/caja/cierres', async (req, res) => {
+router.get('/api/caja/cierres', async (req, res, next) => {
   try {
     const limit = parseInt(req.query.limit || 30);
     const cierres = await prisma.cierreCaja.findMany({
@@ -423,7 +419,7 @@ router.get('/api/caja/cierres', async (req, res) => {
     });
     res.json({ ok: true, cierres });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

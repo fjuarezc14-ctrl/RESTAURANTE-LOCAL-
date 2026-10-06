@@ -1,6 +1,7 @@
 // Rutas de ofertas por temporada
 const express = require('express');
 const { prisma } = require('../db');
+const { ErrorApp } = require('../middlewares/errores');
 
 const router = express.Router();
 
@@ -9,21 +10,21 @@ const router = express.Router();
 // ============================================================
 
 // GET /api/ofertas → Listar todas las ofertas
-router.get('/api/ofertas', async (req, res) => {
+router.get('/api/ofertas', async (req, res, next) => {
   try {
     const ofertas = await prisma.oferta.findMany({ orderBy: { creadoEn: 'desc' } });
     res.json(ofertas);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /api/ofertas → Crear nueva oferta (solo Admin)
-router.post('/api/ofertas', async (req, res) => {
+router.post('/api/ofertas', async (req, res, next) => {
   try {
     const { nombre, descripcion, tipoDescuento, valorDescuento, categorias, activa, fechaInicio, fechaFin, creadoPor } = req.body;
     if (!nombre || !tipoDescuento || valorDescuento == null || !categorias || !creadoPor) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios: nombre, tipoDescuento, valorDescuento, categorias, creadoPor' });
+      return next(new ErrorApp('VALIDACION', 'Faltan campos obligatorios: nombre, tipoDescuento, valorDescuento, categorias, creadoPor'));
     }
     const oferta = await prisma.oferta.create({
       data: {
@@ -40,12 +41,12 @@ router.post('/api/ofertas', async (req, res) => {
     });
     res.json(oferta);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT /api/ofertas/:id → Editar oferta
-router.put('/api/ofertas/:id', async (req, res) => {
+router.put('/api/ofertas/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const data = {};
@@ -59,12 +60,12 @@ router.put('/api/ofertas/:id', async (req, res) => {
     const oferta = await prisma.oferta.update({ where: { id }, data });
     res.json(oferta);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /api/ofertas/:id/activar → Activar o desactivar oferta
-router.patch('/api/ofertas/:id/activar', async (req, res) => {
+router.patch('/api/ofertas/:id/activar', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const { activa } = req.body;
@@ -74,18 +75,18 @@ router.patch('/api/ofertas/:id/activar', async (req, res) => {
     });
     res.json({ ok: true, activa: oferta.activa, nombre: oferta.nombre });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /api/ofertas/:id → Eliminar oferta
-router.delete('/api/ofertas/:id', async (req, res) => {
+router.delete('/api/ofertas/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     await prisma.oferta.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

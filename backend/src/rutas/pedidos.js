@@ -3,6 +3,7 @@ const express = require('express');
 const { prisma } = require('../db');
 const { alertasCancelacion } = require('../servicios/cancelaciones');
 const { BARRA_CATEGORIAS } = require('../servicios/empresa');
+const { ErrorApp } = require('../middlewares/errores');
 
 const router = express.Router();
 
@@ -11,7 +12,7 @@ const router = express.Router();
 // ============================================================
 
 // GET /api/pedidos/cocina → Todos los pedidos en Cocina para el monitor
-router.get('/api/pedidos/cocina', async (req, res) => {
+router.get('/api/pedidos/cocina', async (req, res, next) => {
   try {
     const pedidos = await prisma.pedido.findMany({
       where: { estado: 'Cocina' },
@@ -66,12 +67,12 @@ router.get('/api/pedidos/cocina', async (req, res) => {
 
     res.json(formateados);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/pedidos/barra → Todos los pedidos con bebidas pendientes en Cocina
-router.get('/api/pedidos/barra', async (req, res) => {
+router.get('/api/pedidos/barra', async (req, res, next) => {
   try {
     const pedidos = await prisma.pedido.findMany({
       where: { estado: 'Cocina' },
@@ -122,12 +123,12 @@ router.get('/api/pedidos/barra', async (req, res) => {
 
     res.json(formateados);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /api/pedidos/items/:itemId/preparar → Cocinero o Barman marca listo un item de cocina/barra de forma individual
-router.patch('/api/pedidos/items/:itemId/preparar', async (req, res) => {
+router.patch('/api/pedidos/items/:itemId/preparar', async (req, res, next) => {
   const itemId = parseInt(req.params.itemId);
   try {
     const item = await prisma.itemPedido.update({
@@ -159,12 +160,12 @@ router.patch('/api/pedidos/items/:itemId/preparar', async (req, res) => {
 
     res.json({ ok: true, todosListos });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /api/pedidos/:id/preparar → Cocinero o Barman marca listo su sección
-router.patch('/api/pedidos/:id/preparar', async (req, res) => {
+router.patch('/api/pedidos/:id/preparar', async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { seccion } = req.body; // "cocina" o "barra"
 
@@ -174,7 +175,7 @@ router.patch('/api/pedidos/:id/preparar', async (req, res) => {
       include: { items: { include: { producto: true } } },
     });
 
-    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (!pedido) return next(new ErrorApp('NO_ENCONTRADO', 'Pedido no encontrado'));
 
     // Filtrar los items que corresponden a la sección despachada
     const itemsAActualizar = (pedido.items || []).filter(i => {
@@ -222,12 +223,12 @@ router.patch('/api/pedidos/:id/preparar', async (req, res) => {
 
     res.json({ ok: true, todosListos });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /api/pedidos/:id/servir → Cocinero marca como Listo
-router.patch('/api/pedidos/:id/servir', async (req, res) => {
+router.patch('/api/pedidos/:id/servir', async (req, res, next) => {
   const id = parseInt(req.params.id);
   try {
     // Marcar items como historial
@@ -257,12 +258,12 @@ router.patch('/api/pedidos/:id/servir', async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /api/pedidos/items/:itemId/entregar → Mozo marca un plato de cocina como entregado en la mesa
-router.patch('/api/pedidos/items/:itemId/entregar', async (req, res) => {
+router.patch('/api/pedidos/items/:itemId/entregar', async (req, res, next) => {
   const itemId = parseInt(req.params.itemId);
   try {
     await prisma.itemPedido.update({
@@ -271,12 +272,12 @@ router.patch('/api/pedidos/items/:itemId/entregar', async (req, res) => {
     });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /api/pedidos/:id/entregar-todo → Mozo marca todos los platos listos de cocina del pedido como entregados
-router.patch('/api/pedidos/:id/entregar-todo', async (req, res) => {
+router.patch('/api/pedidos/:id/entregar-todo', async (req, res, next) => {
   const id = parseInt(req.params.id);
   try {
     const pedido = await prisma.pedido.findUnique({
@@ -284,7 +285,7 @@ router.patch('/api/pedidos/:id/entregar-todo', async (req, res) => {
       include: { items: { include: { producto: true } } },
     });
 
-    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (!pedido) return next(new ErrorApp('NO_ENCONTRADO', 'Pedido no encontrado'));
 
     // Todo lo que ya está listo y aún no se llevó a la mesa (cocina y barra)
     const itemsAActualizar = (pedido.items || []).filter(i => i.historial && !i.entregado);
@@ -298,12 +299,12 @@ router.patch('/api/pedidos/:id/entregar-todo', async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // Actualizar notas de un ítem de pedido individual
-router.patch('/api/pedidos/items/:id/notas', async (req, res) => {
+router.patch('/api/pedidos/items/:id/notas', async (req, res, next) => {
   const { id } = req.params;
   const { notas } = req.body;
   try {
@@ -313,7 +314,7 @@ router.patch('/api/pedidos/items/:id/notas', async (req, res) => {
     });
     res.json({ ok: true, item });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -321,7 +322,7 @@ router.patch('/api/pedidos/items/:id/notas', async (req, res) => {
 // CANCELACIÓN DE PEDIDOS (Solo Mozo, límite 5 min)
 // ============================================================
 
-router.patch('/api/pedidos/:id/cancelar', async (req, res) => {
+router.patch('/api/pedidos/:id/cancelar', async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { canceladoPor, motivo, force } = req.body;
 
@@ -334,14 +335,12 @@ router.patch('/api/pedidos/:id/cancelar', async (req, res) => {
       },
     });
 
-    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    if (!pedido) return next(new ErrorApp('NO_ENCONTRADO', 'Pedido no encontrado.'));
 
     // Si no es una cancelación forzada por supervisor, aplicar filtros normales
     if (!force) {
       if (pedido.estado !== 'Cocina') {
-        return res.status(400).json({
-          error: 'Este pedido ya no puede cancelarse. Solo se cancelan pedidos en estado "Cocina".',
-        });
+        return next(new ErrorApp('CONFLICTO', 'Este pedido ya no puede cancelarse. Solo se cancelan pedidos en estado "Cocina".'));
       }
     }
 
@@ -466,35 +465,35 @@ router.patch('/api/pedidos/:id/cancelar', async (req, res) => {
 
     res.json({ ok: true, mesaLiberada, nuevoEstadoMesa });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/cocina/cancelaciones → Devuelve las alertas de cancelación pendientes de confirmación para Cocina
-router.get('/api/cocina/cancelaciones', (req, res) => {
+router.get('/api/cocina/cancelaciones', (req, res, next) => {
   res.json(alertasCancelacion.cocina);
 });
 
 // DELETE /api/cocina/cancelaciones/:id → Cocina confirma que vio la alerta ("Entendido")
-router.delete('/api/cocina/cancelaciones/:id', (req, res) => {
+router.delete('/api/cocina/cancelaciones/:id', (req, res, next) => {
   const { id } = req.params;
   alertasCancelacion.cocina = alertasCancelacion.cocina.filter(c => c.id !== id);
   res.json({ ok: true });
 });
 
 // GET /api/barra/cancelaciones → Devuelve las alertas de cancelación pendientes de confirmación para Barra
-router.get('/api/barra/cancelaciones', (req, res) => {
+router.get('/api/barra/cancelaciones', (req, res, next) => {
   res.json(alertasCancelacion.barra);
 });
 
 // DELETE /api/barra/cancelaciones/:id → Barra confirma que vio la alerta ("Entendido")
-router.delete('/api/barra/cancelaciones/:id', (req, res) => {
+router.delete('/api/barra/cancelaciones/:id', (req, res, next) => {
   const { id } = req.params;
   alertasCancelacion.barra = alertasCancelacion.barra.filter(c => c.id !== id);
   res.json({ ok: true });
 });
 
-router.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
+router.patch('/api/pedidos/:id/cancelar-item', async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { productoId, itemId, cantidadACancelar, motivo, canceladoPor, force } = req.body;
 
@@ -507,14 +506,12 @@ router.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
       },
     });
 
-    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    if (!pedido) return next(new ErrorApp('NO_ENCONTRADO', 'Pedido no encontrado.'));
 
     // Si no es una cancelación forzada por supervisor, aplicar filtros normales
     if (!force) {
       if (pedido.estado !== 'Cocina') {
-        return res.status(400).json({
-          error: 'Este pedido ya no puede modificarse. Solo se cancelan ítems de pedidos en estado "Cocina".',
-        });
+        return next(new ErrorApp('CONFLICTO', 'Este pedido ya no puede modificarse. Solo se cancelan ítems de pedidos en estado "Cocina".'));
       }
     }
 
@@ -524,10 +521,10 @@ router.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
           ? pedido.items.find(i => String(i.productoId) === String(productoId))
           : pedido.items.find(i => String(i.productoId) === String(productoId) && !i.historial));
 
-    if (!item) return res.status(404).json({ error: 'El ítem seleccionado no se encuentra en la comanda activa.' });
+    if (!item) return next(new ErrorApp('NO_ENCONTRADO', 'El ítem seleccionado no se encuentra en la comanda activa.'));
 
     if (cantidadACancelar > item.cantidad) {
-      return res.status(400).json({ error: 'La cantidad a cancelar supera la cantidad pedida.' });
+      return next(new ErrorApp('VALIDACION', 'La cantidad a cancelar supera la cantidad pedida.', { campo: 'cantidadACancelar' }));
     }
 
     // Calcular nueva cantidad
@@ -686,7 +683,7 @@ router.patch('/api/pedidos/:id/cancelar-item', async (req, res) => {
 
     res.json({ ok: true, mesaLiberada, nuevoEstadoMesa, pedidoVacio: itemsRestantes.length === 0 });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
