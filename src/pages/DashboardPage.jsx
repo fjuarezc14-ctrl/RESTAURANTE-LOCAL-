@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Users, Flame, CheckCircle, Banknote, LayoutGrid, ChefHat, Calculator, Lock, Unlock, AlertTriangle, ShieldAlert, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { useAviso } from '../components/ui';
 
 export default function DashboardPage() {
+  const aviso = useAviso();
   const [stats, setStats] = useState({ ocupadas: 0, totalMesas: 15, enCocina: 0, atendidas: 0, ingresos: 0 });
   const [topProducts, setTopProducts] = useState([]);
   const [cajaEstado, setCajaEstado] = useState({ abierto: false, turno: null, resumenEnVivo: null });
@@ -85,7 +87,7 @@ export default function DashboardPage() {
       setAdminPin('');
       setAdminMotivo('');
       setCajaEstado({ abierto: false, turno: null, resumenEnVivo: null });
-      alert('✅ ' + (res.mensaje || 'Turno cerrado forzosamente con éxito.'));
+      aviso.exito(res.mensaje || 'Turno cerrado forzosamente con éxito.');
     } catch (err) {
       setErrorForzar('Error al cerrar caja: ' + err.message);
     } finally {

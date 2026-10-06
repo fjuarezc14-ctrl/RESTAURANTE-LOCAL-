@@ -18,6 +18,7 @@ import CategoriasPage from './pages/CategoriasPage';
 import UsuariosPage from './pages/UsuariosPage';
 import CreditosPage from './pages/CreditosPage';
 import ConfiguracionPage from './pages/ConfiguracionPage';
+import { useAviso } from './components/ui';
 
 // === SESIÓN ===
 // La sesión vive en sessionStorage: al cerrar la pestaña/navegador hay que volver a poner el PIN.
@@ -586,6 +587,7 @@ const Layout = ({ children, title, currentUser, onLogout }) => {
 
 // === APP MAIN ENTRY ===
 function App() {
+  const aviso = useAviso();
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [avisoLogin, setAvisoLogin] = useState('');
@@ -631,7 +633,7 @@ function App() {
             } else if (parsed.pinSignature && status.pinSignature && parsed.pinSignature !== status.pinSignature) {
               borrarSesion();
               setCurrentUser(null);
-              alert('⚠️ La contraseña/PIN de tu cuenta ha sido modificada por el administrador. Por favor, inicia sesión con tu nuevo PIN.');
+              aviso.advertencia('La contraseña/PIN de tu cuenta ha sido modificada por el administrador. Por favor, inicia sesión con tu nuevo PIN.');
             } else {
               // Sincronizar roles y permisos actualizados de la BD
               const updatedUser = {
@@ -730,10 +732,10 @@ function App() {
         const res = await api.checkUserStatus(currentUser.id);
         if (!res || !res.exists || !res.activo) {
           handleLogout();
-          alert('⚠️ Tu usuario ha sido eliminado o desactivado. Sesión cerrada.');
+          aviso.advertencia('Tu usuario ha sido eliminado o desactivado. Sesión cerrada.');
         } else if (currentUser.pinSignature && res.pinSignature && currentUser.pinSignature !== res.pinSignature) {
           handleLogout();
-          alert('⚠️ La contraseña/PIN de tu cuenta fue modificada por el administrador. Sesión cerrada.');
+          aviso.advertencia('La contraseña/PIN de tu cuenta fue modificada por el administrador. Sesión cerrada.');
         } else if (res.rol !== currentUser.rol || JSON.stringify(res.permisos) !== JSON.stringify(currentUser.permisos)) {
           const syncedUser = {
             ...currentUser,

@@ -21,6 +21,7 @@ async function apiRequest(endpoint, options = {}) {
 
   try {
     const response = await fetch(url, {
+      credentials: 'include',
       ...options,
       signal: options.signal || controller.signal,
       headers: {
@@ -36,15 +37,45 @@ async function apiRequest(endpoint, options = {}) {
     if (!response.ok) {
       if (isJson) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Error HTTP ${response.status}: ${response.statusText}`);
+        let mensaje = '';
+        let codigo = 'ERROR_INTERNO';
+        let campo = null;
+        let datos = null;
+
+        if (errorData.error && typeof errorData.error === 'object') {
+          codigo = errorData.error.codigo || 'ERROR_INTERNO';
+          mensaje = errorData.error.mensaje || 'Ocurrió un error inesperado.';
+          campo = errorData.error.campo || null;
+          datos = errorData.error.datos || null;
+        } else if (typeof errorData.error === 'string') {
+          mensaje = errorData.error;
+        } else {
+          mensaje = `Error HTTP ${response.status}: ${response.statusText}`;
+        }
+
+        const err = new Error(mensaje);
+        err.codigo = codigo;
+        err.campo = campo;
+        err.datos = datos;
+        err.status = response.status;
+        throw err;
       } else {
         if (response.status === 502) {
-          throw new Error('502 Bad Gateway: El servidor backend no está respondiendo o se encuentra en reinicio.');
+          const err = new Error('502 Bad Gateway: El servidor backend no está respondiendo o se encuentra en reinicio.');
+          err.codigo = 'SIN_CONEXION';
+          err.status = 502;
+          throw err;
         }
         if (response.status === 504) {
-          throw new Error('504 Gateway Timeout: El servidor tardó demasiado en responder.');
+          const err = new Error('504 Gateway Timeout: El servidor tardó demasiado en responder.');
+          err.codigo = 'TIEMPO_AGOTADO';
+          err.status = 504;
+          throw err;
         }
-        throw new Error(`Error ${response.status}: El servidor no devolvió una respuesta JSON válida.`);
+        const err = new Error(`Error ${response.status}: El servidor no devolvió una respuesta JSON válida.`);
+        err.codigo = 'ERROR_INTERNO';
+        err.status = response.status;
+        throw err;
       }
     }
 
@@ -57,7 +88,13 @@ async function apiRequest(endpoint, options = {}) {
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      throw new Error(`Tiempo de espera agotado (${timeoutMs / 1000}s). Verifica la conexión Wi-Fi con el servidor.`);
+      const timeoutErr = new Error(`Tiempo de espera agotado (${timeoutMs / 1000}s). Verifica la conexión Wi-Fi con el servidor.`);
+      timeoutErr.codigo = 'TIEMPO_AGOTADO';
+      throw timeoutErr;
+    }
+    if (!err.codigo && (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError'))) {
+      err.codigo = 'SIN_CONEXION';
+      err.message = 'No se pudo conectar con el servidor. Verifica tu conexión de red.';
     }
     throw err;
   }

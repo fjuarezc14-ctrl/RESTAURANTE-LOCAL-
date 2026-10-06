@@ -8,6 +8,27 @@ import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 import { matchProductSemantic, relevanciaBusqueda, ordenarCategorias } from '../utils/busquedaProductos';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
+import { useAviso, useConfirmar, usePedirDato } from '../components/ui';
+import {
+  ModalAperturaCaja,
+  ModalRetiroCaja,
+  ModalCierreCaja,
+  ModalHistorialCierres,
+  ModalReimpresionCierre,
+  ModalCorregirMetodoPago,
+  ModalCorregirTipoEntrega,
+  ModalCancelarLlevar,
+  ModalComprobanteSunat,
+  ModalAnularVenta,
+  ModalConfirmacionCobro,
+  ModalDetalleMesa,
+  ModalDetallePedidoLlevar,
+  ModalDetalleVenta,
+  ModalTodasCategorias,
+  ModalOpcionesProducto,
+  ModalCobroMesa,
+  ModalNuevoPedidoDelivery,
+} from '../modulos/caja/modales';
 
 // Desactivado por defecto (se emite en portal SUNAT SOL o ticket de control interno)
 const FACTURACION_ELECTRONICA = false;
@@ -440,6 +461,9 @@ const agruparProductos = (items) => {
 export default function CajaPage({ currentUser }) {
   const { empresa: COMPANY_CONFIG } = useCompany();
   const FACTURACION_ELECTRONICA = COMPANY_CONFIG?.facturacionElectronica ?? true;
+  const aviso = useAviso();
+  const confirmar = useConfirmar();
+  const pedirDato = usePedirDato();
   const [mesas, setMesas] = useState([]);
   const [pedidosLlevar, setPedidosLlevar] = useState([]);
   const [stats, setStats] = useState({ atendidas: 0, ingresos: 0 });
@@ -1001,7 +1025,7 @@ export default function CajaPage({ currentUser }) {
       }
     } catch (err) {
       console.error("Error consultando API de DNI/RUC en delivery:", err);
-      alert("No se encontró el cliente o error en la consulta.");
+      aviso.advertencia("No se encontró el cliente o error en la consulta.");
     } finally {
       setIsBuscando(false);
     }
@@ -1093,17 +1117,16 @@ export default function CajaPage({ currentUser }) {
 
 
 
-  const enviarPorWhatsApp = (v) => {
+  const enviarPorWhatsApp = async (v) => {
     if (!v) return;
-    const telefono = prompt("Ingresa el número de WhatsApp del cliente (Ej. 999888777):");
+    const telefono = await pedirDato({
+      titulo: 'Enviar Comprobante por WhatsApp',
+      mensaje: 'Ingresa el número de WhatsApp del cliente:',
+      placeholder: '999888777',
+      validar: (val) => val.replace(/\D/g, '').length === 9 ? null : 'Ingresa un número de celular válido de 9 dígitos',
+    });
     if (!telefono) return;
-    
-    // Validar formato básico peruano (9 dígitos)
     const cleanedPhone = telefono.replace(/\D/g, '');
-    if (cleanedPhone.length !== 9) {
-      alert("Por favor, ingresa un número de celular válido de 9 dígitos.");
-      return;
-    }
     
     let serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
     let correlativoStr = String(v.numero || v.id).padStart(4, '0');
@@ -1133,15 +1156,15 @@ export default function CajaPage({ currentUser }) {
     if (!mesaSeleccionada || !mesaSeleccionada.pedidoData) return;
     if (tipoComprobante === 'Factura') {
       if (!numDocumento || numDocumento.trim().length !== 11) {
-        alert('Para emitir Factura, el RUC debe tener 11 dígitos.');
+        aviso.advertencia('Para emitir Factura, el RUC debe tener 11 dígitos.');
         return;
       }
       if (!clienteNombre || !clienteNombre.trim()) {
-        alert('Por favor, busca y valida el RUC del cliente antes de cobrar.');
+        aviso.advertencia('Por favor, busca y valida el RUC del cliente antes de cobrar.');
         return;
       }
       if (!clienteDireccion || !clienteDireccion.trim()) {
-        alert('La Dirección fiscal del cliente es obligatoria para emitir una Factura. Por favor, ingrésala.');
+        aviso.advertencia('La Dirección fiscal del cliente es obligatoria para emitir una Factura. Por favor, ingrésala.');
         return;
       }
     }
@@ -1170,7 +1193,7 @@ export default function CajaPage({ currentUser }) {
 
     if (metodoPago === 'Crédito') {
       if (!clienteCreditoSeleccionado) {
-        alert('Debe seleccionar un cliente con línea de crédito para continuar.');
+        aviso.advertencia('Debe seleccionar un cliente con línea de crédito para continuar.');
         return;
       }
     }
@@ -1198,7 +1221,7 @@ export default function CajaPage({ currentUser }) {
       if (incluirCreditoMixto) {
         const validos = (clientesCreditoMixto || []).filter(c => c.clienteId && parseMonto(c.monto) > 0);
         if (validos.length === 0) {
-          alert('⚠️ Has marcado la opción de incluir crédito en Pago Mixto. Debes seleccionar al menos un cliente de crédito e ingresar su monto.');
+          aviso.advertencia('Has marcado incluir crédito en Pago Mixto. Debes seleccionar al menos un cliente de crédito e ingresar su monto.');
           return;
         }
 
@@ -1215,14 +1238,14 @@ export default function CajaPage({ currentUser }) {
       }
 
       if (tarjVal + yapeVal + credVal > (total + 0.01)) {
-        alert('⚠️ La suma de Tarjeta, Yape / Plin y Crédito no puede superar el total a pagar. El vuelto solo aplica sobre Efectivo.');
+        aviso.advertencia('La suma de Tarjeta, Yape / Plin y Crédito no puede superar el total a pagar. El vuelto solo aplica sobre Efectivo.');
         return;
       }
 
       const restante = parseFloat(Math.max(0, total - (tarjVal + yapeVal + credVal)).toFixed(2));
       if (efecVal < (restante - 0.01)) {
         const faltante = parseFloat(Math.max(0, total - (efecVal + tarjVal + yapeVal + credVal)).toFixed(2));
-        alert(`⚠️ Monto insuficiente. Debes cubrir el total de S/ ${total.toFixed(2)}.\nFaltan S/ ${faltante.toFixed(2)}`);
+        aviso.error(`Monto insuficiente. Debes cubrir el total de S/ ${total.toFixed(2)}. Faltan S/ ${faltante.toFixed(2)}`);
         return;
       }
 
@@ -1359,12 +1382,12 @@ export default function CajaPage({ currentUser }) {
           descCortesiaTicket
         );
       } else {
-        alert(`✅ Consumo Personal registrado. Mesa liberada.`);
+        aviso.exito('Consumo Personal registrado. Mesa liberada.');
       }
 
       await fetchCajaData();
     } catch (err) {
-      alert('Error al procesar cobro: ' + err.message);
+      aviso.error('Error al procesar cobro: ' + err.message);
     } finally {
       setCobrando(false);
     }
@@ -1374,13 +1397,18 @@ export default function CajaPage({ currentUser }) {
 
 
   const confirmarEntregaDelivery = async (pedidoId, codigo) => {
-    if (!confirm(`¿Confirmas la entrega del pedido ${codigo}?`)) return;
+    const ok = await confirmar({
+      titulo: 'Confirmar Entrega',
+      mensaje: `¿Confirmas la entrega del pedido ${codigo}?`,
+      textoConfirmar: 'Confirmar Entrega',
+    });
+    if (!ok) return;
     try {
       await api.confirmarEntrega(pedidoId);
       await fetchCajaData();
-      alert(`✅ Entrega del pedido ${codigo} confirmada.`);
+      aviso.exito(`Entrega del pedido ${codigo} confirmada`);
     } catch (err) {
-      alert('Error: ' + err.message);
+      aviso.error('Error: ' + err.message);
     }
   };
 
@@ -1541,7 +1569,7 @@ export default function CajaPage({ currentUser }) {
       setCambioTipoEntregaModal(false);
       setVentaATipoCambiar(null);
       setCambioTipoPin('');
-      alert('✅ Tipo de entrega corregido exitosamente.');
+      aviso.exito('Tipo de entrega corregido exitosamente.');
     } catch (err) {
       setCambioTipoError('Error de conexión: ' + err.message);
     } finally {
@@ -1580,7 +1608,7 @@ export default function CajaPage({ currentUser }) {
       setAnularPin('');
       setAnularMotivo('');
       await fetchCajaData();
-      alert('✅ Devolución / Anulación registrada con éxito. La venta ha sido ajustada a S/ 0.00 en caja.');
+      aviso.exito('Devolución / Anulación registrada con éxito. La venta ha sido ajustada a S/ 0.00 en caja.');
     } catch (err) {
       setAnularError('Error al procesar devolución: ' + err.message);
     } finally {
@@ -1912,7 +1940,7 @@ export default function CajaPage({ currentUser }) {
     
     // Validar stock si es limitado
     if (prod.tipoStock === 'limitado' && cantTotalEnTicket >= prod.stock) {
-      alert(`⚠️ Stock agotado. Solo quedan ${prod.stock} unidades de "${prod.nombre}".`);
+      aviso.advertencia(`Stock agotado. Solo quedan ${prod.stock} unidades de "${prod.nombre}".`);
       return;
     }
 
@@ -1945,7 +1973,7 @@ export default function CajaPage({ currentUser }) {
         .filter(i => String(i.id) === String(nuevo[idx].id))
         .reduce((sum, item) => sum + item.cant, 0);
       if (prodOriginal && prodOriginal.tipoStock === 'limitado' && cantTotal >= prodOriginal.stock) {
-        alert(`⚠️ Stock agotado. Solo quedan ${prodOriginal.stock} unidades de "${prodOriginal.nombre}".`);
+        aviso.advertencia(`Stock agotado. Solo quedan ${prodOriginal.stock} unidades de "${prodOriginal.nombre}".`);
         return;
       }
       nuevo[idx] = { ...nuevo[idx], cant: nuevo[idx].cant + 1 };
@@ -2049,51 +2077,51 @@ export default function CajaPage({ currentUser }) {
   };
 
   const enviarDeliveryACocina = async () => {
-    if (itemsDelivery.length === 0) { alert('Debes agregar al menos un producto.'); return; }
+    if (itemsDelivery.length === 0) { aviso.advertencia('Debes agregar al menos un producto.'); return; }
     // Pedidos nuevos por PedidosYa deshabilitados (versión de prueba)
     if (tipoDelivery === 'PedidosYa' && !editingPedidoId) { avisarPedidosYaPrueba(); return; }
 
     // Validar datos según el canal seleccionado
     if (tipoDelivery === 'PedidosYa') {
       if (!codigoPY.trim()) {
-        alert('El código de PedidosYa es obligatorio.');
+        aviso.advertencia('El código de PedidosYa es obligatorio.');
         return;
       }
     } else if (tipoDelivery === 'ParaLlevar') {
       if (!codigoPY.trim()) {
-        alert('El nombre del cliente o número de ticket es obligatorio.');
+        aviso.advertencia('El nombre del cliente o número de ticket es obligatorio.');
         return;
       }
       if (deliveryTipoComprobante === 'Factura') {
         if (!deliveryNumDocumento || deliveryNumDocumento.length !== 11) {
-          alert('Para emitir Factura, el RUC debe tener 11 dígitos.');
+          aviso.advertencia('Para emitir Factura, el RUC debe tener 11 dígitos.');
           return;
         }
         if (!deliveryClienteNombre.trim()) {
-          alert('Para emitir Factura, la Razón Social del cliente es obligatoria.');
+          aviso.advertencia('Para emitir Factura, la Razón Social del cliente es obligatoria.');
           return;
         }
         if (!deliveryDireccion.trim()) {
-          alert('Para emitir Factura, la Dirección fiscal del cliente es obligatoria. Por favor, ingrésala.');
+          aviso.advertencia('Para emitir Factura, la Dirección fiscal del cliente es obligatoria. Por favor, ingrésala.');
           return;
         }
       }
     } else if (tipoDelivery === 'DeliveryPropio') {
       if (!deliveryClienteNombre.trim()) {
-        alert('El nombre del cliente es obligatorio.');
+        aviso.advertencia('El nombre del cliente es obligatorio.');
         return;
       }
       if (!deliveryDireccion.trim()) {
-        alert('La dirección del cliente es obligatoria.');
+        aviso.advertencia('La dirección del cliente es obligatoria.');
         return;
       }
       if (!deliveryTelefono.trim()) {
-        alert('El teléfono del cliente es obligatorio.');
+        aviso.advertencia('El teléfono del cliente es obligatorio.');
         return;
       }
       if (deliveryTipoComprobante === 'Factura') {
         if (!deliveryNumDocumento || deliveryNumDocumento.length !== 11) {
-          alert('Para emitir Factura, el RUC debe tener 11 dígitos.');
+          aviso.advertencia('Para emitir Factura, el RUC debe tener 11 dígitos.');
           return;
         }
       }
@@ -2103,12 +2131,12 @@ export default function CajaPage({ currentUser }) {
     const tieneCortesias = deliveryMetodoPago === 'Consumo' || deliveryMetodoPago === 'Cortesía' || cortesiaDeliveryIndices.length > 0;
     if (tieneCortesias) {
       if (!pinAdminDelivery.trim()) {
-        alert(`⚠️ Debes ingresar el PIN del administrador/cajero para autorizar ${deliveryMetodoPago === 'Consumo' ? 'un Consumo de Personal' : 'la Cortesía'}.`);
+        aviso.advertencia(`Debes ingresar el PIN del administrador/cajero para autorizar ${deliveryMetodoPago === "Consumo" ? "un Consumo de Personal" : "la Cortesía"}.`);
         return;
       }
       const authResult = await api.validateAuth(pinAdminDelivery.trim());
       if (!authResult || !authResult.ok) {
-        alert(`❌ PIN incorrecto. Solo el administrador/cajero puede autorizar ${deliveryMetodoPago === 'Consumo' ? 'un Consumo de Personal' : 'la Cortesía'}.`);
+        aviso.error(`PIN incorrecto. Solo el administrador/cajero puede autorizar ${deliveryMetodoPago === "Consumo" ? "un Consumo de Personal" : "la Cortesía"}.`);
         setPinAdminDelivery('');
         return;
       }
@@ -2116,7 +2144,7 @@ export default function CajaPage({ currentUser }) {
 
     if (tipoDelivery !== 'PedidosYa' && deliveryMetodoPago === 'Crédito') {
       if (!deliveryClienteCreditoSeleccionado) {
-        alert('Debe seleccionar un cliente con línea de crédito para continuar.');
+        aviso.advertencia('Debe seleccionar un cliente con línea de crédito para continuar.');
         return;
       }
     }
@@ -2162,24 +2190,24 @@ export default function CajaPage({ currentUser }) {
       const credVal = parseFloat(deliveryMontoCredito || 0);
 
       if (efecVal < 0 || tarjVal < 0 || yapeVal < 0 || credVal < 0) {
-        alert('Los montos de pago no pueden ser valores negativos.');
+        aviso.advertencia('Los montos de pago no pueden ser valores negativos.');
         return;
       }
 
       if (credVal > 0 && !deliveryClienteCreditoSeleccionado) {
-        alert('Debe seleccionar un cliente para la porción de pago a crédito.');
+        aviso.advertencia('Debe seleccionar un cliente para la porción de pago a crédito.');
         return;
       }
 
       if (tarjVal + yapeVal + credVal > (grandTotal + 0.01)) {
-        alert('La suma de Tarjeta, Yape / Plin y Crédito no puede superar el total a pagar.');
+        aviso.advertencia('La suma de Tarjeta, Yape / Plin y Crédito no puede superar el total a pagar.');
         return;
       }
 
       const restante = parseFloat(Math.max(0, grandTotal - (tarjVal + yapeVal + credVal)).toFixed(2));
       if (efecVal < (restante - 0.01)) {
         const faltante = parseFloat(Math.max(0, restante - efecVal).toFixed(2));
-        alert(`Monto insuficiente. Debes cubrir el total de S/ ${grandTotal.toFixed(2)}.\nFaltan S/ ${faltante.toFixed(2)}`);
+        aviso.error(`Monto insuficiente. Debes cubrir el total de S/ ${grandTotal.toFixed(2)}. Faltan S/ ${faltante.toFixed(2)}`);
         return;
       }
 
@@ -2292,10 +2320,10 @@ export default function CajaPage({ currentUser }) {
           descCortesiaTicket
         );
       } else {
-        alert(`✅ Pedido ${codigoPY.toUpperCase()} enviado a Cocina. Venta registrada.`);
+        aviso.exito(`Pedido ${codigoPY.toUpperCase()} enviado a Cocina. Venta registrada.`);
       }
     } catch (err) {
-      alert('Error: ' + err.message);
+      aviso.error('Error: ' + err.message);
     } finally {
       setEnviandoDelivery(false);
     }
@@ -3053,3985 +3081,344 @@ export default function CajaPage({ currentUser }) {
       </div>
 
       {/* MODAL: DETALLE DE MESA */}
-      {mesaDetalle && (() => {
-        const m = mesaDetalle;
-        const items = (m.pedidoData?.items || []).filter(Boolean);
-        return modalDetalle(
-          () => setMesaDetalleNum(null),
-          <>
-            <p className="text-lg font-semibold text-slate-900">Mesa {m.num}</p>
-            <p className="text-sm text-slate-500 flex flex-wrap items-center gap-x-2">
-              <span>{m.pedidoData?.mesero || '—'}</span><span className="text-slate-300">·</span>
-              <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{m.pedidoData?.hora}</span>
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {estadoChip(mesaCobrable(m), 'Listo p/ cobrar', mesaEnPreparacion(m) ? 'En preparación' : 'Por servir')}
-              {m.pedidoData?.estadoEnsalada && <span className="text-[11px] text-emerald-700 bg-emerald-50 rounded-md px-1.5 py-0.5">🥗 Ensalada {m.pedidoData.estadoEnsalada.toLowerCase()}</span>}
-            </div>
-          </>,
-          <div>
-            <p className="text-xs font-medium text-slate-400 mb-2">Consumo ({items.length})</p>
-            {items.length > 0 ? (
-              <ul className="divide-y divide-slate-100">
-                {items.map((i, idx) => (
-                  <li key={idx} className="flex items-start justify-between gap-3 py-2 text-sm">
-                    <span className="min-w-0 text-slate-700"><span className="font-mono text-slate-400 mr-2">{i.cant}×</span>{i.nombre}</span>
-                    {i.precio != null && <span className="font-mono tabular-nums text-slate-600 shrink-0">{soles(i.cant * i.precio)}</span>}
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="text-sm text-slate-400">Sin consumos</p>}
-          </div>,
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <p className="text-xs text-slate-500">Total</p>
-              <p className="text-xl font-semibold font-mono tabular-nums text-slate-900">{soles(m.pedidoData?.total)}</p>
-            </div>
-            {!mesaCobrable(m) ? (
-              <div className="text-right">
-                <button
-                  type="button"
-                  disabled
-                  className="h-11 px-6 rounded-xl bg-slate-100 text-slate-400 text-sm font-semibold cursor-not-allowed inline-flex items-center gap-2"
-                >
-                  <Clock className="w-4 h-4" /> {mesaEnPreparacion(m) ? 'En preparación' : 'Por servir'}
-                </button>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  {mesaEnPreparacion(m)
-                    ? (platosEnPreparacion(m) > 0 ? `${platosEnPreparacion(m)} plato(s) en preparación` : 'Esperando a cocina y barra')
-                    : `El mozo debe servir ${platosSinServir(m)} plato(s)`}
-                </p>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => { setMesaDetalleNum(null); abrirCobroMesa(m); }}
-                className="h-11 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors active:scale-[0.98]"
-              >
-                Cobrar mesa
-              </button>
-            )}
-          </div>
-        );
-      })()}
+      <ModalDetalleMesa
+        mesa={mesaDetalle}
+        onCerrar={() => setMesaDetalleNum(null)}
+        onCobrar={(m) => { setMesaDetalleNum(null); abrirCobroMesa(m); }}
+        esCobrable={mesaDetalle ? mesaCobrable(mesaDetalle) : false}
+        enPreparacion={mesaDetalle ? mesaEnPreparacion(mesaDetalle) : false}
+        cantPlatosEnPreparacion={mesaDetalle ? platosEnPreparacion(mesaDetalle) : 0}
+        cantPlatosSinServir={mesaDetalle ? platosSinServir(mesaDetalle) : 0}
+      />
 
       {/* MODAL: DETALLE DE PEDIDO PARA LLEVAR / DELIVERY */}
-      {pedidoDetalle && (() => {
-        const p = pedidoDetalle;
-        const o = origenPedido(p.codigoPedidosYa, p);
-        const listo = esPedidoListo(p);
-        const items = (p.items || []).filter(Boolean);
-        return modalDetalle(
-          () => setPedidoDetalleId(null),
-          <>
-            <p className="text-xs font-medium text-slate-400 flex items-center gap-1.5"><o.Icon className="w-3.5 h-3.5" /> {o.etiqueta}</p>
-            <p className="text-lg font-semibold text-slate-900 break-words">{o.nombre}</p>
-            <p className="text-sm text-slate-500">{p.cajero} · {p.hora}</p>
-            <div className="mt-2">{estadoChip(listo, 'Listo para entregar', 'En cocina')}</div>
-          </>,
-          <>
-            {o.info && (
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                {o.info.telefono && <div><dt className="text-xs text-slate-400 flex items-center gap-1"><Phone className="w-3 h-3" /> Teléfono</dt><dd className="text-slate-800">{o.info.telefono}</dd></div>}
-                {o.info.direccion && <div className="sm:col-span-2"><dt className="text-xs text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> Dirección</dt><dd className="text-slate-800 break-words">{o.info.direccion}</dd></div>}
-                {o.info.conCuanto && <div><dt className="text-xs text-slate-400">Paga con</dt><dd className="font-mono text-slate-800">{o.info.conCuanto}</dd></div>}
-                {o.info.vuelto && <div><dt className="text-xs text-slate-400">Vuelto</dt><dd className="font-mono text-slate-800">{o.info.vuelto}</dd></div>}
-              </dl>
-            )}
-            <div>
-              <p className="text-xs font-medium text-slate-400 mb-2">Productos ({items.length})</p>
-              {items.length > 0 ? (
-                <ul className="divide-y divide-slate-100">
-                  {items.map((i, idx) => (
-                    <li key={idx} className="flex items-start justify-between gap-3 py-2 text-sm">
-                      <span className="min-w-0 text-slate-700"><span className="font-mono text-slate-400 mr-2">{i.cant}×</span>{i.nombre}</span>
-                      {i.precio != null && <span className="font-mono tabular-nums text-slate-600 shrink-0">{soles(i.cant * i.precio)}</span>}
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="text-sm text-slate-400">Sin detalle de productos</p>}
-            </div>
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-              <span className="text-sm text-slate-500">Total</span>
-              <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">{soles(p.total)}</span>
-            </div>
-          </>,
-          <div className="grid grid-cols-2 sm:flex sm:justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setPedidoDetalleId(null);
-                setPedidoACancelarLlevar(p);
-                setPinCancelLlevar('');
-                setErrorCancelLlevar('');
-                setCancelLlevarModalOpen(true);
-              }}
-              className="h-10 px-4 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors inline-flex items-center justify-center gap-1.5"
-            >
-              <Trash2 className="w-4 h-4" /> Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => { setPedidoDetalleId(null); iniciarModificarDelivery(p); }}
-              className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors inline-flex items-center justify-center gap-1.5"
-            >
-              <Pencil className="w-4 h-4" /> Modificar
-            </button>
-            {listo && (
-              <button
-                type="button"
-                onClick={() => { setPedidoDetalleId(null); confirmarEntregaDelivery(p.pedidoId, p.codigoPedidosYa); }}
-                className="col-span-2 h-10 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors inline-flex items-center justify-center gap-1.5"
-              >
-                <PackageCheck className="w-4 h-4" /> Confirmar entrega
-              </button>
-            )}
-          </div>
-        );
-      })()}
+      <ModalDetallePedidoLlevar
+        pedido={pedidoDetalle}
+        onCerrar={() => setPedidoDetalleId(null)}
+        origen={pedidoDetalle ? origenPedido(pedidoDetalle.codigoPedidosYa, pedidoDetalle) : {}}
+        listo={pedidoDetalle ? esPedidoListo(pedidoDetalle) : false}
+        onCancelar={(p) => {
+          setPedidoDetalleId(null);
+          setPedidoACancelarLlevar(p);
+          setPinCancelLlevar('');
+          setErrorCancelLlevar('');
+          setCancelLlevarModalOpen(true);
+        }}
+        onModificar={(p) => {
+          setPedidoDetalleId(null);
+          iniciarModificarDelivery(p);
+        }}
+        onConfirmarEntrega={(pedidoId, codigoPY) => {
+          setPedidoDetalleId(null);
+          confirmarEntregaDelivery(pedidoId, codigoPY);
+        }}
+      />
 
       {/* MODAL: DETALLE DE VENTA */}
-      {ventaDetalle && (() => {
-        const v = ventaDetalle;
-        const est = estiloMetodo(v.metodoPago);
-        const items = itemsDeVenta(v);
-        const infoDelivery = parseDeliveryInfo(v.codigoPedidosYa) || parseDeliveryInfo(v.nombreCliente);
-        const ofertaLimpia = v.ofertaDescripcion ? v.ofertaDescripcion.replace(/\[CREDITO_SPLIT:.*?\]/g, '').trim() : '';
-        return modalDetalle(
-          () => setVentaDetalleId(null),
-          <>
-            <p className="text-xs font-medium text-slate-400 font-mono">#VT-{v.id} · {v.hora}</p>
-            <p className="text-lg font-semibold text-slate-900">
-              {v.tipoComprobante} {v.serie ? `${v.serie}-${String(v.numero).padStart(4, '0')}` : ''}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {v.anulado ? (
-                <span className="text-xs font-medium text-red-700 bg-red-50 rounded-md px-2 py-0.5">Devuelto</span>
-              ) : (
-                <span className={`inline-flex items-center gap-1 text-xs font-medium rounded-md px-2 py-0.5 ${est.chip}`}><est.Icon className="w-3 h-3" /> {v.metodoPago}</span>
-              )}
-              {!v.anulado && v.metodoPago === 'Cortesía' && <span className="text-xs font-medium text-orange-700 bg-orange-50 rounded-md px-2 py-0.5">Cortesía total</span>}
-              {!v.anulado && v.metodoPago !== 'Cortesía' && v.itemsResumen?.includes('CORTESÍA') && <span className="text-xs font-medium text-orange-700 bg-orange-50 rounded-md px-2 py-0.5">Con cortesía</span>}
-            </div>
-          </>,
-          <>
-            {v.anulado && (
-              <div className="rounded-xl bg-red-50 border border-red-100 px-3.5 py-3 text-sm text-red-700">
-                <p className="font-medium">Venta devuelta</p>
-                {v.motivoAnulacion && <p className="text-red-600/90">Motivo: {v.motivoAnulacion} ({v.anuladoPor || 'Admin'})</p>}
-              </div>
-            )}
-
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
-              <div className="min-w-0">
-                <dt className="text-xs text-slate-400">Cliente</dt>
-                <dd className="text-slate-800 break-words">{clienteDeVenta(v)}</dd>
-                {v.numDocumento && !v.numDocumento.startsWith('DELIVERY -') && <dd className="text-xs font-mono text-slate-500">{v.numDocumento}</dd>}
-              </div>
-              <div className="min-w-0">
-                <dt className="text-xs text-slate-400">Cobrado por</dt>
-                <dd className="text-slate-800">{v.cajeroNombre || 'Cajero Principal'}</dd>
-                {v.mesero && <dd className="text-xs text-slate-500">Mesero: {v.mesero}</dd>}
-              </div>
-              {v.codigoPago && (
-                <div className="min-w-0">
-                  <dt className="text-xs text-slate-400">Código de pago</dt>
-                  <dd className="font-mono text-slate-800 break-all">{v.codigoPago}</dd>
-                </div>
-              )}
-              <div className="min-w-0">
-                <dt className="text-xs text-slate-400">Origen</dt>
-                <dd className="flex items-center gap-1 text-slate-800">
-                  <span className="truncate">{v.codigoPedidosYa && !v.codigoPedidosYa.startsWith('DELIVERY -') && !v.codigoPedidosYa.startsWith('LLEVAR -') ? `PedidosYa · ${v.codigoPedidosYa}` : origenDeVenta(v)}</span>
-                  {v.codigoPedidosYa && iconoEditar(() => abrirCambioTipoEntregaModal(v), 'Corregir tipo de entrega (requiere PIN Administrador)')}
-                </dd>
-              </div>
-              {!v.anulado && (
-                <div className="min-w-0">
-                  <dt className="text-xs text-slate-400">Método de pago</dt>
-                  <dd className="flex items-center gap-1 text-slate-800">
-                    <span className={est.text}>{v.metodoPago}</span>
-                    {iconoEditar(() => {
-                      setVentaACambiar(v);
-                      setCambioNuevoMetodo(v.metodoPago);
-                      setCambioPin('');
-                      setCambioError('');
-                      setCambioMetodoModal(true);
-                    }, 'Corregir método de pago (requiere PIN Administrador)')}
-                  </dd>
-                  {v.metodoPago === 'Mixto' && (
-                    <dd className="mt-1 text-xs font-mono text-slate-500 space-y-0.5">
-                      {(v.montoEfectivo || 0) > 0 && <p>Efectivo {soles(v.montoEfectivo)}</p>}
-                      {(v.montoTarjeta || 0) > 0 && <p>Tarjeta {soles(v.montoTarjeta)}</p>}
-                      {(v.montoYape || 0) > 0 && <p>Yape {soles(v.montoYape)}</p>}
-                      {(v.montoCredito || 0) > 0 && <p>Crédito {soles(v.montoCredito)}</p>}
-                    </dd>
-                  )}
-                </div>
-              )}
-              {infoDelivery?.telefono && (
-                <div className="min-w-0">
-                  <dt className="text-xs text-slate-400 flex items-center gap-1"><Phone className="w-3 h-3" /> Teléfono</dt>
-                  <dd className="text-slate-800">{infoDelivery.telefono}</dd>
-                </div>
-              )}
-              {infoDelivery?.direccion && (
-                <div className="min-w-0 sm:col-span-2">
-                  <dt className="text-xs text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> Dirección</dt>
-                  <dd className="text-slate-800 break-words">{infoDelivery.direccion}</dd>
-                </div>
-              )}
-            </dl>
-
-            <div>
-              <p className="text-xs font-medium text-slate-400 mb-2">Productos ({items.length})</p>
-              {items.length > 0 ? (
-                <ul className="divide-y divide-slate-100">
-                  {items.map((i, idx) => (
-                    <li key={idx} className="flex items-start justify-between gap-3 py-2 text-sm">
-                      <span className="min-w-0 text-slate-700">{i.cant != null && <span className="font-mono text-slate-400 mr-2">{i.cant}×</span>}{i.nombre}</span>
-                      {i.subtotal != null && <span className="font-mono tabular-nums text-slate-600 shrink-0">{soles(i.subtotal)}</span>}
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="text-sm text-slate-400">Sin ítems</p>}
-              {ofertaLimpia && <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5">🏷️ {ofertaLimpia}</p>}
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 space-y-1 text-sm">
-              {!v.anulado && v.descuentoAplicado > 0 && (
-                <>
-                  <div className="flex justify-between text-slate-500"><span>Subtotal</span><span className="font-mono tabular-nums">{soles(parseFloat(v.total || 0) + parseFloat(v.descuentoAplicado || 0))}</span></div>
-                  <div className="flex justify-between text-blue-600"><span>Descuento</span><span className="font-mono tabular-nums">−{soles(v.descuentoAplicado)}</span></div>
-                </>
-              )}
-              <div className="flex items-baseline justify-between">
-                <span className="text-slate-500">Total</span>
-                {v.anulado ? (
-                  <span className="text-right">
-                    <span className="block text-xl font-semibold font-mono tabular-nums text-red-600">S/ 0.00</span>
-                    <span className="block text-xs font-mono line-through text-slate-400">{soles(v.montoOriginal ?? v.total)}</span>
-                  </span>
-                ) : (
-                  <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">{soles(v.total)}</span>
-                )}
-              </div>
-            </div>
-
-            {!v.anulado && (
-              <a
-                href="https://ww1.sunat.gob.pe/ol-ti-itfesimpopciones/FESimpSunat.htm"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50/60 hover:bg-blue-100/60 px-3.5 py-2.5 text-sm font-medium text-blue-900 transition-colors shadow-sm"
-                title="Abrir portal oficial de SUNAT para emitir comprobante electrónico"
-              >
-                <span className="flex items-center gap-2">
-                  <ExternalLink className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span>Emitir boleta / factura en SUNAT (Portal SOL)</span>
-                </span>
-                <span className="text-xs font-semibold text-blue-600 bg-white px-2 py-0.5 rounded border border-blue-200 shrink-0">sunat.gob.pe ↗</span>
-              </a>
-            )}
-          </>,
-          !v.anulado && (
-            <div className="grid grid-cols-3 sm:flex sm:justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => abrirAnularVentaModal(v)}
-                className="h-10 px-3 sm:px-4 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors inline-flex items-center justify-center gap-1.5"
-                title="Registrar devolución (requiere PIN Administrador)"
-              >
-                <Ban className="w-4 h-4" /> <span className="truncate">Devolución</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => enviarPorWhatsApp(v)}
-                className="h-10 px-3 sm:px-4 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors inline-flex items-center justify-center gap-1.5"
-              >
-                <svg className="w-4 h-4 fill-current text-emerald-600 shrink-0" viewBox="0 0 24 24">
-                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.003 5.324 5.328 0 11.859 0c3.161.001 6.136 1.23 8.375 3.466 2.238 2.237 3.467 5.21 3.466 8.373-.003 6.535-5.328 11.86-11.859 11.86-2.007-.001-3.98-.51-5.753-1.48L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.725 1.45 5.269 0 9.557-4.287 9.559-9.556.001-2.553-.99-4.955-2.792-6.758-1.802-1.802-4.199-2.793-6.753-2.794-5.27 0-9.559 4.287-9.56 9.559-.001 1.625.434 3.208 1.262 4.622L1.51 21.054l4.137-1.9zm12.135-6.843c-.268-.134-1.583-.78-1.828-.87-.247-.09-.427-.134-.607.134-.18.267-.697.87-.852 1.047-.156.178-.311.201-.579.067-.268-.134-1.132-.418-2.156-1.332-.796-.71-1.335-1.586-1.492-1.853-.156-.268-.017-.413.117-.547.12-.12.268-.312.401-.468.134-.156.179-.268.268-.446.09-.178.045-.335-.022-.469-.067-.134-.607-1.462-.832-2.002-.22-.53-.442-.457-.607-.466-.156-.008-.337-.008-.518-.008-.18 0-.473.067-.72.337-.247.268-.943.922-.943 2.248s.965 2.604 1.1 2.784c.134.18 1.9 2.901 4.6 4.068.643.277 1.143.443 1.534.568.646.205 1.233.176 1.697.107.518-.077 1.583-.647 1.807-1.272.223-.624.223-1.159.156-1.272-.069-.112-.249-.18-.517-.313z" />
-                </svg>
-                <span className="truncate">WhatsApp</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => reimprimirComprobante(v)}
-                className="h-10 px-3 sm:px-5 rounded-xl bg-slate-900 hover:bg-slate-700 text-white text-sm font-semibold transition-colors inline-flex items-center justify-center gap-1.5"
-              >
-                <Printer className="w-4 h-4" /> <span className="truncate">Reimprimir</span>
-              </button>
-            </div>
-          )
-        );
-      })()}
+      <ModalDetalleVenta
+        venta={ventaDetalle}
+        onCerrar={() => setVentaDetalleId(null)}
+        onAbrirAnulacion={(v) => abrirAnularVentaModal(v)}
+        onEnviarWhatsApp={(v) => enviarPorWhatsApp(v)}
+        onReimprimir={(v) => reimprimirComprobante(v)}
+        onEditarMetodoPago={(v) => {
+          setVentaACambiar(v);
+          setCambioNuevoMetodo(v.metodoPago);
+          setCambioPin('');
+          setCambioError('');
+          setCambioMetodoModal(true);
+        }}
+        onEditarTipoEntrega={(v) => abrirCambioTipoEntregaModal(v)}
+        estiloMetodo={estiloMetodo}
+        itemsDeVenta={itemsDeVenta}
+        clienteDeVenta={clienteDeVenta}
+        origenDeVenta={origenDeVenta}
+        parseDeliveryInfo={parseDeliveryInfo}
+      />
 
       {/* MODAL DE COBRO (MESAS) */}
-      {modalOpen && mesaSeleccionada && (() => {
-        const itemsMesa = (mesaSeleccionada.pedidoData.items || []).filter(Boolean);
-        const cortesiaTotalMesa = metodoPago === 'Cortesía';
-        const totalConCortesias = cortesiaTotalMesa ? 0 : itemsMesa
-          .filter(i => !cortesiaItemIds.includes(i.itemId))
-          .reduce((s, i) => s + (i.cant * i.precio), 0);
-        const subtotalConCortesias = parseFloat((totalConCortesias / 1.105).toFixed(2));
-        const igvConCortesias = parseFloat((totalConCortesias - subtotalConCortesias).toFixed(2));
-        const tieneCortesiasIndividuales = cortesiaItemIds.length > 0;
-        const requierePin = metodoPago === 'Consumo' || metodoPago === 'Cortesía' || tieneCortesiasIndividuales;
-        const unidadesMesa = itemsMesa.reduce((s, i) => s + (i.cant || 0), 0);
-
-        const labelCampo = 'block text-xs font-medium text-slate-500 mb-1.5';
-        const inputCampo = 'w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5 transition';
-        const inputMonto = 'w-full h-11 bg-white border border-slate-200 rounded-xl pl-9 pr-3 font-mono text-base font-semibold text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5 transition';
-        const chipMonto = 'h-8 px-3 rounded-lg border border-slate-200 bg-white text-xs font-mono font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 transition active:scale-95';
-
-        const campoMonto = (label, value, onChange, extra) => (
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-medium text-slate-500">{label}</label>
-              {parseMonto(value) > 0 && (
-                <button type="button" onClick={() => onChange('')} className="text-[11px] text-slate-400 hover:text-rose-600">Limpiar</button>
-              )}
-            </div>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">S/</span>
-              <input type="text" inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0.00" className={inputMonto} />
-            </div>
-            {extra}
-          </div>
-        );
-
-        return (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] z-[110] flex items-end md:items-center justify-center md:p-6 animate-fade-in">
-            <div className="bg-white w-full max-w-5xl h-[96dvh] md:h-[min(90dvh,820px)] rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
-
-              {/* Header */}
-              <div className="flex items-center justify-between gap-3 px-5 md:px-6 py-4 border-b border-slate-100 shrink-0">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white grid place-items-center text-sm font-semibold shrink-0 shadow-sm shadow-emerald-600/30">{mesaSeleccionada.num}</div>
-                  <div className="min-w-0">
-                    <h2 className="text-lg font-semibold text-slate-900 leading-tight">Cobrar mesa {mesaSeleccionada.num}</h2>
-                    <p className="text-sm text-slate-500 truncate">
-                      {mesaSeleccionada.pedidoData?.mesero || '—'} · {mesaSeleccionada.pedidoData?.hora} · {metodoPago === 'Consumo' ? 'Consumo personal (planilla)' : 'Ticket de venta'}
-                    </p>
-                  </div>
-                </div>
-                <button type="button" onClick={() => setModalOpen(false)} className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Body */}
-              <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden custom-scrollbar md:grid md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-
-                {/* Columna: consumo */}
-                <div className="md:border-r border-b md:border-b-0 border-slate-100 bg-slate-50/60 flex flex-col md:min-h-0">
-                  <div className="flex items-center justify-between px-5 md:px-6 pt-4 pb-2">
-                    <p className="text-xs font-medium text-slate-500">Consumo · {unidadesMesa} ítem{unidadesMesa !== 1 ? 's' : ''}</p>
-                    <p className={`text-[11px] flex items-center gap-1 ${cortesiaTotalMesa ? 'text-orange-600 font-medium' : 'text-slate-400'}`}>
-                      <Gift className="w-3 h-3" /> {cortesiaTotalMesa ? 'Todo es cortesía' : 'Marca para cortesía'}
-                    </p>
-                  </div>
-                  <ul className="flex-1 md:min-h-0 max-h-[38dvh] md:max-h-none overflow-y-auto custom-scrollbar px-3 md:px-4 pb-2">
-                    {itemsMesa.map((item, idx) => {
-                      const prodOriginal = productosMenu && productosMenu.find(p => p && String(p.id) === String(item.id));
-                      const tieneDescuento = prodOriginal && prodOriginal.precio > item.precio;
-                      const esCortesia = cortesiaTotalMesa || cortesiaItemIds.includes(item.itemId);
-                      return (
-                        <li key={idx} className={`rounded-xl px-2.5 py-2 transition-colors ${esCortesia ? 'bg-orange-50/70' : 'hover:bg-white'}`}>
-                          <div className="flex items-start gap-2.5">
-                            <input
-                              type="checkbox"
-                              checked={esCortesia}
-                              disabled={cortesiaTotalMesa}
-                              onChange={() => {
-                                if (esCortesia) setCortesiaItemIds(prev => prev.filter(id => id !== item.itemId));
-                                else setCortesiaItemIds(prev => [...prev, item.itemId]);
-                              }}
-                              className="mt-0.5 w-4 h-4 rounded border-slate-300 accent-orange-500 cursor-pointer disabled:cursor-not-allowed shrink-0"
-                              title="Marcar como cortesía (S/ 0.00)"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-start justify-between gap-3 text-sm">
-                                <span className={`min-w-0 ${esCortesia ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-                                  <span className="font-mono text-slate-400 mr-1.5">{item.cant}×</span>{item.nombre}
-                                </span>
-                                <span className="font-mono tabular-nums shrink-0 text-right">
-                                  {esCortesia ? (
-                                    <span className="text-xs font-medium text-orange-600">Cortesía</span>
-                                  ) : (
-                                    <>
-                                      {tieneDescuento && <span className="block text-[11px] line-through text-slate-400">{soles(item.cant * prodOriginal.precio)}</span>}
-                                      <span className="text-slate-700">{soles(item.cant * item.precio)}</span>
-                                    </>
-                                  )}
-                                </span>
-                              </div>
-                              <input
-                                type="text"
-                                placeholder="Añadir nota…"
-                                value={item.notas || item.notes || ''}
-                                onChange={(e) => {
-                                  setMesaSeleccionada(prev => {
-                                    if (!prev || !prev.pedidoData) return prev;
-                                    const nuevosItems = [...prev.pedidoData.items];
-                                    const originalIdx = prev.pedidoData.items.findIndex(x => x.itemId === item.itemId);
-                                    if (originalIdx >= 0) {
-                                      nuevosItems[originalIdx].notas = e.target.value;
-                                    }
-                                    return { ...prev, pedidoData: { ...prev.pedidoData, items: nuevosItems } };
-                                  });
-                                }}
-                                onBlur={async (e) => {
-                                  if (item.itemId) {
-                                    try {
-                                      await api.updateItemNotas(item.itemId, e.target.value);
-                                    } catch (err) {
-                                      console.error("Error al actualizar nota en caja:", err);
-                                    }
-                                  }
-                                }}
-                                className="mt-0.5 w-full bg-transparent text-xs text-slate-500 placeholder:text-slate-300 border-b border-transparent focus:border-slate-300 focus:outline-none py-0.5"
-                              />
-                            </div>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  <div className="px-5 md:px-6 py-3 border-t border-slate-100 space-y-1 text-xs text-slate-500 shrink-0">
-                    <div className="flex justify-between"><span>Subtotal (sin IGV)</span><span className="font-mono tabular-nums">{soles(subtotalConCortesias)}</span></div>
-                    <div className="flex justify-between"><span>IGV (10.5%)</span><span className="font-mono tabular-nums">{soles(igvConCortesias)}</span></div>
-                    <div className="flex justify-between pt-1 text-sm text-slate-900"><span className="font-medium">Total</span><span className="font-mono font-semibold tabular-nums">{soles(totalConCortesias)}</span></div>
-                  </div>
-                </div>
-
-                {/* Columna: pago */}
-                <div className="md:min-h-0 md:overflow-y-auto custom-scrollbar px-5 md:px-6 py-5 space-y-6">
-
-                  {/* Método de pago */}
-                  <div>
-                    <p className={labelCampo}>Método de pago</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { id: 'Efectivo', icon: Banknote, label: 'Efectivo' },
-                        { id: 'Tarjeta', icon: CreditCard, label: 'Tarjeta' },
-                        { id: 'Yape', icon: Smartphone, label: 'Yape / Plin' },
-                        { id: 'Crédito', icon: Wallet, label: 'Crédito' },
-                        { id: 'Cortesía', icon: Gift, label: 'Cortesía' },
-                        { id: 'Mixto', icon: Layers, label: 'Mixto' }
-                      ].map(item => {
-                        const IconComp = item.icon;
-                        const active = metodoPago === item.id;
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => {
-                              setMetodoPago(item.id);
-                              if (item.id === 'Crédito' || item.id === 'Cortesía') {
-                                setTipoComprobante('Ticket');
-                              }
-                            }}
-                            className={`h-16 flex flex-col items-center justify-center gap-1 rounded-xl border text-xs font-medium transition-all active:scale-[0.97] ${active ? estiloMetodo(item.id).activo : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'}`}
-                          >
-                            <IconComp className={`w-4.5 h-4.5 ${active ? '' : estiloMetodo(item.id).icono}`} />
-                            {item.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Efectivo */}
-                  {metodoPago === 'Efectivo' && (() => {
-                    const total = totalConCortesias;
-                    const pagaCon = parseFloat(pagaConEfectivoMesa || 0);
-                    const vuelto = (pagaCon >= total && pagaCon > 0) ? (pagaCon - total) : 0;
-                    const faltante = (pagaCon > 0 && pagaCon < total) ? (total - pagaCon) : 0;
-                    return (
-                      <div className="space-y-3 animate-fade-in">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className={labelCampo}>Recibido</label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">S/</span>
-                              <input
-                                type="number"
-                                min="0"
-                                step="any"
-                                value={pagaConEfectivoMesa}
-                                onChange={(e) => setPagaConEfectivoMesa(e.target.value)}
-                                placeholder={total.toFixed(2)}
-                                className={inputMonto}
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <p className={labelCampo}>{faltante > 0 ? 'Falta' : 'Vuelto'}</p>
-                            <p className={`h-11 flex items-center px-3 rounded-xl font-mono text-lg font-semibold tabular-nums ${faltante > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                              {soles(faltante > 0 ? faltante : vuelto)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          <button type="button" onClick={() => setPagaConEfectivoMesa(total.toFixed(2))} className={`${chipMonto} !border-emerald-600 !bg-emerald-600 !text-white`}>
-                            Exacto
-                          </button>
-                          {[10, 20, 50, 100, 200].map(monto => (
-                            <button key={monto} type="button" onClick={() => setPagaConEfectivoMesa(monto.toFixed(2))} className={chipMonto}>
-                              S/ {monto}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {(metodoPago === 'Tarjeta' || metodoPago === 'Yape') && (
-                    <div className="space-y-3 animate-fade-in">
-                      <p className="text-sm text-slate-500 bg-slate-50 rounded-xl px-4 py-3">
-                        Se registrará <span className="font-mono font-semibold text-slate-900">{soles(totalConCortesias)}</span> pagado íntegramente con {metodoPago === 'Tarjeta' ? 'tarjeta (POS)' : 'Yape / Plin'}.
-                      </p>
-                      {campoCodigoPago(codigoPago, setCodigoPago, metodoPago)}
-                    </div>
-                  )}
-                  {metodoPago === 'Mixto' && (parseMonto(mixtoTarjeta) > 0 || parseMonto(mixtoYape) > 0) &&
-                    campoCodigoPago(codigoPago, setCodigoPago, 'Mixto')}
-
-                  {metodoPago === 'Crédito' && (
-                    <div className="animate-fade-in">
-                      <SelectorClienteCreditoCombobox
-                        clientes={clientes}
-                        clienteSeleccionado={clienteCreditoSeleccionado}
-                        onSelectCliente={(c) => {
-                          setClienteCreditoSeleccionado(c);
-                          if (c) {
-                            setClienteNombre(c.nombre);
-                            setNumDocumento(c.numDoc || '');
-                            setClienteDireccion(c.direccion || '');
-                          }
-                        }}
-                        label="Cliente de crédito"
-                      />
-                    </div>
-                  )}
-
-                  {/* Mixto */}
-                  {metodoPago === 'Mixto' && (() => {
-                    const total = totalConCortesias;
-                    const efecVal = parseMonto(mixtoEfectivo);
-                    const tarjVal = parseMonto(mixtoTarjeta);
-                    const yapeVal = parseMonto(mixtoYape);
-                    const credVal = incluirCreditoMixto
-                      ? (clientesCreditoMixto || []).reduce((s, c) => s + parseMonto(c.monto), 0)
-                      : 0;
-
-                    const totalIngresado = efecVal + tarjVal + yapeVal + credVal;
-                    const restanteFisico = Math.max(0, total - (tarjVal + yapeVal + credVal));
-                    const vuelto = efecVal > restanteFisico ? efecVal - restanteFisico : 0;
-                    const faltante = Math.max(0, total - (Math.min(efecVal, restanteFisico) + tarjVal + yapeVal + credVal));
-                    const cuadraExacto = faltante <= 0.01 && (tarjVal + yapeVal + credVal) <= (total + 0.01);
-
-                    const pct = (n) => (total > 0 ? Math.min(100, (n / total) * 100) : 0);
-                    const noEfectivoExcedido = (tarjVal + yapeVal + credVal) > (total + 0.01);
-
-                    return (
-                      <div className="space-y-4 animate-fade-in">
-                        <div>
-                          <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden flex">
-                            <div style={{ width: `${pct(Math.min(efecVal, restanteFisico))}%` }} className="bg-emerald-500 transition-all" />
-                            <div style={{ width: `${pct(tarjVal)}%` }} className="bg-blue-500 transition-all" />
-                            <div style={{ width: `${pct(yapeVal)}%` }} className="bg-purple-500 transition-all" />
-                            <div style={{ width: `${pct(credVal)}%` }} className="bg-teal-500 transition-all" />
-                          </div>
-                          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
-                            {[['bg-emerald-500', 'Efectivo'], ['bg-blue-500', 'Tarjeta'], ['bg-purple-500', 'Yape'], ['bg-teal-500', 'Crédito']].map(([c, l]) => (
-                              <span key={l} className="inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${c}`} /> {l}</span>
-                            ))}
-                          </div>
-                        </div>
-
-                        {noEfectivoExcedido && (
-                          <div className="flex items-start gap-2 rounded-xl bg-rose-50 px-3 py-2.5 text-xs text-rose-700">
-                            <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
-                            <span>Tarjeta, Yape y Crédito suman {soles(tarjVal + yapeVal + credVal)} y superan el total ({soles(total)}). El vuelto solo se genera con efectivo.</span>
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {campoMonto('Efectivo', mixtoEfectivo, setMixtoEfectivo, (
-                            <div className="flex gap-1 mt-1.5">
-                              {[10, 20, 50, 100].map(billete => (
-                                <button
-                                  key={billete}
-                                  type="button"
-                                  onClick={() => setMixtoEfectivo((parseMonto(mixtoEfectivo) + billete).toFixed(2))}
-                                  className="flex-1 h-7 rounded-md bg-slate-100 hover:bg-slate-200 text-[11px] font-mono text-slate-600 transition active:scale-95"
-                                >
-                                  +{billete}
-                                </button>
-                              ))}
-                            </div>
-                          ))}
-                          {campoMonto('Tarjeta', mixtoTarjeta, setMixtoTarjeta)}
-                          {campoMonto('Yape / Plin', mixtoYape, setMixtoYape)}
-                        </div>
-
-                        {/* Crédito dentro del mixto */}
-                        <label className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 cursor-pointer transition-colors ${incluirCreditoMixto ? 'border-teal-300 bg-teal-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
-                          <span className="flex items-center gap-2.5 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={incluirCreditoMixto}
-                              onChange={(e) => {
-                                setIncluirCreditoMixto(e.target.checked);
-                                if (!e.target.checked) {
-                                  setClientesCreditoMixto([{ clienteId: '', monto: '', nombre: '' }]);
-                                }
-                              }}
-                              className="w-4 h-4 rounded border-slate-300 accent-teal-600 cursor-pointer shrink-0"
-                            />
-                            <span className="min-w-0">
-                              <span className="block text-sm font-medium text-slate-800">Incluir crédito a clientes</span>
-                              <span className="block text-xs text-slate-500">Carga parte de la cuenta a uno o varios clientes</span>
-                            </span>
-                          </span>
-                          {incluirCreditoMixto && <span className="font-mono text-sm font-semibold text-teal-700 shrink-0">{soles(credVal)}</span>}
-                        </label>
-
-                        {incluirCreditoMixto && (
-                          <div className="space-y-2.5 animate-fade-in">
-                            {(clientesCreditoMixto || []).map((row, idx) => {
-                              const currentClient = clientes.find(c => String(c.id) === String(row.clienteId));
-                              const filaSinCliente = !row.clienteId && parseMonto(row.monto) > 0;
-                              return (
-                                <div key={idx} className={`rounded-xl border p-3 space-y-2 ${filaSinCliente ? 'border-rose-300 ring-2 ring-rose-100' : 'border-slate-200'}`}>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-medium text-slate-500">Cliente {idx + 1}</span>
-                                    {clientesCreditoMixto.length > 1 && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setClientesCreditoMixto(prev => prev.filter((_, i) => i !== idx))}
-                                        className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                        title="Quitar cliente"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                  </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_8rem] gap-2 items-start">
-                                    <SelectorClienteCreditoCombobox
-                                      clientes={clientes}
-                                      clienteSeleccionado={currentClient}
-                                      onSelectCliente={(c) => {
-                                        setClientesCreditoMixto(prev => {
-                                          const next = [...prev];
-                                          next[idx] = { ...next[idx], clienteId: c ? c.id : '', nombre: c ? c.nombre : '' };
-                                          return next;
-                                        });
-                                      }}
-                                      label=""
-                                      placeholder="Buscar por nombre, DNI o RUC..."
-                                    />
-                                    <div className="relative">
-                                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">S/</span>
-                                      <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        placeholder="0.00"
-                                        value={row.monto}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          setClientesCreditoMixto(prev => {
-                                            const next = [...prev];
-                                            next[idx] = { ...next[idx], monto: val };
-                                            return next;
-                                          });
-                                        }}
-                                        className={inputMonto}
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                            <button
-                              type="button"
-                              onClick={() => setClientesCreditoMixto(prev => [...prev, { clienteId: '', monto: '', nombre: '' }])}
-                              className="w-full h-10 rounded-xl border border-dashed border-slate-300 text-sm font-medium text-slate-600 hover:border-slate-400 hover:text-slate-900 transition-colors inline-flex items-center justify-center gap-1.5"
-                            >
-                              <Plus className="w-4 h-4" /> Dividir con otro cliente
-                            </button>
-                          </div>
-                        )}
-
-                        <div className="rounded-xl bg-slate-50 px-4 py-3 space-y-1.5 text-sm">
-                          <div className="flex justify-between text-slate-500"><span>Ingresado</span><span className="font-mono tabular-nums text-slate-800">{soles(totalIngresado)} / {soles(total)}</span></div>
-                          {faltante > 0.01 && <div className="flex justify-between font-medium text-amber-700"><span>Falta cubrir</span><span className="font-mono tabular-nums">{soles(faltante)}</span></div>}
-                          {vuelto > 0 && <div className="flex justify-between font-medium text-emerald-700"><span>Vuelto</span><span className="font-mono tabular-nums">{soles(vuelto)}</span></div>}
-                          {cuadraExacto && <div className="flex items-center gap-1.5 font-medium text-emerald-700"><Check className="w-4 h-4" /> Cuenta cubierta</div>}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Autorización (cortesía / consumo) */}
-                  {requierePin && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 space-y-3 animate-fade-in">
-                      <div className="flex items-start gap-2.5">
-                        <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium text-slate-800">Requiere autorización</p>
-                          <p className="text-xs text-slate-500">
-                            {tieneCortesiasIndividuales
-                              ? `${cortesiaItemIds.length} producto(s) marcados como cortesía. Ingresa el PIN de administrador o cajero.`
-                              : 'Ingresa el PIN de administrador o cajero para continuar.'}
-                          </p>
-                        </div>
-                      </div>
-                      <input
-                        type="password"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={6}
-                        value={consumoPin}
-                        onChange={(e) => {
-                          setConsumoPin(e.target.value.replace(/\D/g, '').slice(0, 6));
-                          setConsumoPinError('');
-                        }}
-                        placeholder="PIN"
-                        className="w-full h-12 bg-white border border-amber-200 rounded-xl px-4 text-center text-xl font-mono tracking-[0.5em] text-slate-900 placeholder:tracking-normal placeholder:text-sm placeholder:text-slate-400 focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-500/10 transition"
-                        autoComplete="off"
-                        name="consumo-pin-auth"
-                      />
-                      {consumoPinError && <p className="text-xs font-medium text-rose-600">{consumoPinError}</p>}
-                      {(metodoPago === 'Cortesía' || tieneCortesiasIndividuales) && (
-                        <input
-                          type="text"
-                          value={motivoCortesia}
-                          onChange={(e) => setMotivoCortesia(e.target.value)}
-                          placeholder="Motivo de la cortesía (opcional): cumpleaños, demora…"
-                          className={inputCampo}
-                        />
-                      )}
-                    </div>
-                  )}
-
-                  {/* Datos del cliente */}
-                  {metodoPago !== 'Consumo' && (
-                    <details className="group rounded-xl border border-slate-200" open={!!(numDocumento || clienteNombre) || undefined}>
-                      <summary className="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer list-none select-none">
-                        <span className="text-sm font-medium text-slate-700">
-                          Datos del cliente <span className="font-normal text-slate-400">· opcional</span>
-                        </span>
-                        <span className="flex items-center gap-2 min-w-0">
-                          {clienteNombre && <span className="text-xs text-slate-500 truncate max-w-[10rem]">{clienteNombre}</span>}
-                          <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180 shrink-0" />
-                        </span>
-                      </summary>
-                      <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className={labelCampo}>DNI o RUC</label>
-                          <input type="text" value={numDocumento} onChange={(e) => handleDocumentoChange(e.target.value)} placeholder="Solo si lo pide" className={`${inputCampo} font-mono`} />
-                        </div>
-                        <div>
-                          <label className={labelCampo}>Nombre</label>
-                          <input type="text" value={clienteNombre} onChange={(e) => setClienteNombre(e.target.value)} placeholder="Consumidor final" className={inputCampo} />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <label className={labelCampo}>Dirección</label>
-                          <input type="text" value={clienteDireccion} onChange={(e) => setClienteDireccion(e.target.value)} placeholder="Ej. Av. Hoyos Rubio 338" className={inputCampo} />
-                        </div>
-                        <p className="sm:col-span-2 text-[11px] text-slate-400">La boleta o factura se emite en el portal de SUNAT.</p>
-                      </div>
-                    </details>
-                  )}
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="px-5 md:px-6 py-4 border-t border-slate-100 bg-white shrink-0">
-                {requierePin && !consumoPin.trim() && (
-                  <p className="mb-2 text-xs text-amber-700 flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Ingresa el PIN de autorización para poder cobrar.</p>
-                )}
-                <div className="flex items-center gap-4">
-                  <div className="min-w-0">
-                    <p className="text-xs text-slate-500">Total a cobrar</p>
-                    <p className="text-2xl font-semibold font-mono tabular-nums text-slate-900 leading-tight">{soles(totalConCortesias)}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={procesarCobroYFacturar}
-                    disabled={cobrando}
-                    className="ml-auto h-12 px-6 sm:px-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors active:scale-[0.98] disabled:opacity-50 inline-flex items-center justify-center gap-2"
-                  >
-                    {cobrando
-                      ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      : <><CheckCircle className="w-4.5 h-4.5" /> Cobrar y liberar mesa</>}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <ModalCobroMesa
+        abierto={modalOpen && !!mesaSeleccionada}
+        mesa={mesaSeleccionada}
+        onCerrar={() => setModalOpen(false)}
+        productosMenu={productosMenu}
+        metodoPago={metodoPago}
+        setMetodoPago={setMetodoPago}
+        cortesiaItemIds={cortesiaItemIds}
+        setCortesiaItemIds={setCortesiaItemIds}
+        pagaCon={pagaCon}
+        setPagaCon={setPagaCon}
+        vueltoCalculado={vueltoCalculado}
+        montoMixtoEfectivo={montoMixtoEfectivo}
+        setMontoMixtoEfectivo={setMontoMixtoEfectivo}
+        montoMixtoTarjeta={montoMixtoTarjeta}
+        setMontoMixtoTarjeta={setMontoMixtoTarjeta}
+        montoMixtoYape={montoMixtoYape}
+        setMontoMixtoYape={setMontoMixtoYape}
+        consumoUsuario={consumoUsuario}
+        setConsumoUsuario={setConsumoUsuario}
+        consumoPin={consumoPin}
+        setConsumoPin={setConsumoPin}
+        consumoMotivo={consumoMotivo}
+        setConsumoMotivo={setConsumoMotivo}
+        codigoOperacionPago={codigoOperacionPago}
+        setCodigoOperacionPago={setCodigoOperacionPago}
+        numDocumento={numDocumento}
+        setNumDocumento={setNumDocumento}
+        handleDocumentoChange={handleDocumentoChange}
+        clienteNombre={clienteNombre}
+        setClienteNombre={setClienteNombre}
+        clienteDireccion={clienteDireccion}
+        setClienteDireccion={setClienteDireccion}
+        usuarios={usuarios}
+        DENOMINACIONES_PEN={DENOMINACIONES_PEN}
+        procesarCobroYFacturar={procesarCobroYFacturar}
+        cobrando={cobrando}
+        setMesaSeleccionada={setMesaSeleccionada}
+        soles={soles}
+        parseMonto={parseMonto}
+        campoCodigoPago={campoCodigoPago}
+      />
 
       {/* MODAL DE CONFIRMACIÓN DE COBRO */}
-      {modalConfirmarCobro && datosConfirmacionCobro && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[250] flex items-end sm:items-center justify-center sm:p-4 animate-fade-in">
-          <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
-            <div className="flex items-start justify-between gap-3 px-5 pt-5">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Confirmar cobro</h3>
-                <p className="text-sm text-slate-500">Verifica los datos antes de cobrar</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalConfirmarCobro(false)}
-                disabled={cobrando}
-                className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50"
-                aria-label="Cerrar"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="px-5 py-5 space-y-4">
-              <div className="text-center py-2">
-                <p className="text-xs text-slate-500">Total a cobrar</p>
-                <p className="text-4xl font-semibold font-mono tabular-nums text-slate-900 tracking-tight">{soles(datosConfirmacionCobro.total)}</p>
-                {datosConfirmacionCobro.metodoPago === 'Efectivo' && datosConfirmacionCobro.pagaCon > datosConfirmacionCobro.total && (
-                  <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-sm text-emerald-700">
-                    Recibe {soles(datosConfirmacionCobro.pagaCon)} · <span className="font-semibold">Vuelto {soles(datosConfirmacionCobro.vuelto)}</span>
-                  </p>
-                )}
-              </div>
-              <dl className="divide-y divide-slate-100 rounded-xl border border-slate-200 text-sm">
-                {[
-                  ['Origen', datosConfirmacionCobro.esDelivery ? 'Para llevar / delivery' : `Mesa ${datosConfirmacionCobro.mesaNum}`],
-                  ['Comprobante', datosConfirmacionCobro.tipoComprobante],
-                  ['Cliente', `${datosConfirmacionCobro.nombreCliente}${datosConfirmacionCobro.numDocumento ? ` (${datosConfirmacionCobro.numDocumento})` : ''}`],
-                  ['Método', datosConfirmacionCobro.metodoPago],
-                ].map(([k, val]) => (
-                  <div key={k} className="flex items-center justify-between gap-4 px-4 py-2.5">
-                    <dt className="text-slate-500 shrink-0">{k}</dt>
-                    <dd className="font-medium text-slate-900 truncate text-right">{val}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-
-            <div className="px-5 pb-5 grid grid-cols-[1fr_2fr] gap-2">
-              <button
-                type="button"
-                onClick={() => setModalConfirmarCobro(false)}
-                disabled={cobrando}
-                className="h-12 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
-              >
-                Volver
-              </button>
-              <button
-                type="button"
-                onClick={ejecutarCobroFinal}
-                disabled={cobrando}
-                className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors active:scale-[0.98] disabled:opacity-50 inline-flex items-center justify-center gap-2"
-              >
-                {cobrando ? (
-                  <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Procesando…</>
-                ) : (
-                  <><CheckCircle className="w-4 h-4" /> Confirmar y cobrar</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalConfirmacionCobro
+        abierto={modalConfirmarCobro}
+        datos={datosConfirmacionCobro}
+        cobrando={cobrando}
+        onCerrar={() => setModalConfirmarCobro(false)}
+        onConfirmar={ejecutarCobroFinal}
+      />
 
       {/* MODAL: TODAS LAS CATEGORÍAS DEL NUEVO PEDIDO */}
-      {deliveryModal && deliveryCategoriasModalOpen && (
-        <div
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] z-[120] flex items-end md:items-center justify-center md:p-6 animate-fade-in"
-          onClick={() => setDeliveryCategoriasModalOpen(false)}
-        >
-          <div
-            className="bg-white w-full max-w-lg max-h-[85dvh] rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-4 border-b border-slate-100">
-              <div className="min-w-0">
-                <p className="text-lg font-semibold text-slate-900">Categorías</p>
-                <p className="text-sm text-slate-500">Toca una para ver sus productos</p>
-              </div>
-              <button type="button" onClick={() => setDeliveryCategoriasModalOpen(false)} className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 grid grid-cols-2 gap-2 content-start">
-              {deliveryCategoriasOrdenadas.map(cat => {
-                const activa = deliveryCategoriaFiltro === cat;
-                const isMasPedidos = cat === '🔥 Más Pedidos';
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => { setDeliveryCategoriaFiltro(cat); setDeliveryCategoriasModalOpen(false); }}
-                    className={`min-h-[3.5rem] px-3 py-2.5 rounded-xl border text-left flex flex-col justify-center transition active:scale-95 ${
-                      activa
-                        ? 'bg-sky-600 border-sky-600 text-white shadow-sm'
-                        : isMasPedidos
-                          ? 'bg-amber-50 border-amber-200 text-amber-900'
-                          : 'bg-white border-slate-200 text-slate-700 hover:border-sky-300'
-                    }`}
-                  >
-                    <span className="text-sm font-medium leading-tight flex items-center gap-1.5">
-                      {isMasPedidos && <Flame className={`w-3.5 h-3.5 shrink-0 ${activa ? 'text-white' : 'text-amber-500'}`} />}
-                      {isMasPedidos ? 'Más pedidos' : cat}
-                    </span>
-                    <span className={`text-[11px] mt-0.5 ${activa ? 'text-sky-100' : 'text-slate-400'}`}>
-                      {contarProductosCategoriaDelivery(cat)} productos
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalTodasCategorias
+        abierto={deliveryModal && deliveryCategoriasModalOpen}
+        onCerrar={() => setDeliveryCategoriasModalOpen(false)}
+        categorias={deliveryCategoriasOrdenadas}
+        categoriaFiltro={deliveryCategoriaFiltro}
+        onSeleccionar={(cat) => {
+          setDeliveryCategoriaFiltro(cat);
+          setDeliveryCategoriasModalOpen(false);
+        }}
+        contarProductos={contarProductosCategoriaDelivery}
+      />
 
       {/* MODAL PEDIDOS YA */}
-      {deliveryModal && (() => {
-        const cerrarDelivery = () => { setDeliveryModal(false); setCodigoPY(''); setItemsDelivery([]); setEditingPedidoId(null); };
-        const conCobro = tipoDelivery === 'ParaLlevar' || tipoDelivery === 'DeliveryPropio';
-        const requierePinDelivery = deliveryMetodoPago === 'Cortesía' || deliveryMetodoPago === 'Consumo' || cortesiaDeliveryIndices.length > 0;
-        const unidadesDelivery = itemsDelivery.reduce((s, i) => s + (i.cant || 0), 0);
-
-        const lbl = 'block text-xs font-medium text-slate-500 mb-1.5';
-        const inp = 'w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5 transition';
-        const chip = 'h-8 px-3 rounded-lg border border-slate-200 bg-white text-xs font-mono font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 transition active:scale-95';
-        const tituloSeccion = 'text-xs font-semibold uppercase tracking-wider text-sky-700 flex items-center gap-2 before:w-1 before:h-3.5 before:rounded-full before:bg-sky-500';
-
-        return (
-          <div
-            onPointerDown={(e) => {
-              // Cierra el teclado del celular al tocar fuera del buscador
-              const input = deliverySearchInputRef.current;
-              if (input && document.activeElement === input && !input.contains(e.target)) input.blur();
-            }}
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] z-[110] flex items-end md:items-center justify-center md:p-6 animate-fade-in"
-          >
-            <div className="bg-white w-full max-w-6xl h-[96dvh] md:h-[min(92dvh,880px)] rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
-
-              {/* Header */}
-              <div className="px-5 md:px-6 pt-4 pb-3 border-b border-slate-100 shrink-0 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="text-lg font-semibold text-slate-900 leading-tight">{editingPedidoId ? 'Modificar pedido' : 'Nuevo pedido'}</h2>
-                    <p className="text-sm text-slate-500 truncate">Para llevar, delivery o PedidosYa · Cajero: {usuarioOperador}</p>
-                  </div>
-                  <button type="button" onClick={cerrarDelivery} className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <div className="grid grid-cols-3 p-1 rounded-xl bg-slate-100 sm:w-auto">
-                    {[
-                      { id: 'ParaLlevar', label: 'Para llevar', Icon: ShoppingBag, activo: 'bg-cyan-600 text-white shadow-sm', onSel: () => { setTipoDelivery('ParaLlevar'); setCodigoPY(''); setDeliveryMontoEnvio(''); } },
-                      { id: 'DeliveryPropio', label: 'Delivery', Icon: Bike, activo: 'bg-indigo-600 text-white shadow-sm', onSel: () => { setTipoDelivery('DeliveryPropio'); setCodigoPY(''); } },
-                      {
-                        id: 'PedidosYa', label: 'PedidosYa', Icon: Truck, activo: 'bg-rose-600 text-white shadow-sm',
-                        // Los pedidos nuevos por PedidosYa están deshabilitados (versión de prueba);
-                        // los que ya existían se pueden seguir modificando.
-                        bloqueado: !editingPedidoId,
-                        onSel: () => {
-                          if (!editingPedidoId) { avisarPedidosYaPrueba(); return; }
-                          setTipoDelivery('PedidosYa'); setCodigoPY(''); setDeliveryMontoEnvio('');
-                        },
-                      },
-                    ].map(t => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={t.onSel}
-                        className={`h-9 px-3 sm:px-4 rounded-lg text-sm font-medium inline-flex items-center justify-center gap-1.5 transition-all ${
-                          tipoDelivery === t.id ? t.activo : (t.bloqueado ? 'text-slate-400 opacity-60' : 'text-slate-500 hover:text-slate-800')
-                        }`}
-                      >
-                        {t.bloqueado ? <Lock className="w-3.5 h-3.5 shrink-0" /> : <t.Icon className="w-4 h-4 shrink-0" />} <span className="truncate">{t.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                  {/* Pestañas solo en móvil */}
-                  <div className="grid grid-cols-2 p-1 rounded-xl bg-slate-100 md:hidden">
-                    {[['productos', 'Productos'], ['pedido', `Pedido${unidadesDelivery ? ` (${unidadesDelivery})` : ''}`]].map(([id, label]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setDeliveryVistaMovil(id)}
-                        className={`h-9 rounded-lg text-sm font-medium transition-all ${deliveryVistaMovil === id ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-500'}`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Body */}
-              <div className="flex-1 min-h-0 flex md:grid md:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-
-                {/* Columna: catálogo */}
-                <div className={`${deliveryVistaMovil === 'productos' ? 'flex' : 'hidden'} md:flex flex-1 min-w-0 flex-col min-h-0 bg-slate-50/60 md:border-r border-slate-100`}>
-                  <div className="px-4 md:px-5 pt-4 pb-2 space-y-3 shrink-0">
-                    <div className="relative">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      <input
-                        ref={deliverySearchInputRef}
-                        type="text"
-                        inputMode="search"
-                        enterKeyHint="search"
-                        placeholder="Buscar por nombre (ej: pollo, 1/4, parri)…"
-                        value={deliverySearchQuery}
-                        onChange={(e) => setDeliverySearchQuery(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                        className={`${inp} pl-9 pr-9`}
-                      />
-                      {deliverySearchQuery && (
-                        <button type="button" onClick={() => setDeliverySearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                    {/* Categorías: solo unas pocas + botón para ver todas (deslizar era incómodo en celular) */}
-                    <div className="flex flex-wrap gap-1.5">
-                      {deliveryCategoriasBarra.map(cat => {
-                        const isMasPedidos = cat === '🔥 Más Pedidos';
-                        const isSelected = deliveryCategoriaFiltro === cat;
-                        return (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => setDeliveryCategoriaFiltro(cat)}
-                            className={`max-w-[11rem] h-8 px-3 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1 ${
-                              isSelected
-                                ? (isMasPedidos ? 'bg-amber-500 text-white shadow-sm' : 'bg-sky-600 text-white shadow-sm')
-                                : (isMasPedidos ? 'bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100' : 'bg-white border border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-700')
-                            }`}
-                          >
-                            {isMasPedidos && <Flame className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-amber-500'}`} />}
-                            <span className="truncate">{isMasPedidos ? 'Más pedidos' : cat}</span>
-                          </button>
-                        );
-                      })}
-                      {deliveryCategoriasOrdenadas.length > CATEGORIAS_VISIBLES && (
-                        <button
-                          type="button"
-                          onClick={() => setDeliveryCategoriasModalOpen(true)}
-                          className="h-8 px-3 rounded-full text-xs font-medium inline-flex items-center gap-1 bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100 active:scale-95 transition"
-                        >
-                          <Layers className="w-3.5 h-3.5 shrink-0" /> Ver todas ({deliveryCategoriasOrdenadas.length - 2})
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 md:px-5 pb-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
-                      {(() => {
-                        const topProductosCajaIds = [...productosMenu]
-                          .filter(p => p.activo && p.categoria !== 'PedidosYa / Ofertas')
-                          .sort((a, b) => (b.ordenCount || b.ventasTotal || b.precio || 0) - (a.ordenCount || a.ventasTotal || a.precio || 0))
-                          .slice(0, 8)
-                          .map(p => p.id);
-
-                        const menuFiltradoPre = productosMenu.filter(p => {
-                          if (!p.activo) return false;
-                          if (deliveryCategoriaFiltro === '🔥 Más Pedidos') {
-                            return topProductosCajaIds.includes(p.id) && matchProductSemantic(p, deliverySearchQuery);
-                          }
-                          if (deliveryCategoriaFiltro !== 'Todos' && p.categoria !== deliveryCategoriaFiltro) return false;
-                          return matchProductSemantic(p, deliverySearchQuery);
-                        });
-                        const menuAgrupado = agruparProductos(menuFiltradoPre);
-                        const menuFiltrado = deliverySearchQuery.trim()
-                          ? [...menuAgrupado].sort((a, b) => relevanciaBusqueda(a, deliverySearchQuery) - relevanciaBusqueda(b, deliverySearchQuery))
-                          : menuAgrupado;
-
-                        if (menuFiltrado.length === 0) {
-                          return <p className="col-span-full text-center text-sm text-slate-400 py-12">No se encontraron productos.</p>;
-                        }
-
-                        return menuFiltrado.map(prod => {
-                          const isGroup = prod.esAgrupado;
-                          const cantEnTicket = isGroup
-                            ? 0
-                            : itemsDelivery.filter(i => String(i.id) === String(prod.id)).reduce((sum, item) => sum + item.cant, 0);
-                          const stockDisponible = prod.tipoStock === 'limitado' ? prod.stock - cantEnTicket : Infinity;
-                          const agotado = prod.tipoStock === 'limitado' && stockDisponible <= 0;
-                          const tieneOferta = prod.precioOferta !== null && prod.precioOferta !== undefined;
-
-                          return (
-                            <button
-                              key={prod.id}
-                              type="button"
-                              disabled={agotado}
-                              onClick={() => agregarItemDelivery(prod)}
-                              className={`relative text-left rounded-xl border p-3 min-h-[5.5rem] flex flex-col justify-between gap-2 transition-all ${
-                                agotado
-                                  ? 'opacity-50 grayscale border-slate-200 bg-slate-50 cursor-not-allowed'
-                                  : cantEnTicket > 0
-                                    ? 'bg-sky-50/60 border-sky-500 ring-1 ring-sky-500'
-                                    : 'bg-white border-slate-200 hover:border-sky-300 hover:shadow-sm active:scale-[0.98]'
-                              }`}
-                            >
-                              {cantEnTicket > 0 && !isGroup && (
-                                <span className="absolute -top-2 -right-2 min-w-6 h-6 px-1.5 rounded-full bg-sky-600 text-white text-xs font-semibold grid place-items-center shadow">
-                                  {cantEnTicket}
-                                </span>
-                              )}
-                              <div className="min-w-0">
-                                <p className="text-[13px] font-medium text-slate-800 leading-snug line-clamp-2">{prod.nombre}</p>
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {isGroup && <span className="text-[10px] font-medium text-blue-700 bg-blue-50 rounded px-1.5 py-0.5">Opciones</span>}
-                                  {tieneOferta && !isGroup && <span className="text-[10px] font-medium text-rose-600 bg-rose-50 rounded px-1.5 py-0.5">-{prod.ofertaValor}%</span>}
-                                  {prod.tipoStock === 'limitado' && !isGroup && (
-                                    <span className={`text-[10px] font-medium rounded px-1.5 py-0.5 ${agotado ? 'text-red-600 bg-red-50' : 'text-slate-500 bg-slate-100'}`}>
-                                      {agotado ? 'Agotado' : `Stock ${stockDisponible}`}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              {isGroup ? (
-                                <p className="font-mono text-sm font-semibold text-sky-700"><span className="text-xs font-sans font-normal text-slate-400">desde </span>{soles(prod.precioMin)}</p>
-                              ) : tieneOferta ? (
-                                <p className="font-mono text-sm font-semibold text-rose-600">
-                                  {soles(prod.precioOferta)} <span className="text-[11px] font-normal line-through text-slate-400">{soles(prod.precio)}</span>
-                                </p>
-                              ) : (
-                                <p className="font-mono text-sm font-semibold text-sky-700">{soles(prod.precio)}</p>
-                              )}
-                            </button>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Columna: pedido y cobro */}
-                <div className={`${deliveryVistaMovil === 'pedido' ? 'block' : 'hidden'} md:block flex-1 min-w-0 min-h-0 overflow-y-auto custom-scrollbar`}>
-                  <div className="px-5 md:px-6 py-5 space-y-6">
-
-                    {/* Datos del pedido */}
-                    <section className="space-y-3">
-                      <p className={tituloSeccion}>{tipoDelivery === 'DeliveryPropio' ? 'Datos de entrega' : 'Datos del pedido'}</p>
-                      {tipoDelivery !== 'DeliveryPropio' ? (
-                        <div>
-                          <label className={lbl}>{tipoDelivery === 'PedidosYa' ? 'Código PedidosYa' : 'Nombre del cliente o ticket'}</label>
-                          <input
-                            type="text"
-                            value={codigoPY}
-                            onChange={(e) => setCodigoPY(e.target.value)}
-                            placeholder={tipoDelivery === 'PedidosYa' ? 'Ej: FG-4821' : 'Ej: PEDRO o T-12'}
-                            className={`${inp} font-mono uppercase`}
-                          />
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="col-span-2">
-                            <label className={lbl}>Nombre del cliente</label>
-                            <input type="text" value={deliveryClienteNombre} onChange={(e) => setDeliveryClienteNombre(e.target.value)} placeholder="Ej: Juan Pérez" className={inp} />
-                          </div>
-                          <div>
-                            <label className={lbl}>Teléfono</label>
-                            <input type="tel" inputMode="tel" value={deliveryTelefono} onChange={(e) => setDeliveryTelefono(e.target.value)} placeholder="999 888 777" className={inp} />
-                          </div>
-                          <div>
-                            <label className={lbl}>Envío</label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">S/</span>
-                              <input type="number" min="0" step="any" value={deliveryMontoEnvio} onChange={(e) => setDeliveryMontoEnvio(e.target.value)} placeholder="0.00" className={`${inp} pl-9 font-mono`} />
-                            </div>
-                          </div>
-                          <div className="col-span-2">
-                            <label className={lbl}>Dirección de entrega</label>
-                            <input type="text" value={deliveryDireccion} onChange={(e) => setDeliveryDireccion(e.target.value)} placeholder="Ej: Av. Hoyos Rubio 338" className={inp} />
-                          </div>
-                        </div>
-                      )}
-                    </section>
-
-                    {/* Productos del pedido */}
-                    <section className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className={tituloSeccion}>Productos {unidadesDelivery > 0 && <span className="normal-case tracking-normal font-medium">· {unidadesDelivery}</span>}</p>
-                        {itemsDelivery.length > 0 && deliveryMetodoPago !== 'Cortesía' && (
-                          <p className="text-[11px] text-slate-400 flex items-center gap-1"><Gift className="w-3 h-3" /> Toca el regalo para cortesía</p>
-                        )}
-                      </div>
-                      {itemsDelivery.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center">
-                          <p className="text-sm text-slate-400">Agrega productos desde el catálogo</p>
-                          <button type="button" onClick={() => setDeliveryVistaMovil('productos')} className="md:hidden mt-2 text-sm font-medium text-slate-700 underline underline-offset-2">
-                            Ver productos
-                          </button>
-                        </div>
-                      ) : (
-                        <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-                          {itemsDelivery.map((item, idx) => {
-                            const prodOriginal = productosMenu.find(p => String(p.id) === String(item.id));
-                            const esCortesiaItem = cortesiaDeliveryIndices.includes(idx) || deliveryMetodoPago === 'Cortesía';
-                            const tieneDescuento = prodOriginal && prodOriginal.precio > item.precio;
-                            return (
-                              <li key={idx} className={`px-3 py-2.5 ${esCortesiaItem ? 'bg-orange-50/60' : ''}`}>
-                                <div className="flex items-start gap-2">
-                                  <div className="min-w-0 flex-1">
-                                    <p className={`text-sm leading-snug ${esCortesiaItem ? 'line-through text-slate-400' : 'text-slate-800'}`}>{item.nombre}</p>
-                                    <p className="font-mono text-xs tabular-nums mt-0.5">
-                                      {esCortesiaItem ? (
-                                        <span className="text-orange-600 font-sans font-medium">Cortesía</span>
-                                      ) : (
-                                        <>
-                                          {tieneDescuento && <span className="line-through text-slate-400 mr-1.5">{soles(item.cant * prodOriginal.precio)}</span>}
-                                          <span className="text-slate-600">{soles(item.cant * item.precio)}</span>
-                                        </>
-                                      )}
-                                    </p>
-                                  </div>
-                                  {deliveryMetodoPago !== 'Cortesía' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (cortesiaDeliveryIndices.includes(idx)) setCortesiaDeliveryIndices(prev => prev.filter(i => i !== idx));
-                                        else setCortesiaDeliveryIndices(prev => [...prev, idx]);
-                                      }}
-                                      className={`w-8 h-8 rounded-lg grid place-items-center transition-colors shrink-0 ${cortesiaDeliveryIndices.includes(idx) ? 'bg-orange-500 text-white' : 'text-slate-300 hover:text-orange-500 hover:bg-orange-50'}`}
-                                      title={cortesiaDeliveryIndices.includes(idx) ? 'Quitar cortesía' : 'Marcar como cortesía (S/ 0.00)'}
-                                    >
-                                      <Gift className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                  <div className="flex items-center rounded-lg border border-slate-200 shrink-0">
-                                    <button type="button" onClick={() => alterarItemDelivery(idx, '-')} className="w-8 h-8 grid place-items-center text-slate-500 hover:text-slate-900 text-lg leading-none" aria-label="Quitar uno">−</button>
-                                    <span className="w-6 text-center text-sm font-semibold text-slate-900 tabular-nums">{item.cant}</span>
-                                    <button type="button" onClick={() => alterarItemDelivery(idx, '+')} className="w-8 h-8 grid place-items-center text-slate-500 hover:text-slate-900 text-lg leading-none" aria-label="Agregar uno">+</button>
-                                  </div>
-                                </div>
-                                <input
-                                  type="text"
-                                  placeholder="Añadir especificación (ej: sin cebolla)…"
-                                  value={item.notas || ''}
-                                  onChange={(e) => alterarNotasDelivery(idx, e.target.value)}
-                                  className="mt-1 w-full bg-transparent text-xs text-slate-500 placeholder:text-slate-300 border-b border-transparent focus:border-slate-300 focus:outline-none py-0.5"
-                                />
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </section>
-
-                    {/* Descuento */}
-                    {itemsDelivery.length > 0 && (
-                      <section className="space-y-2">
-                        <p className={tituloSeccion}>Descuento</p>
-                        <div className="flex items-center gap-2">
-                          <div className="inline-flex p-1 rounded-xl bg-slate-100 shrink-0">
-                            {[['porcentaje', '%'], ['monto', 'S/']].map(([id, label]) => (
-                              <button
-                                key={id}
-                                type="button"
-                                onClick={() => { setDeliveryDescuentoTipo(id); setDeliveryDescuentoValor(''); }}
-                                className={`h-8 w-11 rounded-lg text-sm font-semibold transition-all ${deliveryDescuentoTipo === id ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-                                title={id === 'porcentaje' ? 'Descuento en porcentaje' : 'Descuento en soles'}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="relative flex-1">
-                            {deliveryDescuentoTipo === 'monto' && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">S/</span>}
-                            <input
-                              type="number"
-                              min="0"
-                              max={deliveryDescuentoTipo === 'porcentaje' ? 100 : totalDelivery}
-                              step="any"
-                              inputMode="decimal"
-                              placeholder={deliveryDescuentoTipo === 'porcentaje' ? '0' : '0.00'}
-                              value={deliveryDescuentoValor}
-                              onChange={(e) => setDeliveryDescuentoValor(e.target.value)}
-                              className={`${inp} font-mono ${deliveryDescuentoTipo === 'monto' ? 'pl-9' : 'pr-8'}`}
-                            />
-                            {deliveryDescuentoTipo === 'porcentaje' && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">%</span>}
-                          </div>
-                          {deliveryDescuentoMonto > 0 && (
-                            <span className="font-mono text-sm font-medium text-rose-600 tabular-nums shrink-0">−{soles(deliveryDescuentoMonto)}</span>
-                          )}
-                        </div>
-                        {deliveryDescuentoTipo === 'porcentaje' && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {[5, 10, 15, 20, 50].map(p => (
-                              <button key={p} type="button" onClick={() => setDeliveryDescuentoValor(String(p))} className={chip}>{p}%</button>
-                            ))}
-                          </div>
-                        )}
-                        {deliveryDescuentoTipo === 'monto' && deliveryDescVal > totalDelivery && totalDelivery > 0 && (
-                          <p className="text-xs text-amber-700">El descuento no puede superar el subtotal; se aplicará {soles(totalDelivery)}.</p>
-                        )}
-                      </section>
-                    )}
-
-                    {/* Cobro (Para llevar / Delivery propio) */}
-                    {conCobro && (
-                      <section className="space-y-4">
-                        <p className={tituloSeccion}>Cobro</p>
-                        <div className="grid grid-cols-3 gap-2">
-                          {[
-                            { id: 'Efectivo', Icon: Banknote, label: 'Efectivo' },
-                            { id: 'Tarjeta', Icon: CreditCard, label: 'Tarjeta' },
-                            { id: 'Yape', Icon: Smartphone, label: 'Yape' },
-                            { id: 'Mixto', Icon: Layers, label: 'Mixto' },
-                            { id: 'Crédito', Icon: Wallet, label: 'Crédito' },
-                            { id: 'Cortesía', Icon: Gift, label: 'Cortesía' },
-                          ].map(m => {
-                            const active = deliveryMetodoPago === m.id;
-                            return (
-                              <button
-                                key={m.id}
-                                type="button"
-                                onClick={() => {
-                                  setDeliveryMetodoPago(m.id);
-                                  if (m.id === 'Crédito' || m.id === 'Cortesía' || m.id === 'Consumo') {
-                                    setDeliveryTipoComprobante('Ticket');
-                                    setDeliveryNumDocumento('');
-                                  }
-                                }}
-                                className={`h-14 flex flex-col items-center justify-center gap-0.5 rounded-xl border text-[11px] font-medium transition-all active:scale-[0.97] ${active ? estiloMetodo(m.id).activo : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'}`}
-                              >
-                                <m.Icon className={`w-4 h-4 ${active ? '' : estiloMetodo(m.id).icono}`} />
-                                {m.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {deliveryMetodoPago === 'Efectivo' && (() => {
-                          const conC = parseFloat(deliveryConCuanto);
-                          const vuelto = (!isNaN(conC) && conC >= grandTotalDelivery) ? conC - grandTotalDelivery : 0;
-                          const falta = (!isNaN(conC) && conC > 0 && conC < grandTotalDelivery) ? grandTotalDelivery - conC : 0;
-                          return (
-                            <div className="space-y-3 animate-fade-in">
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className={lbl}>{tipoDelivery === 'DeliveryPropio' ? 'Paga con' : 'Recibido'}</label>
-                                  <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">S/</span>
-                                    <input type="number" min="0" step="any" value={deliveryConCuanto} onChange={(e) => setDeliveryConCuanto(e.target.value)} placeholder={grandTotalDelivery.toFixed(2)} className={`${inp} h-11 pl-9 font-mono text-base font-semibold`} />
-                                  </div>
-                                </div>
-                                <div>
-                                  <p className={lbl}>{falta > 0 ? 'Falta' : 'Vuelto'}</p>
-                                  <p className={`h-11 flex items-center px-3 rounded-xl font-mono text-lg font-semibold tabular-nums ${falta > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                                    {soles(falta > 0 ? falta : vuelto)}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                <button type="button" onClick={() => setDeliveryConCuanto(grandTotalDelivery.toFixed(2))} className={`${chip} !border-emerald-600 !bg-emerald-600 !text-white`}>Exacto</button>
-                                {[10, 20, 50, 100, 200].map(monto => (
-                                  <button key={monto} type="button" onClick={() => setDeliveryConCuanto(monto.toFixed(2))} className={chip}>S/ {monto}</button>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {(deliveryMetodoPago === 'Tarjeta' || deliveryMetodoPago === 'Yape') && (
-                          <div className="space-y-3 animate-fade-in">
-                            <p className="text-sm text-slate-500 bg-slate-50 rounded-xl px-4 py-3">
-                              Se registrará <span className="font-mono font-semibold text-slate-900">{soles(grandTotalDelivery)}</span> con {deliveryMetodoPago === 'Tarjeta' ? 'tarjeta (POS)' : 'Yape / Plin'}.
-                            </p>
-                            {campoCodigoPago(deliveryCodigoPago, setDeliveryCodigoPago, deliveryMetodoPago)}
-                          </div>
-                        )}
-                        {deliveryMetodoPago === 'Mixto' && (parseFloat(deliveryMixtoTarjeta || 0) > 0 || parseFloat(deliveryMixtoYape || 0) > 0) &&
-                          campoCodigoPago(deliveryCodigoPago, setDeliveryCodigoPago, 'Mixto')}
-
-                        {deliveryMetodoPago === 'Crédito' && (
-                          <div className="animate-fade-in">
-                            <SelectorClienteCreditoCombobox
-                              clientes={clientes}
-                              clienteSeleccionado={deliveryClienteCreditoSeleccionado}
-                              onSelectCliente={(client) => {
-                                setDeliveryClienteCreditoSeleccionado(client || null);
-                                if (client) {
-                                  setDeliveryClienteNombre(client.nombre);
-                                  setDeliveryNumDocumento(client.numDoc || '');
-                                }
-                              }}
-                              label="Cliente de crédito"
-                            />
-                          </div>
-                        )}
-
-                        {deliveryMetodoPago === 'Mixto' && (() => {
-                          const total = grandTotalDelivery;
-                          const efecVal = parseFloat(deliveryMixtoEfectivo || 0);
-                          const tarjVal = parseFloat(deliveryMixtoTarjeta || 0);
-                          const yapeVal = parseFloat(deliveryMixtoYape || 0);
-                          const credVal = parseFloat(deliveryMontoCredito || 0);
-                          const ingresado = efecVal + tarjVal + yapeVal + credVal;
-                          const restante = Math.max(0, total - (tarjVal + yapeVal + credVal));
-                          const vuelto = efecVal > restante ? efecVal - restante : 0;
-                          const diferencia = total - ingresado;
-                          const campos = [
-                            { label: 'Efectivo', value: deliveryMixtoEfectivo, set: setDeliveryMixtoEfectivo, otros: tarjVal + yapeVal + credVal },
-                            { label: 'Tarjeta', value: deliveryMixtoTarjeta, set: setDeliveryMixtoTarjeta, otros: efecVal + yapeVal + credVal },
-                            { label: 'Yape / Plin', value: deliveryMixtoYape, set: setDeliveryMixtoYape, otros: efecVal + tarjVal + credVal },
-                            { label: 'Crédito', value: deliveryMontoCredito, set: setDeliveryMontoCredito, otros: efecVal + tarjVal + yapeVal },
-                          ];
-                          return (
-                            <div className="space-y-3 animate-fade-in">
-                              <div className="grid grid-cols-2 gap-3">
-                                {campos.map(c => (
-                                  <div key={c.label}>
-                                    <div className="flex items-center justify-between mb-1.5">
-                                      <label className="text-xs font-medium text-slate-500">{c.label}</label>
-                                      <button
-                                        type="button"
-                                        onClick={() => { const resto = Math.max(0, total - c.otros); c.set(resto > 0 ? resto.toFixed(2) : ''); }}
-                                        className="text-[11px] font-medium text-slate-400 hover:text-slate-900"
-                                        title="Completar con el saldo restante"
-                                      >
-                                        Completar
-                                      </button>
-                                    </div>
-                                    <div className="relative">
-                                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">S/</span>
-                                      <input type="number" min="0" step="any" value={c.value} onChange={(e) => c.set(e.target.value)} placeholder="0.00" className={`${inp} pl-9 font-mono`} />
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                              {credVal > 0 && (
-                                <div className="space-y-1.5">
-                                  <SelectorClienteCreditoCombobox
-                                    clientes={clientes}
-                                    clienteSeleccionado={deliveryClienteCreditoSeleccionado}
-                                    onSelectCliente={(client) => setDeliveryClienteCreditoSeleccionado(client || null)}
-                                    label="Cliente para el crédito"
-                                  />
-                                  {deliveryClienteCreditoSeleccionado && (
-                                    <p className={`text-xs font-medium ${(deliveryClienteCreditoSeleccionado.saldo || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                      Saldo actual: {soles(deliveryClienteCreditoSeleccionado.saldo)}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-                              <div className="rounded-xl bg-slate-50 px-4 py-3 space-y-1.5 text-sm">
-                                <div className="flex justify-between text-slate-500"><span>Ingresado</span><span className="font-mono tabular-nums text-slate-800">{soles(ingresado)} / {soles(total)}</span></div>
-                                {diferencia > 0.01 && <div className="flex justify-between font-medium text-amber-700"><span>Falta cubrir</span><span className="font-mono tabular-nums">{soles(diferencia)}</span></div>}
-                                {vuelto > 0 && <div className="flex justify-between font-medium text-emerald-700"><span>Vuelto</span><span className="font-mono tabular-nums">{soles(vuelto)}</span></div>}
-                                {diferencia <= 0.01 && vuelto === 0 && <div className="flex items-center gap-1.5 font-medium text-emerald-700"><Check className="w-4 h-4" /> Cuenta cubierta</div>}
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {requierePinDelivery && (
-                          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 space-y-3 animate-fade-in">
-                            <div className="flex items-start gap-2.5">
-                              <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                              <div>
-                                <p className="text-sm font-medium text-slate-800">Requiere autorización</p>
-                                <p className="text-xs text-slate-500">
-                                  {deliveryMetodoPago === 'Cortesía'
-                                    ? 'Cortesía total (S/ 0.00). Ingresa el PIN de administrador o cajero.'
-                                    : deliveryMetodoPago === 'Consumo'
-                                      ? 'Consumo de personal. Ingresa el PIN de administrador o cajero.'
-                                      : `${cortesiaDeliveryIndices.length} producto(s) como cortesía. Ingresa el PIN de administrador o cajero.`}
-                                </p>
-                              </div>
-                            </div>
-                            <input
-                              type="password"
-                              value={pinAdminDelivery}
-                              onChange={(e) => setPinAdminDelivery(e.target.value)}
-                              placeholder="PIN"
-                              maxLength={10}
-                              autoComplete="off"
-                              className="w-full h-12 bg-white border border-amber-200 rounded-xl px-4 text-center text-xl font-mono tracking-[0.5em] text-slate-900 placeholder:tracking-normal placeholder:text-sm placeholder:text-slate-400 focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-500/10 transition"
-                            />
-                            {(deliveryMetodoPago === 'Cortesía' || cortesiaDeliveryIndices.length > 0) && (
-                              <input
-                                type="text"
-                                value={deliveryMotivoCortesia}
-                                onChange={(e) => setDeliveryMotivoCortesia(e.target.value)}
-                                placeholder="Motivo de la cortesía (opcional)"
-                                className={inp}
-                              />
-                            )}
-                          </div>
-                        )}
-
-                        {deliveryMetodoPago !== 'Consumo' && (
-                          <details className="group rounded-xl border border-slate-200" open={!!deliveryNumDocumento || undefined}>
-                            <summary className="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer list-none select-none">
-                              <span className="text-sm font-medium text-slate-700">Documento del cliente <span className="font-normal text-slate-400">· opcional</span></span>
-                              <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" />
-                            </summary>
-                            <div className="px-4 pb-4 space-y-3">
-                              <div className={`grid grid-cols-1 ${tipoDelivery === 'DeliveryPropio' ? '' : 'sm:grid-cols-2'} gap-3`}>
-                                <div>
-                                  <label className={lbl}>DNI o RUC</label>
-                                  <div className="flex gap-2">
-                                    <input
-                                      type="text"
-                                      value={deliveryNumDocumento}
-                                      onChange={(e) => setDeliveryNumDocumento(e.target.value)}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); buscarClienteDelivery(); } }}
-                                      placeholder={deliveryTipoComprobante === 'Factura' ? '11 dígitos' : '8 dígitos'}
-                                      className={`${inp} font-mono`}
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={buscarClienteDelivery}
-                                      disabled={isBuscando}
-                                      className="w-10 h-10 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-50 grid place-items-center shrink-0 disabled:opacity-50"
-                                      title="Buscar cliente"
-                                    >
-                                      {isBuscando ? <span className="w-4 h-4 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
-                                    </button>
-                                  </div>
-                                </div>
-                                {tipoDelivery !== 'DeliveryPropio' && (
-                                  <div>
-                                    <label className={lbl}>Nombre / razón social</label>
-                                    <input type="text" value={deliveryClienteNombre} onChange={(e) => setDeliveryClienteNombre(e.target.value)} placeholder="Consumidor final" className={inp} />
-                                  </div>
-                                )}
-                              </div>
-                              {deliveryTipoComprobante === 'Factura' && tipoDelivery !== 'DeliveryPropio' && (
-                                <div>
-                                  <label className={lbl}>Dirección fiscal</label>
-                                  <input type="text" value={deliveryDireccion} onChange={(e) => setDeliveryDireccion(e.target.value)} placeholder="Obligatorio" className={inp} />
-                                </div>
-                              )}
-                              <p className="text-[11px] text-slate-400">Se emite ticket de venta; la boleta o factura se hace en SUNAT.</p>
-                            </div>
-                          </details>
-                        )}
-                      </section>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="px-5 md:px-6 py-3.5 border-t border-slate-100 bg-white shrink-0">
-                {requierePinDelivery && conCobro && !pinAdminDelivery.trim() && (
-                  <p className="mb-2 text-xs text-amber-700 flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Ingresa el PIN de autorización para registrar la cortesía / consumo.</p>
-                )}
-                <div className="flex items-center gap-4">
-                  <div className="min-w-0">
-                    <p className="text-xs text-slate-500 truncate">
-                      Subtotal {soles(totalDelivery)}
-                      {deliveryDescuentoMonto > 0 && <span className="text-rose-600"> · Desc. {deliveryDescuentoTipo === 'porcentaje' ? `${deliveryDescPct}%` : ''} −{soles(deliveryDescuentoMonto)}</span>}
-                      {tipoDelivery === 'DeliveryPropio' && <> · Envío {soles(deliveryShippingFee)}</>}
-                    </p>
-                    <p className="text-2xl font-semibold font-mono tabular-nums text-slate-900 leading-tight">{soles(grandTotalDelivery)}</p>
-                  </div>
-                  {deliveryVistaMovil === 'productos' && (
-                    <button
-                      type="button"
-                      onClick={() => setDeliveryVistaMovil('pedido')}
-                      className="md:hidden ml-auto h-12 px-5 rounded-xl bg-sky-600 text-white text-sm font-semibold inline-flex items-center gap-1.5"
-                    >
-                      Continuar <ChevronRight className="w-4 h-4" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={enviarDeliveryACocina}
-                    disabled={enviandoDelivery}
-                    className={`${deliveryVistaMovil === 'productos' ? 'hidden md:inline-flex' : 'inline-flex'} ml-auto h-12 px-6 sm:px-8 rounded-xl text-white text-sm font-semibold transition-colors active:scale-[0.98] disabled:opacity-50 items-center justify-center gap-2 ${
-                      editingPedidoId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'
-                    }`}
-                  >
-                    {enviandoDelivery ? (
-                      <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        {tipoDelivery === 'ParaLlevar' ? <Banknote className="w-4.5 h-4.5" /> : <Truck className="w-4.5 h-4.5" />}
-                        {editingPedidoId
-                          ? 'Actualizar pedido'
-                          : tipoDelivery === 'ParaLlevar'
-                            ? 'Cobrar y enviar'
-                            : 'Registrar y enviar'}
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <ModalNuevoPedidoDelivery
+        abierto={deliveryModal}
+        onCerrar={() => {
+          setDeliveryModal(false);
+          setCodigoPY('');
+          setItemsDelivery([]);
+          setEditingPedidoId(null);
+        }}
+        editingPedidoId={editingPedidoId}
+        setEditingPedidoId={setEditingPedidoId}
+        usuarioOperador={usuarioOperador}
+        tipoDelivery={tipoDelivery}
+        setTipoDelivery={setTipoDelivery}
+        codigoPY={codigoPY}
+        setCodigoPY={setCodigoPY}
+        deliveryMontoEnvio={deliveryMontoEnvio}
+        setDeliveryMontoEnvio={setDeliveryMontoEnvio}
+        avisarPedidosYaPrueba={avisarPedidosYaPrueba}
+        deliveryVistaMovil={deliveryVistaMovil}
+        setDeliveryVistaMovil={setDeliveryVistaMovil}
+        deliverySearchInputRef={deliverySearchInputRef}
+        deliveryBusqueda={deliveryBusqueda}
+        setDeliveryBusqueda={setDeliveryBusqueda}
+        deliveryCategoriaFiltro={deliveryCategoriaFiltro}
+        setDeliveryCategoriaFiltro={setDeliveryCategoriaFiltro}
+        deliveryCategoriasBarra={deliveryCategoriasBarra}
+        setDeliveryCategoriasModalOpen={setDeliveryCategoriasModalOpen}
+        deliveryProductosFiltrados={deliveryProductosFiltrados}
+        abrirOpcionesParaProductoDelivery={abrirOpcionesParaProductoDelivery}
+        agregarItemDeliveryDirecto={agregarItemDeliveryDirecto}
+        itemsDelivery={itemsDelivery}
+        setItemsDelivery={setItemsDelivery}
+        cortesiaDeliveryIndices={cortesiaDeliveryIndices}
+        setCortesiaDeliveryIndices={setCortesiaDeliveryIndices}
+        deliveryMetodoPago={deliveryMetodoPago}
+        setDeliveryMetodoPago={setDeliveryMetodoPago}
+        deliveryPagaCon={deliveryPagaCon}
+        setDeliveryPagaCon={setDeliveryPagaCon}
+        deliveryNombreCliente={deliveryNombreCliente}
+        setDeliveryNombreCliente={setDeliveryNombreCliente}
+        deliveryTelefono={deliveryTelefono}
+        setDeliveryTelefono={setDeliveryTelefono}
+        deliveryDireccion={deliveryDireccion}
+        setDeliveryDireccion={setDeliveryDireccion}
+        deliveryNumDocumento={deliveryNumDocumento}
+        setDeliveryNumDocumento={setDeliveryNumDocumento}
+        handleDocumentoDeliveryChange={handleDocumentoDeliveryChange}
+        deliveryDescuentoTipo={deliveryDescuentoTipo}
+        setDeliveryDescuentoTipo={setDeliveryDescuentoTipo}
+        deliveryDescPct={deliveryDescPct}
+        setDeliveryDescPct={setDeliveryDescPct}
+        deliveryDescFijo={deliveryDescFijo}
+        setDeliveryDescFijo={setDeliveryDescFijo}
+        deliveryCodigoPago={deliveryCodigoPago}
+        setDeliveryCodigoPago={setDeliveryCodigoPago}
+        deliveryMixtoEfec={deliveryMixtoEfec}
+        setDeliveryMixtoEfec={setDeliveryMixtoEfec}
+        deliveryMixtoTarj={deliveryMixtoTarj}
+        setDeliveryMixtoTarj={setDeliveryMixtoTarj}
+        deliveryMixtoYape={deliveryMixtoYape}
+        setDeliveryMixtoYape={setDeliveryMixtoYape}
+        deliveryConsumoUsuario={deliveryConsumoUsuario}
+        setDeliveryConsumoUsuario={setDeliveryConsumoUsuario}
+        deliveryConsumoPin={deliveryConsumoPin}
+        setDeliveryConsumoPin={setDeliveryConsumoPin}
+        deliveryConsumoMotivo={deliveryConsumoMotivo}
+        setDeliveryConsumoMotivo={setDeliveryConsumoMotivo}
+        enviarDeliveryACocina={enviarDeliveryACocina}
+        enviandoDelivery={enviandoDelivery}
+        usuarios={usuarios}
+        DENOMINACIONES_PEN={DENOMINACIONES_PEN}
+        soles={soles}
+        parseMonto={parseMonto}
+        campoCodigoPago={campoCodigoPago}
+      />
 
       {/* MODAL DE SELECCIÓN DE OPCIONES Y COMBOS (INTERACTIVO PARA DELIVERY) */}
-      {optionsModalOpen && selectedProduct && (() => {
-        const steps = getProductSteps(selectedProduct, selections);
-        if (!steps || steps.length === 0) return null;
-        
-        const safeStepIdx = Math.max(0, Math.min(currentStepIdx, steps.length - 1));
-        const currentStep = steps[safeStepIdx] || steps[0];
-        if (!currentStep) return null;
-
-        const esUltimoPaso = safeStepIdx >= steps.length - 1;
-        const seleccionActual = selections[currentStep.key];
-        
-        const handleSelectOption = (val) => {
-          setSelections(prev => ({ ...prev, [currentStep.key]: val }));
-          
-          if (!esUltimoPaso) {
-            setTimeout(() => {
-              setCurrentStepIdx(prev => Math.min(steps.length - 1, prev + 1));
-            }, 150);
-          }
-        };
-        
-        const handleConfirm = () => {
-          const hasCustomConfig = selectedProduct.opcionesConfig && (() => {
-            try {
-              const p = typeof selectedProduct.opcionesConfig === 'string' 
-                ? JSON.parse(selectedProduct.opcionesConfig) 
-                : selectedProduct.opcionesConfig;
-              return Array.isArray(p) && p.length > 0;
-            } catch { return false; }
-          })();
-
-          // Acompañamientos quitados y complementos agregados por el mozo
-          const compl = resolverComplementos(selectedProduct, selections);
-          const soloComplementos = !hasCustomConfig && steps.length === 1 && steps[0].tipo === 'complementos';
-
-          if (selectedProduct.esAgrupado) {
-            const prodVariante = selections["producto_variante"];
-            if (!prodVariante) {
-              alert("Por favor, selecciona una opción de carne.");
-              return;
-            }
-            agregarItemDeliveryDirecto(prodVariante, additionalNotes);
-          } else if (soloComplementos) {
-            const notas = [...compl.notas];
-            if (additionalNotes.trim()) notas.push(`(Nota: ${additionalNotes.trim()})`);
-            agregarItemDeliveryDirecto(selectedProduct, notas.join(' · '), { opciones: [], precioExtra: compl.precioExtra });
-          } else if (hasCustomConfig) {
-            const notesArray = [];
-            steps.forEach(step => {
-              if (step.tipo === 'complementos') return;
-              const val = selections[step.key];
-              if (val) {
-                const valLower = String(val).toLowerCase();
-                if (valLower.includes('sin ') || valLower.includes('omitir')) return;
-                const stepLower = step.name.toLowerCase();
-                if (stepLower.includes('bebida')) {
-                  notesArray.push(`[Bebida: ${val}]`);
-                } else if (stepLower.includes('entrada')) {
-                  notesArray.push(`[Entrada: ${val}]`);
-                } else if (stepLower.includes('guarnicion') || stepLower.includes('acompañamiento')) {
-                  notesArray.push(`[Guarnición: ${val}]`);
-                } else {
-                  notesArray.push(`${step.name}: ${val}`);
-                }
-              }
-            });
-            notesArray.push(...compl.notas);
-            if (additionalNotes.trim()) {
-              notesArray.push(`(Nota: ${additionalNotes.trim()})`);
-            }
-            const finalNotes = notesArray.join(' · ');
-            const sel = resolverSeleccion(steps, selections);
-            agregarItemDeliveryDirecto(selectedProduct, finalNotes, { ...sel, precioExtra: sel.precioExtra + compl.precioExtra });
-          } else if (selectedProduct.categoria === 'Menú' || selectedProduct.categoria?.toLowerCase().includes('menú')) {
-            const notesArray = [];
-            const entr = selections["entrada_menu"];
-            const beb = selections["bebida"];
-            const guarn = selections["guarnicion_menu"];
-            
-            if (entr && !entr.toLowerCase().includes('sin entrada') && !entr.toLowerCase().includes('omitir')) {
-              notesArray.push(`[Entrada: ${entr}]`);
-            }
-            if (beb && !beb.toLowerCase().includes('sin bebida') && !beb.toLowerCase().includes('omitir')) {
-              notesArray.push(`[Bebida: ${beb}]`);
-            }
-            if (guarn && !guarn.toLowerCase().includes('estándar') && !guarn.toLowerCase().includes('sin guarnición') && !guarn.toLowerCase().includes('omitir')) {
-              notesArray.push(`[Guarnición: ${guarn}]`);
-            }
-            
-            if (additionalNotes.trim()) {
-              notesArray.push(`(Nota: ${additionalNotes.trim()})`);
-            }
-            const finalNotes = notesArray.join(' · ');
-            agregarItemDeliveryDirecto(selectedProduct, finalNotes);
-          } else if (getComboConfig(selectedProduct.nombre)) {
-            const notesArray = [];
-            const fondo = selections["fondo"];
-            const proteina = selections["proteina"];
-            const entrada = selections["entrada"];
-            const bebida = selections["bebida"];
-            
-            if (fondo) {
-              if (proteina) {
-                const cleanFondoName = fondo.replace(' (pollo o carne)', '');
-                notesArray.push(`Fondo: ${cleanFondoName} de ${proteina}`);
-              } else {
-                notesArray.push(`Fondo: ${fondo}`);
-              }
-            }
-            if (entrada) {
-              notesArray.push(`[Entrada: ${entrada}]`);
-            }
-            
-            notesArray.push(`+ Refresco + Postre`);
-
-            if (bebida && !bebida.toLowerCase().includes('sin bebida') && !bebida.toLowerCase().includes('omitir')) {
-              notesArray.push(`[Bebida: ${bebida}]`);
-            }
-
-            const cantidadEnsaladas = selections["cantidad_ensaladas"];
-            if (cantidadEnsaladas && !cantidadEnsaladas.toLowerCase().includes('sin ensalada')) {
-              notesArray.push(cantidadEnsaladas);
-            }
-            
-            if (additionalNotes.trim()) {
-              notesArray.push(`(Nota: ${additionalNotes.trim()})`);
-            }
-            const finalNotes = notesArray.join(' · ');
-            agregarItemDeliveryDirecto(selectedProduct, finalNotes);
-          } else {
-            const notesArray = [];
-            steps.forEach(step => {
-              const val = selections[step.key];
-              if (val) {
-                const valLower = String(val).toLowerCase();
-                if (valLower.includes('sin bebida') || valLower.includes('sin ensalada') || valLower.includes('omitir') || valLower.includes('sin acompañamiento') || valLower.includes('sin guarnicion')) {
-                  return;
-                }
-                const stepLower = step.name.toLowerCase();
-                if (stepLower.includes('bebida')) {
-                  notesArray.push(`[Bebida: ${val}]`);
-                } else if (stepLower.includes('ensalada')) {
-                  notesArray.push(val);
-                } else if (stepLower.includes('guarnicion') || stepLower.includes('acompañamiento')) {
-                  notesArray.push(`[Guarnición: ${val}]`);
-                } else if (stepLower.includes('fondo')) {
-                  notesArray.push(`Fondo: ${val}`);
-                } else if (stepLower.includes('entrada')) {
-                  notesArray.push(`[Entrada: ${val}]`);
-                } else {
-                  notesArray.push(`${step.name}: ${val}`);
-                }
-              }
-            });
-            if (additionalNotes.trim()) {
-              notesArray.push(`(Nota: ${additionalNotes.trim()})`);
-            }
-            const finalNotes = notesArray.join(' · ');
-            agregarItemDeliveryDirecto(selectedProduct, finalNotes);
-          }
-          
+      <ModalOpcionesProducto
+        abierto={optionsModalOpen && !!selectedProduct}
+        producto={selectedProduct}
+        onCerrar={() => {
           setOptionsModalOpen(false);
           setSelectedProduct(null);
-        };
-        
-        return (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[250] flex items-center justify-center md:p-4">
-            <div className="bg-slate-900 border border-slate-800 w-full max-w-lg md:rounded-3xl shadow-2xl overflow-hidden flex flex-col h-full max-h-[100vh] md:h-auto md:max-h-[90vh] animate-slide-up">
-              <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/40">
-                <div>
-                  <h3 className="text-white font-black text-base uppercase tracking-tight leading-none">
-                    {selectedProduct.esAgrupado ? "Seleccionar Variante" : "Personalizar Plato"}
-                  </h3>
-                  <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest mt-1">
-                    {selectedProduct.nombre}
-                  </p>
-                </div>
-                <button 
-                  onClick={() => {
-                    setOptionsModalOpen(false);
-                    setSelectedProduct(null);
-                  }}
-                  className="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-2 rounded-xl transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              
-              <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-6">
-                {steps.length > 1 && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                      <span>Paso {safeStepIdx + 1} de {steps.length}</span>
-                      <span className="text-amber-400">{currentStep.name}</span>
-                    </div>
-                    <div className="h-1.5 bg-slate-850 rounded-full overflow-hidden flex border border-slate-800">
-                      {steps.map((_, idx) => (
-                        <div 
-                          key={idx} 
-                          className={`h-full flex-1 border-r border-slate-900 last:border-0 transition-all ${
-                            idx <= safeStepIdx ? 'bg-cyan-500' : 'bg-slate-800'
-                          }`}
-                        ></div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                <div className="space-y-3">
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                    {currentStep.name}:
-                  </h4>
-                  {currentStep.tipo === 'complementos' ? (
-                    <div className="space-y-2">
-                      <p className="text-[10px] text-slate-400">
-                        Toca para quitar lo que el cliente no quiere o agregar un extra. Quitar algo incluido no cambia el precio.
-                      </p>
-                      {currentStep.complementos.map(c => {
-                        const sel = selections.complementos || { quitados: [], agregados: [] };
-                        const quitado = (sel.quitados || []).includes(c.nombre);
-                        const agregado = (sel.agregados || []).includes(c.nombre);
-                        const activo = c.incluido ? !quitado : agregado;
-                        const alternar = () => setSelections(prev => {
-                          const actual = prev.complementos || { quitados: [], agregados: [] };
-                          const quitados = [...(actual.quitados || [])];
-                          const agregados = [...(actual.agregados || [])];
-                          if (c.incluido) {
-                            const i = quitados.indexOf(c.nombre);
-                            if (i >= 0) quitados.splice(i, 1); else quitados.push(c.nombre);
-                          } else {
-                            const i = agregados.indexOf(c.nombre);
-                            if (i >= 0) agregados.splice(i, 1); else agregados.push(c.nombre);
-                          }
-                          return { ...prev, complementos: { quitados, agregados } };
-                        });
-                        return (
-                          <button
-                            key={c.nombre}
-                            onClick={alternar}
-                            className={`w-full p-3 rounded-2xl border text-left flex items-center gap-3 transition-all ${
-                              activo
-                                ? 'bg-emerald-500/10 border-emerald-500/40 text-white'
-                                : 'bg-slate-800 border-slate-700 text-slate-400 line-through decoration-rose-500/70'
-                            }`}
-                          >
-                            <span className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 ${activo ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-500'}`}>
-                              {activo ? <Check className="w-3.5 h-3.5 stroke-[3px]" /> : <X className="w-3.5 h-3.5 stroke-[3px]" />}
-                            </span>
-                            <span className="font-black text-xs uppercase flex-1">{c.nombre}</span>
-                            {!c.incluido && (
-                              <span className={`text-[11px] font-black ${activo ? 'text-emerald-300' : 'text-slate-500'}`}>
-                                + S/ {c.precio.toFixed(2)}
-                              </span>
-                            )}
-                            {c.incluido && <span className="text-[10px] font-bold text-slate-500 uppercase">Incluido</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    {currentStep.options.map((opt, oIdx) => {
-                      const isSelected = selectedProduct.esAgrupado 
-                        ? (seleccionActual && seleccionActual.id === opt.value.id)
-                        : (seleccionActual === opt.value);
-                        
-                      return (
-                        <button
-                          key={oIdx}
-                          onClick={() => handleSelectOption(opt.value)}
-                          className={`p-4 rounded-2xl border text-left flex flex-col justify-between transition-all group relative overflow-hidden min-h-[75px] ${
-                            isSelected
-                              ? 'bg-cyan-500 border-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 scale-[0.98]'
-                              : 'bg-slate-800 border-slate-700 text-slate-100 hover:bg-slate-750 hover:border-slate-600'
-                          }`}
-                        >
-                          <span className="font-black text-xs leading-snug pr-6 uppercase">{opt.label}</span>
-                          {isSelected && (
-                            <Check className="w-4 h-4 text-slate-950 absolute top-4 right-4 stroke-[3px]" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  )}
-                </div>
-                
-                {esUltimoPaso && (
-                  <div className="border-t border-slate-800 pt-5 space-y-3">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
-                      Especificaciones Especiales / Notas
-                    </label>
-                    <textarea
-                      placeholder="Ejemplo: sin cebolla, papas bien doradas, etc."
-                      value={additionalNotes}
-                      onChange={(e) => setAdditionalNotes(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-2xl p-4 text-xs font-bold text-slate-100 focus:outline-none focus:bg-slate-950 custom-scrollbar h-20 resize-none"
-                    ></textarea>
-                  </div>
-                )}
-              </div>
-              
-              <div className="p-5 border-t border-slate-800 bg-slate-950/40 flex justify-between gap-3 shrink-0">
-                <button
-                  onClick={() => setCurrentStepIdx(prev => Math.max(0, prev - 1))}
-                  disabled={safeStepIdx === 0}
-                  className={`px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                    safeStepIdx === 0
-                      ? 'bg-slate-850 text-slate-600 border border-slate-850 opacity-40 cursor-not-allowed shadow-none'
-                      : 'bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-750 hover:text-white'
-                  }`}
-                >
-                  Atrás
-                </button>
-                
-                {esUltimoPaso ? (
-                  <button
-                    onClick={handleConfirm}
-                    disabled={!seleccionActual && (currentStep.options?.length > 0 || currentStep.key === 'producto_variante')}
-                    className={`px-6 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg ${
-                      (seleccionActual || (!currentStep.options?.length && currentStep.key !== 'producto_variante'))
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 shadow-emerald-500/20'
-                        : 'bg-slate-850 text-slate-600 border border-slate-800 cursor-not-allowed shadow-none'
-                    }`}
-                  >
-                    Agregar Pedido
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setCurrentStepIdx(prev => Math.min(steps.length - 1, prev + 1))}
-                    disabled={!seleccionActual && (currentStep.options?.length > 0 || currentStep.key === 'producto_variante')}
-                    className={`px-6 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg ${
-                      (seleccionActual || (!currentStep.options?.length && currentStep.key !== 'producto_variante'))
-                        ? 'bg-cyan-500 hover:bg-amber-600 text-slate-950'
-                        : 'bg-slate-850 text-slate-600 border border-slate-800 cursor-not-allowed shadow-none'
-                    }`}
-                  >
-                    Siguiente
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+        }}
+        onConfirmarItem={(item, notas, extras) => {
+          agregarItemDeliveryDirecto(item, notas, extras);
+          setOptionsModalOpen(false);
+          setSelectedProduct(null);
+        }}
+        getProductSteps={getProductSteps}
+      />
 
       {/* MODAL DE CIERRE DE CAJA (ARQUEO DE TURNO) */}
-      {cierreModalOpen && (() => {
-        if (!cajaEstado.abierto) {
-          return (
-            <div id="modal-cierre" className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[200] flex items-center justify-center p-4 animate-fade-in">
-              <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl text-center space-y-4 border border-slate-100 animate-slide-up">
-                <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center shadow-xs">
-                  <Lock className="w-7 h-7" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-slate-900">La caja se encuentra cerrada</h3>
-                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                    No es posible realizar un arqueo o cierre mientras la caja esté cerrada. Por favor, abre un turno de caja primero.
-                  </p>
-                </div>
-                <div className="flex gap-2.5 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setCierreModalOpen(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-                  >
-                    Entendido
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCierreModalOpen(false);
-                      setConteoApertura({});
-                      setMontoInicialInput('');
-                      setNotaAperturaInput('');
-                      setErrorApertura('');
-                      setModalAperturaOpen(true);
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white shadow-sm shadow-emerald-600/25 transition-colors"
-                  >
-                    Abrir caja
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        }
-
-        // Consolidación reactiva de montos del turno actual
-        const ventasFiltradas = (ultimoCierre 
-          ? ventas.filter(v => new Date(v.createdAt) > new Date(ultimoCierre))
-          : ventas).filter(v => v.estadoPedido !== 'Cancelado');
-
-        const abonosFiltrados = ultimoCierre
-          ? abonos.filter(a => new Date(a.creadoEn) > new Date(ultimoCierre))
-          : abonos;
-
-        const obtenerMontosVentaFrontend = (v) => {
-          if (!v || v.anulado || v.estadoPedido === 'Cancelado') return { efec: 0, tarj: 0, yape: 0 };
-          if (v.metodoPago === 'Cortesía' || v.metodoPago === 'Consumo' || v.metodoPago === 'PedidosYa' || v.metodoPago === 'Crédito') return { efec: 0, tarj: 0, yape: 0 };
-
-          let efec = parseFloat(v.montoEfectivo || 0);
-          let tarj = parseFloat(v.montoTarjeta || 0);
-          let yape = parseFloat(v.montoYape || 0);
-          const total = parseFloat(v.total || 0);
-
-          if (total <= 0) return { efec: 0, tarj: 0, yape: 0 };
-          if (v.metodoPago === 'Efectivo') return { efec: total, tarj: 0, yape: 0 };
-          if (v.metodoPago === 'Tarjeta') return { efec: 0, tarj: total, yape: 0 };
-          if (v.metodoPago === 'Yape') return { efec: 0, tarj: 0, yape: total };
-
-          // Restar la parte a crédito si es mixto
-          const creditAmount = parseFloat(v.montoCredito || 0);
-          const totalFisico = Math.max(0, total - creditAmount);
-          const suma = efec + tarj + yape;
-          if (Math.abs(suma - totalFisico) > 0.01) {
-            if (suma === 0) efec = totalFisico;
-            else if (totalFisico > suma) efec += (totalFisico - suma);
-          }
-          return { efec, tarj, yape };
-        };
-
-        let totalEfectivo = 0;
-        let totalTarjeta = 0;
-        let totalYape = 0;
-
-        ventasFiltradas.forEach(v => {
-          const { efec, tarj, yape } = obtenerMontosVentaFrontend(v);
-          totalEfectivo += efec;
-          totalTarjeta += tarj;
-          totalYape += yape;
-        });
-
-        // Sumar abonos a la caja real
-        abonosFiltrados.forEach(a => {
-          totalEfectivo += a.montoEfectivo || 0;
-          totalTarjeta += a.montoTarjeta || 0;
-          totalYape += a.montoYape || 0;
-        });
-
-        const totalPedidosYa = ventasFiltradas
-          .filter(v => v.metodoPago === 'PedidosYa' && !v.anulado && v.estadoPedido !== 'Cancelado')
-          .reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
-
-        const clienteMap = new Map(clientes.map(c => [c.id, c.esTrabajador]));
-        let totalConsumoPlanilla = 0;
-        let totalConsumoClientes = 0;
-
-        ventasFiltradas.forEach(v => {
-          if (v.anulado || v.estadoPedido === 'Cancelado') return;
-          if (v.metodoPago === 'Consumo') {
-            totalConsumoPlanilla += (parseFloat(v.descuentoAplicado || v.total) || 0);
-          } else {
-            const splits = v.creditoSplit || parsearCreditoSplit(v.ofertaDescripcion, v.clienteCreditoId, (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0)));
-            if (splits.length > 0) {
-              splits.forEach(s => {
-                const esTrab = clienteMap.get(s.clienteId) || false;
-                if (esTrab) {
-                  totalConsumoPlanilla += s.monto;
-                } else {
-                  totalConsumoClientes += s.monto;
-                }
-              });
-            } else if (v.metodoPago === 'Crédito') {
-              totalConsumoClientes += (parseFloat(v.total) || 0);
-            } else if (parseFloat(v.montoCredito || 0) > 0) {
-              totalConsumoClientes += parseFloat(v.montoCredito);
-            }
-          }
-        });
-
-        // Fondo inicial registrado en la apertura del turno actual (solo valores >= 0)
-        const fondoInicialTurno = Math.max(0, Number(cajaEstado.turno?.montoInicial || 0));
-
-        // Salidas / retiros de efectivo de caja en turno (compras de almacén no restan de la gaveta diaria)
-        const retirosCaja = Math.max(0, Number(cajaEstado.resumenEnVivo?.retirosCaja || 0));
-        const egresosEfectivo = retirosCaja;
-        // Ingresos de dinero a la gaveta (sencillo extra, reposición) registrados en el turno
-        const ingresosCaja = Math.max(0, Number(cajaEstado.resumenEnVivo?.ingresosExtra || 0));
-
-        // Total Efectivo Esperado en Gaveta = Fondo Inicial + (Ventas Efec + Abonos Efec) + Ingresos - Salidas de Caja (no puede ser negativo)
-        const totalEfectivoEsperado = Math.max(0, Math.round((fondoInicialTurno + totalEfectivo + ingresosCaja - egresosEfectivo) * 100) / 100);
-
-        // Total Caja = ingresos reales cobrados en caja (efectivo neto + tarjeta + yape)
-        const totalCalculado = Math.max(0, totalEfectivoEsperado + Math.max(0, totalTarjeta) + Math.max(0, totalYape));
-
-        // Cortesías: solo las ventas con metodoPago === 'Cortesía' o descuentoAplicado parcial
-        const totalCortesias = Math.max(0, ventasFiltradas
-          .filter(v => v.metodoPago === 'Cortesía')
-          .reduce((s, v) => s + (v.descuentoAplicado || v.total || 0), 0));
-
-        const montoFisicoNum = Math.max(0, parseFloat(efectivoFisicoContado || 0));
-        const tieneConteoFisico = efectivoFisicoContado.trim() !== '';
-        const diferenciaEfectivo = tieneConteoFisico ? Math.round((montoFisicoNum - totalEfectivoEsperado) * 100) / 100 : 0;
-
-        // Conteo por denominación (billetes y monedas del Perú)
-        const totalConteo = DENOMINACIONES_PEN.reduce((s, d) => s + d.valor * (Number(conteoBilletes[d.valor]) || 0), 0);
-        const hayConteoDenominaciones = DENOMINACIONES_PEN.some(d => Number(conteoBilletes[d.valor]) > 0);
-        const detalleConteo = DENOMINACIONES_PEN
-          .filter(d => Number(conteoBilletes[d.valor]) > 0)
-          .map(d => ({ ...d, cantidad: Number(conteoBilletes[d.valor]), subtotal: d.valor * Number(conteoBilletes[d.valor]) }));
-
-        const cambiarCantidad = (valor, cantidad) => {
-          const n = Math.max(0, Math.floor(Number(cantidad) || 0));
-          const siguiente = { ...conteoBilletes, [valor]: n };
-          setConteoBilletes(siguiente);
-          const total = DENOMINACIONES_PEN.reduce((s, d) => s + d.valor * (Number(siguiente[d.valor]) || 0), 0);
-          setEfectivoFisicoContado(DENOMINACIONES_PEN.some(d => Number(siguiente[d.valor]) > 0) ? total.toFixed(2) : '');
-        };
-
-        const cerrarModalCierre = () => {
-          setCierreModalOpen(false);
-          setEfectivoFisicoContado('');
-          setConteoBilletes({});
-        };
-
-        const cuadra = Math.abs(diferenciaEfectivo) < 0.05;
-
-        return (
-          <div id="modal-cierre" className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[200] flex items-end md:items-center justify-center md:p-6 animate-fade-in">
-            <div className="bg-white w-full max-w-5xl h-[96dvh] md:h-auto md:max-h-[92dvh] rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
-              {/* Header */}
-              <div className="cierre-no-print flex items-center justify-between gap-3 px-5 md:px-6 py-4 border-b border-slate-100 shrink-0">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 grid place-items-center shrink-0"><Calculator className="w-5 h-5" /></span>
-                  <div className="min-w-0">
-                    <h3 className="text-lg font-semibold text-slate-900 leading-tight">Arqueo y cierre de turno</h3>
-                    <p className="text-sm text-slate-500 truncate">{cajaEstado.turno?.cajeroNombre || cajeroNombre} · cuenta el efectivo y cierra la caja</p>
-                  </div>
-                </div>
-                <button type="button" onClick={cerrarModalCierre} className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Body: ticket + calculadora */}
-              <div className="cierre-grid flex-1 min-h-0 overflow-y-auto md:overflow-hidden flex flex-col md:grid md:grid-cols-2">
-                <div className="order-2 md:overflow-y-auto custom-scrollbar p-4 md:p-6 bg-slate-50/70 md:border-l border-slate-100">
-                  <p className="cierre-no-print text-xs font-medium text-slate-500 mb-2">Vista previa del ticket</p>
-
-              {/* Vista del ticket térmico */}
-              <div id="cierre-imprimible" className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm flex flex-col">
-                <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4 flex flex-col items-center">
-                  <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain mb-1 filter grayscale" />
-                  <h4 className="font-black text-sm text-slate-900 uppercase tracking-wide">{COMPANY_CONFIG.legalName}</h4>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">{COMPANY_CONFIG.address} · RUC: {COMPANY_CONFIG.ruc}</p>
-                  <p className="text-[10px] text-slate-400 font-bold mt-1">CIERRE DE TURNO · ARQUEO DIARIO</p>
-                </div>
-
-                <div className="space-y-1.5 border-b border-dashed border-slate-300 pb-3 mb-4 text-slate-600 font-bold">
-                  <div className="flex justify-between"><span>FECHA:</span><span>{new Date().toLocaleDateString('es-PE')}</span></div>
-                  <div className="flex justify-between"><span>HORA IMP:</span><span>{new Date().toLocaleTimeString('es-PE')}</span></div>
-                  <div className="flex justify-between"><span>CAJERO:</span><span className="uppercase">{cajaEstado.turno?.cajeroNombre || cajeroNombre}</span></div>
-                  <div className="flex justify-between"><span>ESTADO:</span><span className="text-emerald-700">FINALIZADO</span></div>
-                </div>
-
-                <div className="space-y-3 mb-4 border-b border-dashed border-slate-300 pb-3">
-                  {fondoInicialTurno > 0 && (
-                    <div className="flex justify-between font-bold text-slate-700">
-                      <span>💼 FONDO INICIAL (APERTURA):</span>
-                      <span className="font-black text-emerald-800">+ S/ {fondoInicialTurno.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-bold text-slate-700">
-                    <span>💵 EFECTIVO VENTAS:</span>
-                    <span className="font-black text-slate-900">S/ {totalEfectivo.toFixed(2)}</span>
-                  </div>
-                  {ingresosCaja > 0 && (
-                    <div className="flex justify-between font-bold text-emerald-700">
-                      <span>📈 INGRESOS A CAJA:</span>
-                      <span className="font-black text-emerald-700">+ S/ {ingresosCaja.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {egresosEfectivo > 0 && (
-                    <div className="flex justify-between font-bold text-rose-600">
-                      <span>📉 SALIDAS DE CAJA:</span>
-                      <span className="font-black text-rose-600">- S/ {egresosEfectivo.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-bold text-slate-700 bg-emerald-50/80 p-1.5 rounded-lg border border-emerald-200">
-                    <span>💵 EFECTIVO TOTAL ESPERADO:</span>
-                    <span className="font-black text-emerald-800">S/ {totalEfectivoEsperado.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-slate-700">
-                    <span>💳 TARJETA POS:</span>
-                    <span className="font-black text-slate-900">S/ {totalTarjeta.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-slate-700">
-                    <span>📱 YAPE / PLIN:</span>
-                    <span className="font-black text-slate-900">S/ {totalYape.toFixed(2)}</span>
-                  </div>
-                  {abonosFiltrados.length > 0 && (
-                    <div className="border-t border-dashed border-slate-200 pt-2 pb-1 text-slate-650 font-bold text-[10px]">
-                      <span className="text-[9px] text-slate-400">DETALLE DE ABONOS RECIBIDOS:</span>
-                      <div className="flex justify-between pl-2">
-                        <span>Abonos Efec:</span>
-                        <span>S/ {abonosFiltrados.reduce((s, a) => s + (a.montoEfectivo || 0), 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between pl-2">
-                        <span>Abonos Tarj:</span>
-                        <span>S/ {abonosFiltrados.reduce((s, a) => s + (a.montoTarjeta || 0), 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between pl-2">
-                        <span>Abonos Yape:</span>
-                        <span>S/ {abonosFiltrados.reduce((s, a) => s + (a.montoYape || 0), 0).toFixed(2)}</span>
-                      </div>
-                    </div>
-                  )}
-                  {totalConsumoClientes > 0 && (
-                    <div className="flex justify-between font-bold text-emerald-700 border-t border-dashed border-slate-205 pt-2">
-                      <span>👥 CRÉDITO CLIENTES:</span>
-                      <span className="font-black text-emerald-800">S/ {totalConsumoClientes.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {totalConsumoPlanilla > 0 && (
-                    <div className="flex justify-between font-bold text-violet-700 border-t border-dashed border-slate-205 pt-2">
-                      <span>👤 CONSUMO PLANILLA:</span>
-                      <span className="font-black text-violet-800">S/ {totalConsumoPlanilla.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {totalCortesias > 0 && (
-                    <div className="flex justify-between font-bold text-amber-700 border-t border-dashed border-amber-200 pt-2">
-                      <span>🎁 CORTESÍAS (VALOR):</span>
-                      <span className="font-black text-amber-900">S/ {totalCortesias.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {totalPedidosYa > 0 && (
-                    <div className="flex justify-between font-bold text-blue-700 border-t border-dashed border-blue-200 pt-2">
-                      <span>🛵 PEDIDOS YA <span className="font-normal text-[9px]">(cobro semanal)</span>:</span>
-                      <span className="font-black text-blue-800">S/ {totalPedidosYa.toFixed(2)}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-between items-center text-sm font-black text-slate-900 uppercase">
-                  <span>💰 TOTAL RECAUDACIÓN:</span>
-                  <span className="text-base text-emerald-700">S/ {totalCalculado.toFixed(2)}</span>
-                </div>
-                {totalPedidosYa > 0 && (
-                  <div className="mt-1 text-[9px] text-blue-600 font-bold text-right">
-                    + S/ {totalPedidosYa.toFixed(2)} PedidosYa (no incluir en cuadre físico)
-                  </div>
-                )}
-
-                {tieneConteoFisico && (
-                  <div className="mt-3 pt-3 border-t border-dashed border-slate-300 text-xs">
-                    {detalleConteo.length > 0 && (
-                      <div className="mb-2 text-[10px] font-bold text-slate-600">
-                        <span className="text-[9px] text-slate-400">DETALLE DEL CONTEO:</span>
-                        {detalleConteo.map(d => (
-                          <div key={d.valor} className="flex justify-between pl-2">
-                            <span>{d.cantidad} x {d.etiqueta}</span>
-                            <span>S/ {d.subtotal.toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex justify-between font-bold text-slate-800">
-                      <span>EFECTIVO CONTADO:</span>
-                      <span className="font-black">S/ {montoFisicoNum.toFixed(2)}</span>
-                    </div>
-                    <div className={`flex justify-between font-black mt-1 text-xs ${
-                      cuadra ? 'text-emerald-700' : (diferenciaEfectivo > 0 ? 'text-blue-700' : 'text-rose-600')
-                    }`}>
-                      <span>DIFERENCIA (CUADRE):</span>
-                      <span>
-                        {cuadra
-                          ? '✓ CUADRE EXACTO'
-                          : (diferenciaEfectivo > 0
-                              ? `+ S/ ${diferenciaEfectivo.toFixed(2)} (SOBRANTE)`
-                              : `- S/ ${Math.abs(diferenciaEfectivo).toFixed(2)} (FALTANTE)`)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="text-center text-[9px] text-slate-400 font-bold mt-6 border-t border-dashed border-slate-200 pt-3">
-                  *** Fin del Reporte de Turno ***
-                </div>
-              </div>
-                </div>
-
-                {/* Calculadora de billetes y monedas en 2 columnas */}
-                <div className="cierre-no-print order-1 md:overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4">
-                  <CalculadoraEfectivoPEN
-                    conteo={conteoBilletes}
-                    onChangeCantidad={cambiarCantidad}
-                    onLimpiar={() => { setConteoBilletes({}); setEfectivoFisicoContado(''); }}
-                    titulo="Conteo físico de efectivo (Billetes y Monedas)"
-                  />
-
-                  {/* Resultado del cuadre */}
-                  <div className="rounded-2xl border border-slate-200 overflow-hidden">
-                    <div className="grid grid-cols-2 divide-x divide-slate-200 text-center">
-                      <div className="p-3">
-                        <p className="text-[11px] text-slate-500">Esperado en caja</p>
-                        <p className="font-mono font-semibold tabular-nums text-slate-900">S/ {totalEfectivoEsperado.toFixed(2)}</p>
-                      </div>
-                      <div className="p-3">
-                        <p className="text-[11px] text-slate-500">Contado</p>
-                        <p className="font-mono font-semibold tabular-nums text-slate-900">S/ {(hayConteoDenominaciones ? totalConteo : montoFisicoNum).toFixed(2)}</p>
-                      </div>
-                    </div>
-                    <div className={`px-3 py-2.5 text-center text-sm font-semibold ${
-                      !tieneConteoFisico ? 'bg-slate-50 text-slate-400' : cuadra ? 'bg-emerald-50 text-emerald-700' : diferenciaEfectivo > 0 ? 'bg-blue-50 text-blue-700' : 'bg-rose-50 text-rose-700'
-                    }`}>
-                      {!tieneConteoFisico
-                        ? 'Marca los billetes y monedas que hay en caja'
-                        : cuadra
-                          ? '✓ Cuadre exacto'
-                          : diferenciaEfectivo > 0
-                            ? `Sobran S/ ${diferenciaEfectivo.toFixed(2)}`
-                            : `Faltan S/ ${Math.abs(diferenciaEfectivo).toFixed(2)}`}
-                    </div>
-                  </div>
-
-                  {/* Monto directo (opcional) */}
-                  <details className="group" open={!hayConteoDenominaciones && tieneConteoFisico ? true : undefined}>
-                    <summary className="cursor-pointer list-none text-xs text-slate-400 hover:text-slate-700 select-none">▸ Prefiero escribir el monto total</summary>
-                    <div className="relative mt-2">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">S/</span>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        placeholder="0.00"
-                        value={efectivoFisicoContado}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val !== '' && parseFloat(val) < 0) return;
-                          setConteoBilletes({});
-                          setEfectivoFisicoContado(val);
-                        }}
-                        className="w-full h-11 bg-white border border-slate-200 rounded-xl pl-9 pr-3 font-mono text-base font-semibold text-slate-900 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5"
-                      />
-                    </div>
-                  </details>
-                </div>
-              </div>
-
-              {/* Acciones */}
-              <div className="cierre-no-print px-5 md:px-6 py-4 border-t border-slate-100 bg-white shrink-0 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="h-12 px-5 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-2 transition-colors"
-                >
-                  <Printer className="w-4 h-4" /> Imprimir ticket
-                </button>
-                <button
-                  type="button"
-                  disabled={guardandoCierre}
-                  onClick={async () => {
-                    if (!cajaEstado.abierto) {
-                      alert('⚠️ La caja ya se encuentra cerrada. No es posible registrar un nuevo cierre.');
-                      cerrarModalCierre();
-                      return;
-                    }
-
-                    if (tieneConteoFisico && (isNaN(montoFisicoNum) || montoFisicoNum < 0)) {
-                      alert('⚠️ El efectivo contado no puede ser un valor negativo. Debe ser un monto positivo (0 o mayor a cero).');
-                      return;
-                    }
-
-                    const pendientes = mesas.filter(m => m.estado !== 'Libre' && m.pedidoData);
-                    if (pendientes.length > 0) {
-                      const nombresMesas = pendientes.map(m => `Mesa ${m.num}`).join(', ');
-                      alert(`⚠️ No se puede realizar el cierre de turno.\n\nAún quedan mesas activas o pendientes de cobración:\n👉 ${nombresMesas}\n\nPor favor, cobre o libere estas mesas antes de cerrar caja.`);
-                      return;
-                    }
-
-                    const maxSaleTime = ventasFiltradas.length > 0
-                      ? Math.max(...ventasFiltradas.map(v => new Date(v.createdAt).getTime()))
-                      : new Date().getTime();
-                    const newCierreISO = new Date(maxSaleTime + 1000).toISOString();
-
-                    const textoConteo = detalleConteo.length > 0
-                      ? ` Conteo: ${detalleConteo.map(d => `${d.cantidad}x${d.etiqueta}`).join(', ')}.`
-                      : '';
-
-                    setGuardandoCierre(true);
-                    try {
-                      const abonosEfectivoTotal = Math.max(0, abonosFiltrados.reduce((s, a) => s + (parseFloat(a.montoEfectivo) || 0), 0));
-                      const contadoFinal = Math.max(0, tieneConteoFisico ? montoFisicoNum : totalEfectivoEsperado);
-                      const esperadoFinal = Math.max(0, totalEfectivoEsperado);
-
-                      await api.registrarCierre({
-                        fechaApertura: ultimoCierre || new Date(Date.now() - 8 * 3600 * 1000).toISOString(),
-                        fechaCierre: newCierreISO,
-                        cajeroNombre: cajeroNombre || currentUser?.nombre || 'Cajero',
-                        montoInicial: Math.max(0, fondoInicialTurno),
-                        efectivoVentas: Math.max(0, totalEfectivo),
-                        efectivoEsperado: esperadoFinal,
-                        efectivoContado: contadoFinal,
-                        diferencia: Math.round((contadoFinal - esperadoFinal) * 100) / 100,
-                        totalTarjeta: Math.max(0, totalTarjeta),
-                        totalYape: Math.max(0, totalYape),
-                        totalConsumo: Math.max(0, totalConsumoClientes + totalConsumoPlanilla),
-                        totalPedidosYa: Math.max(0, totalPedidosYa),
-                        egresosEfectivo: Math.max(0, egresosEfectivo),
-                        abonosEfectivo: abonosEfectivoTotal,
-                        nota: tieneConteoFisico ? `Conteo físico: S/ ${contadoFinal.toFixed(2)}. Diferencia: S/ ${(Math.round((contadoFinal - esperadoFinal) * 100) / 100).toFixed(2)}.${textoConteo}` : null,
-                      });
-
-                      localStorage.setItem('ultimoCierre', newCierreISO);
-                      setUltimoCierre(newCierreISO);
-                      setMostrarTodoElDia(false);
-                      setCajaEstado({ abierto: false, turno: null, cargando: false });
-                      await fetchCajaData();
-
-                      const diffMsg = tieneConteoFisico
-                        ? `\nEfectivo Contado: S/ ${montoFisicoNum.toFixed(2)}\nDiferencia: S/ ${diferenciaEfectivo.toFixed(2)}`
-                        : '';
-                      alert(`✅ ¡Cierre de Turno registrado con éxito en la Base de Datos!\n\nTotal en Gaveta (esperado): S/ ${totalEfectivoEsperado.toFixed(2)}${diffMsg}\n${totalPedidosYa > 0 ? `PedidosYa (cobro semanal): S/ ${totalPedidosYa.toFixed(2)}\n` : ''}El turno ha sido cerrado.`);
-                      cerrarModalCierre();
-                    } catch (err) {
-                      console.error('Error al registrar cierre de caja en el servidor:', err);
-                      // Fallback local por seguridad ante micro-desconexiones
-                      localStorage.setItem('ultimoCierre', newCierreISO);
-                      setUltimoCierre(newCierreISO);
-                      setMostrarTodoElDia(false);
-                      setCajaEstado({ abierto: false, turno: null, cargando: false });
-                      alert(`⚠️ El turno se cerró localmente (aviso: sincronización con base de datos falló: ${err.message || 'error de conexión'}).`);
-                      cerrarModalCierre();
-                    } finally {
-                      setGuardandoCierre(false);
-                    }
-                  }}
-                  className="h-12 px-6 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 shadow-sm shadow-red-600/25 transition-colors active:scale-[0.98] disabled:opacity-50"
-                >
-                  <Lock className="w-4 h-4" />
-                  {guardandoCierre ? 'Cerrando…' : 'Cerrar turno'}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <ModalCierreCaja
+        abierto={cierreModalOpen}
+        onCerrar={() => setCierreModalOpen(false)}
+        onCierreExitoso={async (newCierreISO) => {
+          setUltimoCierre(newCierreISO);
+          setMostrarTodoElDia(false);
+          setCajaEstado({ abierto: false, turno: null, cargando: false });
+          await fetchCajaData();
+        }}
+        cajaEstado={cajaEstado}
+        ventas={ventas}
+        abonos={abonos}
+        clientes={clientes}
+        mesas={mesas}
+        ultimoCierre={ultimoCierre}
+        empresa={COMPANY_CONFIG}
+        cajeroNombre={cajeroNombre || currentUser?.nombre || 'Cajero'}
+        parsearCreditoSplit={parsearCreditoSplit}
+      />
 
       {/* MODAL DE APERTURA DE CAJA / INICIO DE TURNO */}
-      {modalAperturaOpen && (
-        <div className="fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-[220] flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-          <div className="bg-white w-full max-w-2xl max-h-[94dvh] rounded-3xl shadow-2xl p-5 sm:p-6 flex flex-col animate-slide-up border border-slate-100 overflow-hidden">
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-sm">
-                  <Banknote className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight leading-none">Apertura de Caja</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Iniciar nuevo turno y registrar fondo inicial de sencillo</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => { setModalAperturaOpen(false); setModoOtroCajero(false); setConteoApertura({}); setErrorApertura(''); }}
-                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
-                aria-label="Cerrar modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {errorApertura && (
-              <div className="mb-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-2 shrink-0">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{errorApertura}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleAbrirCaja} className="space-y-4 overflow-y-auto custom-scrollbar flex-1 pr-1">
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5 flex justify-between items-center">
-                  <span>Cajero(a) a quien se le aperturará la caja:</span>
-                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    Personal Registrado
-                  </span>
-                </label>
-                <div className="relative">
-                  <select
-                    required
-                    value={modoOtroCajero ? '__OTRO__' : cajeroNombre}
-                    onChange={(e) => {
-                      if (e.target.value === '__OTRO__') {
-                        setModoOtroCajero(true);
-                        setCajeroNombre('');
-                      } else {
-                        setModoOtroCajero(false);
-                        setCajeroNombre(e.target.value);
-                      }
-                    }}
-                    className="w-full bg-slate-50 hover:bg-slate-100/80 border border-slate-200 focus:border-emerald-500 focus:bg-white rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:outline-none transition-all cursor-pointer appearance-none pr-9 shadow-2xs"
-                  >
-                    <option value="" disabled>-- Selecciona el Cajero(a) --</option>
-                    {cajerosDisponibles.map((u) => (
-                      <option key={u.id} value={u.nombre}>
-                        {u.nombre} · ({u.rol || 'Personal'})
-                      </option>
-                    ))}
-                    {cajerosDisponibles.length === 0 && (
-                      <option value={cajeroNombre || 'María'}>{cajeroNombre || 'María'} (Cajero)</option>
-                    )}
-                    <option value="__OTRO__">✍️ Ingresar otro nombre manualmente...</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
-                </div>
-
-                {modoOtroCajero && (
-                  <div className="mt-2">
-                    <input
-                      type="text"
-                      required
-                      value={cajeroNombre}
-                      onChange={(e) => setCajeroNombre(e.target.value)}
-                      placeholder="Escribe el nombre del cajero(a)..."
-                      autoFocus
-                      className="w-full bg-white border-2 border-emerald-500 rounded-xl px-3.5 py-2 text-sm font-bold text-slate-800 focus:outline-none shadow-xs"
-                    />
-                    <p className="text-[10px] text-slate-400 mt-1">Escribe el nombre del cajero responsable para este turno.</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Calculadora en 2 Columnas para Apertura de Caja */}
-              <div className="pt-1">
-                <CalculadoraEfectivoPEN
-                  conteo={conteoApertura}
-                  onChangeCantidad={cambiarCantidadApertura}
-                  onLimpiar={() => {
-                    setConteoApertura({});
-                    setMontoInicialInput('');
-                  }}
-                  titulo="Calculadora de Sencillo (Billetes y Monedas)"
-                />
-              </div>
-
-              {/* Total y campo manual de fondo inicial */}
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <span className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                      Fondo Inicial Total en Gaveta:
-                    </span>
-                    <p className="text-xs text-slate-400">
-                      Calculado por las denominaciones o ingresado directamente
-                    </p>
-                  </div>
-                  <div className="relative w-full sm:w-44">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-slate-400 text-sm">S/</span>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      placeholder="0.00"
-                      value={montoInicialInput}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val !== '' && parseFloat(val) < 0) return;
-                        setConteoApertura({});
-                        setMontoInicialInput(val);
-                      }}
-                      className="w-full bg-white border-2 border-slate-200 focus:border-emerald-500 rounded-xl pl-8 pr-3 py-1.5 text-base font-black font-mono text-slate-900 focus:outline-none shadow-inner text-right"
-                    />
-                  </div>
-                </div>
-
-                {/* Accesos directos de fondo de caja */}
-                <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-200/60 flex-wrap">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Rápidos:</span>
-                  {[0, 50, 100, 150].map((val) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => {
-                        setConteoApertura({});
-                        setMontoInicialInput(String(val));
-                      }}
-                      className={`px-3 py-1 rounded-lg text-xs font-black transition-all border ${
-                        montoInicialInput === String(val) && Object.keys(conteoApertura).length === 0
-                          ? 'bg-emerald-500 text-slate-950 border-emerald-600 shadow-sm'
-                          : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      {val === 0 ? 'Sin Sencillo' : `S/ ${val}`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5">
-                  Observación / Nota de Apertura (opcional):
-                </label>
-                <input
-                  type="text"
-                  value={notaAperturaInput}
-                  onChange={(e) => setNotaAperturaInput(e.target.value)}
-                  placeholder="Ej. Sencillo recibido para inicio de labores..."
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-700 focus:outline-none"
-                />
-              </div>
-
-              <div className="pt-2 flex gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => { setModalAperturaOpen(false); setModoOtroCajero(false); setConteoApertura({}); setErrorApertura(''); }}
-                  className="w-1/3 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-widest transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={guardandoApertura}
-                  className="w-2/3 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black rounded-xl text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  {guardandoApertura ? 'Abriendo...' : 'Confirmar Apertura'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ModalAperturaCaja
+        abierto={modalAperturaOpen}
+        onCerrar={() => setModalAperturaOpen(false)}
+        onAperturaExitosa={async () => {
+          await fetchCajaData();
+          aviso.exito('Turno de caja aperturado exitosamente');
+        }}
+        cajerosDisponibles={cajerosDisponibles}
+        cajeroNombrePorDefecto={cajeroNombre || currentUser?.nombre || ''}
+      />
 
       {/* MODAL DE SALIDA / RETIRO DE EFECTIVO DE CAJA */}
-      {modalSalidaCajaOpen && (() => {
-        const esIngreso = tipoMovimientoCaja === 'INGRESO';
-        const acento = esIngreso
-          ? { icono: 'bg-emerald-500', foco: 'focus:border-emerald-500', chip: 'bg-emerald-600 text-white border-emerald-600', boton: 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20', nota: 'text-emerald-600' }
-          : { icono: 'bg-rose-500', foco: 'focus:border-rose-500', chip: 'bg-rose-500 text-white border-rose-600', boton: 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20', nota: 'text-rose-500' };
-        return (
-        <div className="fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col animate-slide-up border border-slate-100">
-            <div className="flex justify-between items-center mb-5 pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-2xl text-white flex items-center justify-center font-black shadow-sm ${acento.icono}`}>
-                  {esIngreso ? <ArrowDownLeft className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
-                </div>
-                <div>
-                  <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight leading-none">Movimiento de Caja</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">{esIngreso ? 'Entrada de dinero a la gaveta' : 'Salida de dinero de la gaveta'}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalSalidaCajaOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Tipo de movimiento */}
-            <div className="grid grid-cols-2 p-1 rounded-xl bg-slate-100 mb-4">
-              {[
-                ['RETIRO', 'Retirar', ArrowUpRight, 'bg-rose-500 text-white shadow-sm'],
-                ['INGRESO', 'Ingresar', ArrowDownLeft, 'bg-emerald-600 text-white shadow-sm'],
-              ].map(([id, label, Icono, activo]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => { setTipoMovimientoCaja(id); setErrorSalidaCaja(''); }}
-                  className={`h-10 rounded-lg text-sm font-bold inline-flex items-center justify-center gap-1.5 transition-all ${tipoMovimientoCaja === id ? activo : 'text-slate-500 hover:text-slate-800'}`}
-                >
-                  <Icono className="w-4 h-4" /> {label}
-                </button>
-              ))}
-            </div>
-
-            {errorSalidaCaja && (
-              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{errorSalidaCaja}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleRegistrarSalidaCaja} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5 flex justify-between">
-                  <span>{esIngreso ? 'Monto a ingresar a la gaveta:' : 'Monto a retirar de la gaveta:'}</span>
-                  <span className={`font-bold ${acento.nota}`}>{esIngreso ? 'Suma al arqueo' : 'Resta al arqueo'}</span>
-                </label>
-                <div className="relative mb-2">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-slate-400 text-base">S/</span>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0.01"
-                    required
-                    autoFocus
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    value={montoSalidaCaja}
-                    onChange={(e) => setMontoSalidaCaja(e.target.value)}
-                    className={`w-full bg-white border-2 border-slate-200 rounded-xl pl-9 pr-3.5 py-2.5 text-lg font-black text-slate-900 focus:outline-none shadow-inner ${acento.foco}`}
-                  />
-                </div>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {[10, 20, 50, 100].map((val) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => setMontoSalidaCaja(String(val))}
-                      className={`py-1.5 rounded-lg text-xs font-black transition-all border ${
-                        montoSalidaCaja === String(val)
-                          ? `${acento.chip} shadow-sm`
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      S/ {val}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5">
-                  {esIngreso ? 'Motivo / Concepto del ingreso:' : 'Motivo / Concepto del retiro:'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={motivoSalidaCaja}
-                  onChange={(e) => setMotivoSalidaCaja(e.target.value)}
-                  placeholder={esIngreso ? 'Ej. Sencillo adicional, reposición de caja…' : 'Ej. Compra de hielo, pasaje delivery, gas urgente…'}
-                  className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:outline-none ${acento.foco}`}
-                />
-              </div>
-
-              <div className="pt-2 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setModalSalidaCajaOpen(false)}
-                  className="w-1/3 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-widest transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={guardandoSalidaCaja}
-                  className={`w-2/3 py-3 text-white font-black rounded-xl text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all disabled:opacity-50 ${acento.boton}`}
-                >
-                  {guardandoSalidaCaja ? 'Registrando...' : (esIngreso ? 'Confirmar ingreso' : 'Confirmar retiro')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-        );
-      })()}
+      <ModalRetiroCaja
+        abierto={modalSalidaCajaOpen}
+        onCerrar={() => setModalSalidaCajaOpen(false)}
+        onMovimientoExitoso={async ({ tipo, monto }) => {
+          await fetchCajaData();
+          aviso.exito(tipo === 'INGRESO'
+            ? `Ingreso de S/ ${monto.toFixed(2)} registrado en caja`
+            : `Retiro de S/ ${monto.toFixed(2)} registrado correctamente`);
+        }}
+        cajeroNombre={usuarioOperador}
+        tipoInicial={tipoMovimientoCaja}
+      />
 
       {/* MODAL DE HISTORIAL DE CIERRES DE CAJA (POSTGRESQL) */}
-      {historialCierresModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-6 flex flex-col max-h-[85vh] overflow-hidden animate-slide-up">
-            {/* Header */}
-            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600">
-                  <History className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight">Historial de Cierres de Turno</h3>
-                  <p className="text-xs text-slate-400 font-medium">Registros históricos persistidos en PostgreSQL</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setHistorialCierresModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-2 hover:bg-slate-100 rounded-xl transition-all"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar py-4 space-y-3">
-              {cargandoHistorialCierres ? (
-                <div className="py-12 flex flex-col items-center justify-center text-slate-400">
-                  <div className="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin mb-3" />
-                  <p className="text-xs font-bold uppercase tracking-wider">Cargando registros...</p>
-                </div>
-              ) : (!historialCierres || historialCierres.length === 0) ? (
-                <div className="py-12 text-center text-slate-400">
-                  <FileText className="w-12 h-12 mx-auto text-slate-300 mb-2 stroke-[1.5]" />
-                  <p className="text-sm font-black text-slate-600 uppercase">Sin cierres guardados</p>
-                  <p className="text-xs text-slate-400 mt-1">Los cierres que realices desde "Cerrar Turno" se archivarán aquí automáticamente.</p>
-                </div>
-              ) : (
-                historialCierres.map(c => {
-                  const dif = Number(c.diferencia || 0);
-                  const isExact = Math.abs(dif) < 0.01;
-                  const isSobrante = dif > 0.01;
-                  return (
-                    <div key={c.id} className="bg-slate-50 hover:bg-slate-100/70 border border-slate-200/80 rounded-2xl p-4 transition-all">
-                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200/60">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-xs bg-purple-100 text-purple-700 px-2.5 py-0.5 rounded-full">
-                            #{c.id}
-                          </span>
-                          <span className="font-black text-xs text-slate-800 uppercase">
-                            {new Date(c.fechaCierre).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
-                          </span>
-                          <span className="text-[11px] font-bold text-slate-500">
-                            · Cajero: <strong className="text-slate-700 uppercase">{c.cajeroNombre}</strong>
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-black uppercase text-slate-400">Diferencia:</span>
-                          <span className={`text-xs font-mono font-black px-2 py-0.5 rounded-lg ${
-                            isExact
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : isSobrante
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-rose-100 text-rose-700'
-                          }`}>
-                            {isSobrante ? `+S/ ${dif.toFixed(2)}` : `S/ ${dif.toFixed(2)}`}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2.5 text-xs">
-                        <div className="bg-white p-2 rounded-xl border border-slate-200/60">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">Efec. Esperado</p>
-                          <p className="font-black font-mono text-slate-800">S/ {Number(c.efectivoEsperado || 0).toFixed(2)}</p>
-                        </div>
-                        <div className="bg-white p-2 rounded-xl border border-slate-200/60">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">Efec. Contado</p>
-                          <p className="font-black font-mono text-slate-800">S/ {Number(c.efectivoContado || 0).toFixed(2)}</p>
-                        </div>
-                        <div className="bg-white p-2 rounded-xl border border-slate-200/60">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">Tarjeta / Yape</p>
-                          <p className="font-black font-mono text-slate-800">
-                            S/ {(Number(c.totalTarjeta || 0) + Number(c.totalYape || 0)).toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="bg-white p-2 rounded-xl border border-slate-200/60">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">Egresos Efec.</p>
-                          <p className="font-black font-mono text-rose-600">S/ {Number(c.egresosEfectivo || 0).toFixed(2)}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 mt-2.5 border-t border-slate-200/60">
-                        {c.nota ? (
-                          <p className="text-[11px] text-slate-500 font-medium italic">
-                            Nota: {c.nota}
-                          </p>
-                        ) : <div />}
-                        <button
-                          onClick={() => setCierreAImprimir(c)}
-                          className="px-3 py-1.5 bg-slate-900 hover:bg-purple-700 text-white font-black rounded-xl text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 ml-auto"
-                        >
-                          <Printer className="w-3.5 h-3.5 text-purple-300" />
-                          Reimprimir Ticket
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="pt-3 border-t border-slate-100 flex justify-end">
-              <button
-                onClick={() => setHistorialCierresModalOpen(false)}
-                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-wider transition-all"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalHistorialCierres
+        abierto={historialCierresModalOpen}
+        onCerrar={() => setHistorialCierresModalOpen(false)}
+        cargandoHistorialCierres={cargandoHistorialCierres}
+        historialCierres={historialCierres}
+        onReimprimir={(cierre) => setCierreAImprimir(cierre)}
+      />
 
       {/* MODAL DE REIMPRESIÓN DE TICKET DE CIERRE HISTÓRICO */}
-      {cierreAImprimir && (
-        <div id="modal-cierre-reimpresion" className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[240] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar animate-slide-up relative">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-2 text-purple-700">
-                <Printer className="w-5 h-5 shrink-0" />
-                <h3 className="font-black text-slate-900 text-base uppercase tracking-tight leading-none">Ticket de Cierre #{cierreAImprimir.id}</h3>
-              </div>
-              <button onClick={() => setCierreAImprimir(null)} className="text-slate-400 hover:text-slate-900 p-1 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Vista del ticket térmico */}
-            <div id="cierre-imprimible-reimpresion" className="bg-amber-50/70 border-2 border-dashed border-amber-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm mb-5 flex flex-col">
-              <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4 flex flex-col items-center">
-                <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain mb-1 filter grayscale" />
-                <h4 className="font-black text-sm text-slate-900 uppercase tracking-wide">{COMPANY_CONFIG.legalName}</h4>
-                <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">{COMPANY_CONFIG.address} · RUC: {COMPANY_CONFIG.ruc}</p>
-                <p className="text-[10px] text-purple-700 font-black mt-1 uppercase">COPIA DE CIERRE DE TURNO · #{cierreAImprimir.id}</p>
-              </div>
-
-              <div className="space-y-1.5 border-b border-dashed border-slate-300 pb-3 mb-4 text-slate-600 font-bold">
-                <div className="flex justify-between"><span>FECHA APERTURA:</span><span>{new Date(cierreAImprimir.fechaApertura).toLocaleString('es-PE')}</span></div>
-                <div className="flex justify-between"><span>FECHA CIERRE:</span><span>{new Date(cierreAImprimir.fechaCierre).toLocaleString('es-PE')}</span></div>
-                <div className="flex justify-between"><span>CAJERO:</span><span className="uppercase">{cierreAImprimir.cajeroNombre}</span></div>
-                <div className="flex justify-between"><span>ESTADO:</span><span className="text-emerald-700 font-black">CERRADO</span></div>
-              </div>
-
-              <div className="space-y-2.5 mb-4 border-b border-dashed border-slate-300 pb-3">
-                <div className="flex justify-between font-bold text-slate-700">
-                  <span>💵 EFECTIVO VENTAS:</span>
-                  <span className="font-black text-slate-900">S/ {Number(cierreAImprimir.efectivoVentas || 0).toFixed(2)}</span>
-                </div>
-                {Number(cierreAImprimir.egresosEfectivo || 0) > 0 && (
-                  <div className="flex justify-between font-bold text-rose-600">
-                    <span>🔻 GASTOS EFECTIVO:</span>
-                    <span className="font-black">- S/ {Number(cierreAImprimir.egresosEfectivo || 0).toFixed(2)}</span>
-                  </div>
-                )}
-                {Number(cierreAImprimir.abonosEfectivo || 0) > 0 && (
-                  <div className="flex justify-between font-bold text-emerald-600">
-                    <span>➕ ABONOS EFECTIVO:</span>
-                    <span className="font-black">+ S/ {Number(cierreAImprimir.abonosEfectivo || 0).toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-black text-slate-900 bg-amber-100/60 p-2 rounded-lg">
-                  <span>EFECTIVO ESPERADO:</span>
-                  <span>S/ {Number(cierreAImprimir.efectivoEsperado || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-slate-700">
-                  <span>EFECTIVO CONTADO:</span>
-                  <span className="font-black text-slate-900">S/ {Number(cierreAImprimir.efectivoContado || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-black">
-                  <span>DIFERENCIA:</span>
-                  <span className={Number(cierreAImprimir.diferencia || 0) < 0 ? 'text-rose-600' : 'text-emerald-700'}>
-                    S/ {Number(cierreAImprimir.diferencia || 0).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-1.5 mb-3 border-b border-dashed border-slate-300 pb-3 text-[11px]">
-                <div className="flex justify-between font-bold text-slate-600">
-                  <span>💳 TARJETA:</span>
-                  <span>S/ {Number(cierreAImprimir.totalTarjeta || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-slate-600">
-                  <span>📱 YAPE / PLIN:</span>
-                  <span>S/ {Number(cierreAImprimir.totalYape || 0).toFixed(2)}</span>
-                </div>
-                {Number(cierreAImprimir.totalPedidosYa || 0) > 0 && (
-                  <div className="flex justify-between font-bold text-rose-500">
-                    <span>🛵 PEDIDOS YA:</span>
-                    <span>S/ {Number(cierreAImprimir.totalPedidosYa || 0).toFixed(2)}</span>
-                  </div>
-                )}
-                {Number(cierreAImprimir.totalConsumo || 0) > 0 && (
-                  <div className="flex justify-between font-bold text-purple-600">
-                    <span>🍽️ CONSUMO / CRÉDITO:</span>
-                    <span>S/ {Number(cierreAImprimir.totalConsumo || 0).toFixed(2)}</span>
-                  </div>
-                )}
-              </div>
-
-              {cierreAImprimir.nota && (
-                <div className="text-[10px] text-slate-500 italic mb-3">
-                  <strong>Nota:</strong> {cierreAImprimir.nota}
-                </div>
-              )}
-
-              <div className="text-center text-[10px] text-slate-400 font-bold">
-                *** Reimpresión de Arqueo de Turno ***
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setCierreAImprimir(null)}
-                className="py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-wider transition-colors"
-              >
-                Cerrar
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-1.5"
-              >
-                <Printer className="w-4 h-4" />
-                Imprimir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalReimpresionCierre
+        cierre={cierreAImprimir}
+        onCerrar={() => setCierreAImprimir(null)}
+        empresa={COMPANY_CONFIG}
+      />
 
       {/* Modal: Corregir Método de Pago */}
-      {cambioMetodoModal && ventaACambiar && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[260] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-slide-up">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-amber-500 to-orange-500 p-5 text-slate-950 flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-sm uppercase tracking-wider flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
-                  Corregir Método de Pago
-                </h3>
-                <p className="text-xs font-bold opacity-80 mt-0.5">Venta #{ventaACambiar.id} · S/ {ventaACambiar.total.toFixed(2)}</p>
-              </div>
-              <button onClick={() => { setCambioMetodoModal(false); setCambioPin(''); setCambioError(''); }} className="bg-black/20 hover:bg-black/30 p-2 rounded-xl transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 flex flex-col gap-4">
-              {/* Método anterior */}
-              <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Método actual</p>
-                <p className="font-black text-slate-800 uppercase text-sm">{ventaACambiar.metodoPago}</p>
-              </div>
-
-              {/* Nuevo método */}
-              <div>
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-2">Nuevo Método de Pago</label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {['Efectivo', 'Tarjeta', 'Yape', 'PedidosYa', 'Consumo', 'Cortesía', 'Mixto'].map(mp => (
-                    <button
-                      key={mp}
-                      type="button"
-                      onClick={() => setCambioNuevoMetodo(mp)}
-                      className={`py-2 px-1 rounded-xl text-[9px] font-black uppercase border-2 transition-all ${
-                        cambioNuevoMetodo === mp
-                          ? mp === 'Efectivo' ? 'bg-emerald-500 border-emerald-600 text-white' :
-                            mp === 'Tarjeta' ? 'bg-blue-500 border-blue-600 text-white' :
-                            mp === 'Yape' ? 'bg-purple-500 border-purple-600 text-white' :
-                            mp === 'Consumo' ? 'bg-slate-700 border-slate-800 text-white' :
-                            mp === 'Cortesía' ? 'bg-cyan-500 border-amber-600 text-slate-950' :
-                            mp === 'Mixto' ? 'bg-orange-500 border-orange-600 text-white' :
-                            'bg-indigo-500 border-indigo-600 text-white'
-                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                      }`}
-                    >
-                      {mp === 'Efectivo' ? '💵' : mp === 'Tarjeta' ? '💳' : mp === 'Yape' ? '📱' : mp === 'Consumo' ? '👤' : mp === 'Cortesía' ? '🎁' : mp === 'Mixto' ? '➕' : '🛵'} {mp === 'Consumo' ? 'Consumo' : mp === 'Cortesía' ? 'Corte.' : mp}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Pago Mixto para Corrección */}
-              {cambioNuevoMetodo === 'Mixto' && (() => {
-                const total = ventaACambiar.total;
-                const efecVal = parseFloat(cambioMixtoEfectivo || 0);
-                const tarjVal = parseFloat(cambioMixtoTarjeta || 0);
-                const yapeVal = parseFloat(cambioMixtoYape || 0);
-                const ingresado = efecVal + tarjVal + yapeVal;
-                const restante = Math.max(0, total - (tarjVal + yapeVal));
-                const vuelto = efecVal > restante ? efecVal - restante : 0;
-                const diferencia = total - ingresado;
-
-                return (
-                  <div className="bg-cyan-500/5 border border-amber-500/20 p-3 rounded-2xl shadow-sm space-y-3">
-                    <h4 className="text-[9px] font-black uppercase tracking-wider text-amber-600 flex justify-between">
-                      <span>Desglose de Pago Mixto</span>
-                      <span>Total: S/ {total.toFixed(2)}</span>
-                    </h4>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="block text-slate-500 font-bold mb-0.5 text-[8px] tracking-wider uppercase">💵 Efec. (S/)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={cambioMixtoEfectivo}
-                          onChange={(e) => setCambioMixtoEfectivo(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 font-mono font-bold text-slate-800 text-xs focus:outline-none focus:border-amber-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-500 font-bold mb-0.5 text-[8px] tracking-wider uppercase">💳 Tarj. (S/)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={cambioMixtoTarjeta}
-                          onChange={(e) => setCambioMixtoTarjeta(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 font-mono font-bold text-slate-800 text-xs focus:outline-none focus:border-amber-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-500 font-bold mb-0.5 text-[8px] tracking-wider uppercase">📱 Yape (S/)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={cambioMixtoYape}
-                          onChange={(e) => setCambioMixtoYape(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 font-mono font-bold text-slate-800 text-xs focus:outline-none focus:border-amber-500"
-                        />
-                      </div>
-                    </div>
-                    <div className="bg-white/80 p-2 rounded-lg border border-slate-100 grid grid-cols-2 gap-1 text-[9px] font-bold text-slate-500">
-                      <div className="flex justify-between">
-                        <span>Ingresado:</span>
-                        <span className="font-mono text-slate-700">S/ {ingresado.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Faltante:</span>
-                        <span className={`font-mono ${diferencia > 0 ? 'text-red-650' : 'text-emerald-600'}`}>
-                          S/ {Math.max(0, diferencia).toFixed(2)}
-                        </span>
-                      </div>
-                      {vuelto > 0 && (
-                        <div className="flex justify-between col-span-2 border-t border-slate-100 pt-1 mt-0.5 text-[10px] text-emerald-700 font-black">
-                          <span>💸 Vuelto:</span>
-                          <span className="font-mono">S/ {vuelto.toFixed(2)}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* PIN Admin */}
-              <div>
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-2">🔐 PIN de Administrador</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={cambioPin}
-                  onChange={e => { setCambioPin(e.target.value); setCambioError(''); }}
-                  onKeyDown={e => e.key === 'Enter' && handleCambiarMetodoPago()}
-                  placeholder="••••••"
-                  className="w-full bg-slate-50 border-2 border-slate-200 focus:border-amber-500 focus:bg-white rounded-2xl px-4 py-3 text-center text-xl font-black tracking-[0.5em] text-slate-800 placeholder:tracking-normal placeholder:text-slate-300 focus:outline-none transition-all"
-                  style={{ WebkitTextSecurity: 'disc', textSecurity: 'disc' }}
-                  autoComplete="off"
-                  name="cambio-pin-auth"
-                  autoFocus
-                />
-              </div>
-
-              {/* Error */}
-              {cambioError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-black px-4 py-2.5 rounded-2xl uppercase tracking-wide flex items-center gap-2">
-                  <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                  {cambioError}
-                </div>
-              )}
-
-              {/* Botones */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setCambioMetodoModal(false); setCambioPin(''); setCambioError(''); }}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase rounded-2xl transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleCambiarMetodoPago}
-                  disabled={cambiando || !cambioPin.trim()}
-                  className="flex-1 py-3 bg-cyan-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs uppercase rounded-2xl transition-all flex items-center justify-center gap-2 shadow-md"
-                >
-                  {cambiando ? <span className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" /> : null}
-                  {cambiando ? 'Guardando...' : 'Confirmar Cambio'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalCorregirMetodoPago
+        abierto={cambioMetodoModal}
+        venta={ventaACambiar}
+        onCerrar={() => setCambioMetodoModal(false)}
+        onGuardar={async ({ ventaId, nuevoMetodo, pin, desgloseMixto }) => {
+          const res = await api.cambiarMetodoPago(ventaId, nuevoMetodo, pin, desgloseMixto);
+          if (res?.error) {
+            throw new Error(res.error);
+          }
+          await fetchCajaData();
+          aviso.exito('Método de pago actualizado exitosamente');
+        }}
+      />
 
       {/* Modal: Corregir Tipo de Entrega */}
-      {cambioTipoEntregaModal && ventaATipoCambiar && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[260] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-up">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-indigo-500 to-blue-500 p-5 text-white flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-sm uppercase tracking-wider flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
-                  Corregir Tipo de Entrega
-                </h3>
-                <p className="text-xs font-bold opacity-80 mt-0.5">Venta #{ventaATipoCambiar.id} · S/ {ventaATipoCambiar.total.toFixed(2)}</p>
-              </div>
-              <button onClick={() => { setCambioTipoEntregaModal(false); setCambioTipoPin(''); setCambioTipoError(''); }} className="bg-black/20 hover:bg-black/30 p-2 rounded-xl transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 flex flex-col gap-4 max-h-[80vh] overflow-y-auto">
-              {/* Selector de Nuevo Tipo */}
-              <div>
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-2">Nuevo Tipo de Entrega</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { type: 'ParaLlevar', label: '🛍️ Llevar' },
-                    { type: 'DeliveryPropio', label: '🛵 Delivery' },
-                    { type: 'PedidosYa', label: '🛵 PedidosYa' }
-                  ].map(item => (
-                    <button
-                      key={item.type}
-                      type="button"
-                      onClick={() => setCambioNuevoTipo(item.type)}
-                      className={`py-3 px-2 rounded-2xl text-xs font-black uppercase border-2 transition-all ${
-                        cambioNuevoTipo === item.type
-                          ? 'bg-indigo-500 border-indigo-600 text-white'
-                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Campos dinámicos según el tipo de entrega */}
-              {cambioNuevoTipo === 'PedidosYa' && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col gap-3">
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Código PedidosYa</label>
-                    <input
-                      type="text"
-                      value={cambioCodigoPY}
-                      onChange={e => setCambioCodigoPY(e.target.value)}
-                      placeholder="Ej. FG-4821"
-                      className="w-full bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-350 focus:outline-none transition-all uppercase"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {cambioNuevoTipo === 'ParaLlevar' && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col gap-3">
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Nombre del Cliente</label>
-                    <input
-                      type="text"
-                      value={cambioNombreCliente}
-                      onChange={e => setCambioNombreCliente(e.target.value)}
-                      placeholder="Ej. Juan Pérez"
-                      className="w-full bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-350 focus:outline-none transition-all uppercase"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Método de Pago</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {['Efectivo', 'Tarjeta', 'Yape'].map(mp => (
-                        <button
-                          key={mp}
-                          type="button"
-                          onClick={() => setCambioMetodoPago(mp)}
-                          className={`py-2 px-1 rounded-xl text-[10px] font-black uppercase border transition-all ${
-                            cambioMetodoPago === mp
-                              ? 'bg-slate-800 text-white border-slate-800'
-                              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                          }`}
-                        >
-                          {mp}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {cambioNuevoTipo === 'DeliveryPropio' && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col gap-3">
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Nombre del Cliente</label>
-                    <input
-                      type="text"
-                      value={cambioNombreCliente}
-                      onChange={e => setCambioNombreCliente(e.target.value)}
-                      placeholder="Ej. Juan Pérez"
-                      className="w-full bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-350 focus:outline-none transition-all uppercase"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Teléfono</label>
-                      <input
-                        type="text"
-                        value={cambioTelefono}
-                        onChange={e => setCambioTelefono(e.target.value)}
-                        placeholder="Ej. 999888777"
-                        className="w-full bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-350 focus:outline-none transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Costo Delivery (S/)</label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={cambioMontoDelivery}
-                        onChange={e => setCambioMontoDelivery(e.target.value)}
-                        placeholder="Ej. 5.00"
-                        className="w-full bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-350 focus:outline-none transition-all"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Dirección de Envío</label>
-                    <input
-                      type="text"
-                      value={cambioDireccion}
-                      onChange={e => setCambioDireccion(e.target.value)}
-                      placeholder="Ej. Av. Larco 123"
-                      className="w-full bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-350 focus:outline-none transition-all"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Paga Con (S/)</label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={cambioMontoConCuanto}
-                        onChange={e => setCambioMontoConCuanto(e.target.value)}
-                        placeholder="Ej. 100.00"
-                        className="w-full bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-350 focus:outline-none transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Método de Pago</label>
-                      <div className="grid grid-cols-3 gap-1">
-                        {['Efectivo', 'Tarjeta', 'Yape'].map(mp => (
-                          <button
-                            key={mp}
-                            type="button"
-                            onClick={() => setCambioMetodoPago(mp)}
-                            className={`py-2 px-1 rounded-xl text-[9px] font-black uppercase border transition-all ${
-                              cambioMetodoPago === mp
-                                ? 'bg-slate-800 text-white border-slate-800'
-                                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                            }`}
-                          >
-                            {mp}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* PIN Admin */}
-              <div>
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-2">🔐 PIN de Administrador</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={cambioTipoPin}
-                  onChange={e => { setCambioTipoPin(e.target.value); setCambioTipoError(''); }}
-                  onKeyDown={e => e.key === 'Enter' && handleCambiarTipoEntrega()}
-                  placeholder="••••••"
-                  className="w-full bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 focus:bg-white rounded-2xl px-4 py-2.5 text-center text-xl font-black tracking-[0.5em] text-slate-800 placeholder:tracking-normal placeholder:text-slate-300 focus:outline-none transition-all"
-                  style={{ WebkitTextSecurity: 'disc', textSecurity: 'disc' }}
-                  autoComplete="off"
-                  name="cambio-tipo-pin-auth"
-                />
-              </div>
-
-              {/* Error */}
-              {cambioTipoError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-black px-4 py-2.5 rounded-2xl uppercase tracking-wide flex items-center gap-2">
-                  <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                  {cambioTipoError}
-                </div>
-              )}
-
-              {/* Botones */}
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => { setCambioTipoEntregaModal(false); setCambioTipoPin(''); setCambioTipoError(''); }}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase rounded-2xl transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCambiarTipoEntrega}
-                  disabled={cambioTipoCambiando || !cambioTipoPin.trim()}
-                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black text-xs uppercase rounded-2xl transition-all flex items-center justify-center gap-2 shadow-md"
-                >
-                  {cambioTipoCambiando ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
-                  {cambioTipoCambiando ? 'Guardando...' : 'Confirmar Cambio'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalCorregirTipoEntrega
+        abierto={cambioTipoEntregaModal}
+        venta={ventaATipoCambiar}
+        onCerrar={() => setCambioTipoEntregaModal(false)}
+        onGuardar={async ({ ventaId, datos }) => {
+          const res = await api.cambiarTipoEntrega(ventaId, datos);
+          if (res?.error) {
+            throw new Error(res.error);
+          }
+          await fetchCajaData();
+          aviso.exito('Tipo de entrega corregido exitosamente');
+        }}
+      />
 
       {/* Modal: Autorizar Cancelación de Llevar/Delivery */}
-      {cancelLlevarModalOpen && pedidoACancelarLlevar && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[260] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-slide-up">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-red-500 to-rose-600 p-5 text-white flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-sm uppercase tracking-wider flex items-center gap-2">
-                  <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                  Autorizar Cancelación
-                </h3>
-                <p className="text-xs font-bold opacity-90 mt-0.5">Pedido: {pedidoACancelarLlevar.codigoPedidosYa || `ID: ${pedidoACancelarLlevar.pedidoId}`} · Total: S/ {pedidoACancelarLlevar.total.toFixed(2)}</p>
-              </div>
-              <button onClick={() => { setCancelLlevarModalOpen(false); setPedidoACancelarLlevar(null); setPinCancelLlevar(''); setErrorCancelLlevar(''); }} className="bg-black/20 hover:bg-black/30 p-2 rounded-xl transition-colors text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <ModalCancelarLlevar
+        abierto={cancelLlevarModalOpen}
+        pedido={pedidoACancelarLlevar}
+        onCerrar={() => setCancelLlevarModalOpen(false)}
+        onCanceladoExitoso={async () => {
+          aviso.exito('Pedido cancelado. Cocina ha sido notificada.');
+          await fetchCajaData();
+        }}
+        usuarioOperador={usuarioOperador}
+      />
 
-            <div className="p-5 flex flex-col gap-4">
-              <div className="bg-red-50 rounded-2xl p-3 border border-red-100 text-slate-800 text-xs font-semibold leading-relaxed">
-                ⚠️ <strong className="font-black text-red-700">Atención:</strong> Esta acción cancelará la orden del cliente de forma permanente y enviará una alerta en tiempo real a cocina/barra.
-              </div>
-
-              {/* Detalle de ítems del pedido */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col gap-2">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Detalle del Pedido a Cancelar:</p>
-                <div className="divide-y divide-slate-100 max-h-40 overflow-y-auto pr-1">
-                  {pedidoACancelarLlevar.items && pedidoACancelarLlevar.items.length > 0 ? (
-                    pedidoACancelarLlevar.items.map((item, idx) => (
-                      <div key={idx} className="flex justify-between py-1.5 text-xs text-slate-800 font-bold uppercase">
-                        <span>{item.cant}× {item.nombre}</span>
-                        <span className="font-mono text-slate-600">S/ {(item.cant * item.precio).toFixed(2)}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-slate-400 italic">Sin productos registrados</p>
-                  )}
-                </div>
-              </div>
-
-              {/* PIN Admin */}
-              <div>
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-2">🔐 PIN del Administrador</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={pinCancelLlevar}
-                  onChange={e => { setPinCancelLlevar(e.target.value); setErrorCancelLlevar(''); }}
-                  onKeyDown={e => e.key === 'Enter' && handleExecuteCancelLlevar()}
-                  placeholder="••••••"
-                  className="w-full bg-slate-50 border-2 border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-center text-xl font-black tracking-[0.5em] text-slate-800 placeholder:tracking-normal placeholder:text-slate-300 focus:outline-none transition-all"
-                  style={{ WebkitTextSecurity: 'disc', textSecurity: 'disc' }}
-                  autoComplete="off"
-                  name="cancel-pin-auth"
-                  autoFocus
-                />
-              </div>
-
-              {/* Error */}
-              {errorCancelLlevar && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-black px-4 py-2.5 rounded-2xl uppercase tracking-wide flex items-center gap-2">
-                  <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                  {errorCancelLlevar}
-                </div>
-              )}
-
-              {/* Botones */}
-              <div className="flex gap-3 mt-2">
-                <button
-                  onClick={() => { setCancelLlevarModalOpen(false); setPedidoACancelarLlevar(null); setPinCancelLlevar(''); setErrorCancelLlevar(''); }}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase rounded-2xl transition-all"
-                >
-                  Regresar
-                </button>
-                <button
-                  onClick={handleExecuteCancelLlevar}
-                  disabled={!pinCancelLlevar.trim()}
-                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase rounded-2xl transition-all disabled:opacity-50 shadow-md shadow-red-500/20"
-                >
-                  ✓ Cancelar Orden
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {sunatModalOpen && activeComprobante && (
-        <div id="modal-comprobante-sunat-print-container" className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[95vh] animate-slide-up">
-            <div className="bg-slate-950 p-4 text-white flex justify-between items-center shrink-0">
-              <h3 className="font-black text-xs uppercase tracking-wider flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-amber-500" /> {
-                  activeComprobante.metodoPago === 'Consumo' ? '👤 CONSUMO PERSONAL 👤' :
-                  activeComprobante.metodoPago === 'Cortesía' ? '🎁 TICKET DE CORTESÍA 🎁' :
-                  'TICKET DE VENTA'
-                }
-              </h3>
-              <button onClick={() => setSunatModalOpen(false)} className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-xl transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div id="comprobante-sunat-ticket-print" className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-white text-slate-900 font-mono text-xs leading-relaxed">
-              {activeComprobante.contingencia && activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' && (
-                <div className="bg-amber-100 text-amber-900 border-2 border-dashed border-amber-400 p-2 rounded-lg text-center mb-3 font-bold text-[9px] uppercase tracking-tight no-print">
-                  ⚠️ TICKET DE CONTROL INTERNO<br />
-                  Emisión electrónica pendiente por contingencia
-                </div>
-              )}
-              
-              <div className="flex justify-center mb-2">
-                <img src="/logo.png" alt="Logo" className="w-14 h-14 object-contain filter grayscale contrast-125" />
-              </div>
-              <div className="text-center font-black tracking-wide" style={{ fontSize: '14px', marginBottom: '2px' }}>{COMPANY_CONFIG.legalName}</div>
-              <div className="text-center text-[10px] leading-tight mb-2">
-                {COMPANY_CONFIG.address}<br />
-                R.U.C. N° {COMPANY_CONFIG.ruc}
-              </div>
-              
-              <div className="text-center font-bold mb-1" style={{ fontSize: '11px' }}>{
-                activeComprobante.metodoPago === 'Consumo' ? '👤 VALE DE CONSUMO PERSONAL' :
-                activeComprobante.metodoPago === 'Cortesía' ? '🎁 CORTESÍA / CONSUMO INTERNO' :
-                'TICKET DE VENTA'
-              }</div>
-              <div className="text-center font-bold mb-3" style={{ fontSize: '13px' }}>{
-                activeComprobante.metodoPago === 'Consumo' ? `CONS-00${activeComprobante.mesaNum || 'SM'}-${activeComprobante.correlativo}` :
-                activeComprobante.metodoPago === 'Cortesía' ? `COR-00${activeComprobante.mesaNum || 'SM'}` :
-                `N° ${activeComprobante.correlativo}`
-              }</div>
-              
-              <div className="flex justify-between border-t border-b border-dashed border-slate-300 py-1.5 mb-2 font-bold">
-                <span>{activeComprobante.fecha} {activeComprobante.hora}</span>
-                <span>Mesa {activeComprobante.mesaNum}</span>
-              </div>
-              
-              {(() => {
-                const itemsImprimibles = (activeComprobante.items || []).filter(Boolean);
-
-                return (
-                  <>
-                    <div className="space-y-1 mb-3">
-                      <div><strong>Cliente:</strong> <span className="uppercase">{activeComprobante.clienteNombre}</span></div>
-                      {activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' && (
-                        <div><strong>{activeComprobante.tipo === 'Factura' ? 'RUC' : 'DNI'}:</strong> <span>{activeComprobante.clienteDoc}</span></div>
-                      )}
-                      {activeComprobante.clienteDireccion && (
-                        <div><strong>Dirección:</strong> <span className="uppercase text-[9px] leading-none block mt-0.5">{activeComprobante.clienteDireccion}</span></div>
-                      )}
-                      <div><strong>Items:</strong> <span>{itemsImprimibles.length}</span></div>
-                    </div>
-
-                    {/* Box de Datos de Despacho para Delivery */}
-                    {activeComprobante.deliveryInfo && (
-                      <div style={{ border: '1px dashed black', padding: '6px', margin: '8px 0', fontSize: '10px', lineHeight: '1.3' }} className="space-y-1 bg-slate-50 rounded-lg">
-                        <div className="text-center font-bold uppercase mb-1" style={{ fontSize: '11px' }}>🛵 DATOS DE DESPACHO / DELIVERY 🛵</div>
-                        <div><strong>DIRECCIÓN:</strong> <span className="uppercase font-bold">{activeComprobante.deliveryInfo.direccion}</span></div>
-                        <div className="flex justify-between">
-                          <div><strong>TELÉFONO:</strong> <span>{activeComprobante.deliveryInfo.telefono}</span></div>
-                          <div><strong>ENVÍO:</strong> <span>S/ {parseFloat(activeComprobante.deliveryInfo.montoDelivery || 0).toFixed(2)}</span></div>
-                        </div>
-                        {activeComprobante.deliveryInfo.conCuanto && parseFloat(activeComprobante.deliveryInfo.conCuanto) > 0 && (
-                          <div className="border-t border-slate-300 pt-1 mt-1 flex justify-between font-bold">
-                            <div><strong>PAGA CON:</strong> <span>S/ {parseFloat(activeComprobante.deliveryInfo.conCuanto).toFixed(2)}</span></div>
-                            <div><strong>VUELTO:</strong> <span className="text-emerald-700">S/ {parseFloat(activeComprobante.deliveryInfo.vuelto).toFixed(2)}</span></div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    
-                    <hr style={{ border: '0', borderTop: '1px dashed black', margin: '10px 0' }} />
-                    
-                    {/* Items Table Header */}
-                    <div className="flex font-bold border-b border-dashed border-slate-350 pb-1 mb-1">
-                      <span className="w-8 shrink-0">Cant</span>
-                      <span className="flex-1 pl-1">DESCRIPCIÓN</span>
-                      <span className="w-14 text-right shrink-0">P.Unit</span>
-                      <span className="w-18 text-right shrink-0">TOTAL</span>
-                    </div>
-                    
-                    {itemsImprimibles.map((item, idx) => {
-                const subTotalItem = item.cant * item.precio;
-                const cantStr = item.cant % 1 === 0 ? item.cant.toFixed(0) : item.cant.toFixed(2);
-                return (
-                  <div key={idx} className="flex flex-col mb-1.5">
-                    <div className="flex items-start">
-                      <span className="w-8 shrink-0 font-bold">{cantStr}x</span>
-                      <span className="flex-1 uppercase pl-1">{item.nombre}</span>
-                      <span className="w-14 text-right shrink-0">{item.precio.toFixed(2)}</span>
-                      <span className="w-18 text-right shrink-0">{subTotalItem.toFixed(2)}</span>
-                    </div>
-                    {item.notas && (
-                      <div className="pl-8 text-[9px] text-slate-500 font-bold leading-tight uppercase text-left break-all">
-                        {item.notas}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </>
-          );
-        })()}
-              
-              <hr style={{ border: '0', borderTop: '1px dashed black', margin: '10px 0' }} />
-              
-              <div className="space-y-1 text-right font-bold" style={{ fontSize: '11px' }}>
-                {activeComprobante.descuentoAplicado > 0 && (
-                  <>
-                    <div className="flex justify-between text-slate-700">
-                      <span>IMPORTE BRUTO</span> 
-                      <span>S/ {(activeComprobante.total + activeComprobante.descuentoAplicado).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-900">
-                      <span>{activeComprobante.ofertaDescripcion ? activeComprobante.ofertaDescripcion.toUpperCase() : 'DESCUENTO'}</span> 
-                      <span>- S/ {activeComprobante.descuentoAplicado.toFixed(2)}</span>
-                    </div>
-                  </>
-                )}
-                <div className="flex justify-between" style={{ fontSize: '12px', fontWeight: '900' }}><span>TOTAL</span> <span>S/ {activeComprobante.total.toFixed(2)}</span></div>
-              </div>
-              
-              <hr style={{ border: '0', borderTop: '1px dashed black', margin: '10px 0' }} />
-              
-              {activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' && (
-                <div className="mb-4">
-                  <strong className="block text-[10px]">IMPORTE EN LETRAS:</strong>
-                  <span className="uppercase text-[10px] leading-tight block">{activeComprobante.totalLetras}</span>
-                </div>
-              )}
-              
-              
-              <div>
-                <strong>FORMA DE PAGO:</strong> <span className="uppercase">{
-                  activeComprobante.metodoPago === 'Consumo' ? 'DESCUENTO PLANILLA (PERSONAL)' :
-                  activeComprobante.metodoPago === 'Cortesía' ? 'CORTESÍA / CONSUMO INTERNO' :
-                  activeComprobante.metodoPago === 'Mixto' ? 'PAGO MIXTO' :
-                  activeComprobante.metodoPago === 'Efectivo' ? 'CONTADO' : 'CONTADO (' + activeComprobante.metodoPago + ')'
-                }</span>
-              </div>
-              
-              {activeComprobante.metodoPago === 'Mixto' && (
-                <div className="mt-1.5 border-t border-dashed border-black pt-1.5 space-y-0.5 text-[10px]">
-                  {activeComprobante.montoEfectivo > 0 && (
-                    <div className="flex justify-between"><span>- EFECTIVO:</span> <span>S/ {activeComprobante.montoEfectivo.toFixed(2)}</span></div>
-                  )}
-                  {activeComprobante.montoTarjeta > 0 && (
-                    <div className="flex justify-between"><span>- TARJETA:</span> <span>S/ {activeComprobante.montoTarjeta.toFixed(2)}</span></div>
-                  )}
-                  {activeComprobante.montoYape > 0 && (
-                    <div className="flex justify-between"><span>- YAPE/PLIN:</span> <span>S/ {activeComprobante.montoYape.toFixed(2)}</span></div>
-                  )}
-                </div>
-              )}
-              
-              {FACTURACION_ELECTRONICA && activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' ? (
-                <div className="flex justify-center my-5">
-                  <img 
-                    src={activeComprobante.qrImageUrl} 
-                    alt="QR Comprobante" 
-                    style={{ width: '120px', height: '120px' }} 
-                    className="border p-1 bg-white"
-                    onLoad={() => {
-                      if (activeComprobante.shouldAutoPrint) {
-                        setTimeout(() => {
-                          window.print();
-                        }, 200);
-                        setActiveComprobante(prev => prev ? ({ ...prev, shouldAutoPrint: false }) : null);
-                      }
-                    }}
-                  />
-                </div>
-              ) : (
-                <div style={{ display: 'none' }}>
-                  <img 
-                    src={activeComprobante.qrImageUrl} 
-                    alt="QR Comprobante" 
-                    onLoad={() => {
-                      if (activeComprobante.shouldAutoPrint) {
-                        setTimeout(() => {
-                          window.print();
-                        }, 200);
-                        setActiveComprobante(prev => prev ? ({ ...prev, shouldAutoPrint: false }) : null);
-                      }
-                    }}
-                  />
-                </div>
-              )}
-
-              {(activeComprobante.metodoPago === 'Consumo' || activeComprobante.metodoPago === 'Cortesía') && (
-                <div className="mt-8 mb-4 border-t border-slate-400 pt-6 text-center">
-                  <p className="border-t border-dashed border-slate-350 mx-auto w-3/4 mb-1"></p>
-                  <p className="text-[10px] font-black uppercase tracking-wider">FIRMA COLABORADOR</p>
-                  <p className="text-[9px] text-slate-500 mt-0.5 font-medium">{activeComprobante.clienteNombre}</p>
-                </div>
-              )}
-              
-              <div className="text-center font-bold mt-4" style={{ fontSize: '10px' }}>¡Gracias por su preferencia!</div>
-              <div className="text-center text-[9px] leading-tight text-slate-500 mt-1">
-                {
-                  activeComprobante.metodoPago === 'Consumo' ? 'VALE INTERNO AUTORIZADO DE COLABORADOR' :
-                  activeComprobante.metodoPago === 'Cortesía' ? 'TICKET DE CONSUMO INTERNO AUTORIZADO' :
-                  'Documento interno de control. No es comprobante de pago: solicite su boleta o factura en caja.'
-                }
-              </div>
-
-              {FACTURACION_ELECTRONICA && activeComprobante.enlacePdf && activeComprobante.metodoPago !== 'Cortesía' && activeComprobante.metodoPago !== 'Consumo' && (
-                <div className="text-center text-[10px] mt-4 font-bold no-print pt-2 border-t border-slate-100">
-                  <a href={activeComprobante.enlacePdf} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800 flex items-center justify-center gap-1.5">
-                    📄 Descargar Comprobante SUNAT (PDF)
-                  </a>
-                </div>
-              )}
-            </div>
-
-            
-            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2 shrink-0">
-              <button onClick={() => window.print()} className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black uppercase tracking-widest rounded-xl text-xs flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/20">
-                <Receipt className="w-4 h-4" /> Imprimir 80mm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal Comprobante / Ticket SUNAT */}
+      <ModalComprobanteSunat
+        abierto={sunatModalOpen}
+        comprobante={activeComprobante}
+        empresa={COMPANY_CONFIG}
+        facturacionElectronica={FACTURACION_ELECTRONICA}
+        onCerrar={() => setSunatModalOpen(false)}
+      />
 
       {/* Modal: Anular / Registrar Devolución de Venta */}
-      {anularVentaModal && ventaAAnular && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[260] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-slide-up border border-slate-100">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-red-600 to-rose-700 p-5 text-white flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-sm uppercase tracking-wider flex items-center gap-2">
-                  <Ban className="w-5 h-5 animate-pulse" />
-                  Registrar Devolución
-                </h3>
-                <p className="text-xs font-bold opacity-90 mt-0.5">
-                  Venta #{ventaAAnular.id} ({ventaAAnular.tipoComprobante}) · Original: S/ {(ventaAAnular.montoOriginal || ventaAAnular.total).toFixed(2)}
-                </p>
-              </div>
-              <button 
-                onClick={() => { setAnularVentaModal(false); setVentaAAnular(null); setAnularError(''); }}
-                className="bg-black/20 hover:bg-black/30 p-2 rounded-xl transition-colors"
-              >
-                <X className="w-5 h-5 text-white" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="p-5 space-y-4">
-              <div className="bg-red-50 border border-red-200 p-3 rounded-2xl text-red-900 text-xs font-medium space-y-1">
-                <div className="font-black flex items-center gap-1.5 text-red-700 uppercase tracking-wide">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
-                  Atención sobre Devoluciones
-                </div>
-                <p className="text-[11px] text-red-800 leading-snug">
-                  Esta venta <strong>permanecerá en el historial</strong> para auditoría, pero su monto cambiará a <strong>S/ 0.00</strong> para que no afecte el arqueo de caja.
-                </p>
-              </div>
-
-              {/* Motivo de Devolución */}
-              <div>
-                <label className="block text-slate-600 font-black text-xs uppercase tracking-wider mb-1">
-                  Motivo de Devolución / Anulación:
-                </label>
-                <textarea
-                  value={anularMotivo}
-                  onChange={(e) => setAnularMotivo(e.target.value)}
-                  placeholder="Ej: Cliente devolvió pedido por demora / Pedido equivocado / Cancelación..."
-                  rows={2}
-                  className="w-full bg-slate-50 border-2 border-slate-200 focus:border-red-500 rounded-xl p-2.5 font-medium text-slate-800 text-xs focus:outline-none resize-none"
-                />
-              </div>
-
-              {/* PIN de Administrador */}
-              <div>
-                <label className="block text-slate-600 font-black text-xs uppercase tracking-wider mb-1">
-                  PIN de Autorización (Administrador):
-                </label>
-                <input
-                  type="password"
-                  value={anularPin}
-                  onChange={(e) => setAnularPin(e.target.value)}
-                  placeholder="••••"
-                  maxLength={6}
-                  className="w-full bg-slate-50 border-2 border-slate-200 focus:border-red-500 rounded-xl px-4 py-2.5 text-center font-mono font-black text-slate-900 tracking-[0.5em] text-lg focus:outline-none"
-                  style={{ WebkitTextSecurity: 'disc', textSecurity: 'disc' }}
-                  autoComplete="off"
-                />
-              </div>
-
-              {/* Error */}
-              {anularError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-black px-4 py-2 rounded-xl flex items-center gap-2">
-                  <X className="w-4 h-4 shrink-0" />
-                  {anularError}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => { setAnularVentaModal(false); setVentaAAnular(null); setAnularError(''); }}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase rounded-2xl transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={procesarAnulacionVenta}
-                  disabled={anularCargando || !anularPin.trim() || !anularMotivo.trim()}
-                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-black text-xs uppercase rounded-2xl transition-all flex items-center justify-center gap-2 shadow-md active:scale-95"
-                >
-                  {anularCargando ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
-                  {anularCargando ? 'Procesando...' : 'Confirmar Devolución'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style>{`
-        @page {
-          size: auto;
-          margin: 0mm;
-        }
-        @media print {
-          /* Ocultar elementos de navegación y fondos */
-          aside, header, #sidebar-menu, #sidebar-backdrop, button, nav, .no-print {
-            display: none !important;
-          }
-          /* Ocultar el resto del contenido de la página excepto el modal a imprimir */
-          main > *:not(section),
-          section > *:not(#modal-comprobante-sunat-print-container):not(#modal-cierre):not(#modal-cierre-reimpresion) {
-            display: none !important;
-          }
-          /* Garantizar que el body y contenedores no tengan alturas fijas o desbordamientos */
-          html, body, #root, main, section {
-            background: white !important;
-            color: black !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-            height: auto !important;
-            width: auto !important;
-          }
-          /* Formatear el contenedor del ticket en 74mm en la esquina superior izquierda */
-          #modal-comprobante-sunat-print-container {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 74mm !important;
-            height: auto !important;
-            display: block !important;
-            background: white !important;
-            z-index: 99999 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          #modal-comprobante-sunat-print-container > div {
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            max-width: 74mm !important;
-            width: 74mm !important;
-            height: auto !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          #modal-comprobante-sunat-print-container div.bg-slate-950, 
-          #modal-comprobante-sunat-print-container div.shrink-0 {
-            display: none !important;
-          }
-          #comprobante-sunat-ticket-print {
-            width: 74mm !important;
-            padding: 6px !important;
-            margin: 0 !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
-            font-size: 11px !important;
-            line-height: 1.3 !important;
-            color: #000000 !important;
-            font-weight: 850 !important;
-          }
-          #comprobante-sunat-ticket-print * {
-            color: #000000 !important;
-            font-weight: 850 !important;
-          }
-          #comprobante-sunat-ticket-print div,
-          #comprobante-sunat-ticket-print blockquote {
-            page-break-inside: avoid !important;
-          }
-          
-          /* Cierre de Caja en impresión */
-          #modal-cierre,
-          #modal-cierre-reimpresion {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 74mm !important;
-            height: auto !important;
-            display: block !important;
-            background: white !important;
-            z-index: 99999 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          #modal-cierre > div,
-          #modal-cierre-reimpresion > div {
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            max-width: 74mm !important;
-            width: 74mm !important;
-            height: auto !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          #modal-cierre div.bg-slate-950, 
-          #modal-cierre div.shrink-0,
-          #modal-cierre-reimpresion button {
-            display: none !important;
-          }
-          #cierre-imprimible,
-          #cierre-imprimible-reimpresion {
-            width: 74mm !important;
-            padding: 6px !important;
-            margin: 0 !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
-            font-size: 11px !important;
-            line-height: 1.3 !important;
-            color: #000000 !important;
-            font-weight: 850 !important;
-          }
-          #cierre-imprimible *,
-          #cierre-imprimible-reimpresion * {
-            color: #000000 !important;
-            font-weight: 850 !important;
-          }
-          #cierre-imprimible div,
-          #cierre-imprimible-reimpresion div {
-            page-break-inside: avoid !important;
-          }
-          #modal-cierre .cierre-no-print {
-            display: none !important;
-          }
-          #modal-cierre > div {
-            max-height: none !important;
-            overflow: visible !important;
-          }
-          #modal-cierre .cierre-grid,
-          #modal-cierre .cierre-grid > div {
-            display: block !important;
-            overflow: visible !important;
-            padding: 0 !important;
-            border: 0 !important;
-            background: white !important;
-          }
-        }
-      `}</style>
-
+      <ModalAnularVenta
+        abierto={anularVentaModal}
+        venta={ventaAAnular}
+        onCerrar={() => setAnularVentaModal(false)}
+        onAnulacionExitosa={async () => {
+          await fetchCajaData();
+          aviso.exito('Devolución / Anulación registrada con éxito');
+        }}
+      />
 
       {/* FLOATING TOASTS NOTIFICATIONS SYSTEM FOR CAJA */}
       <div className="fixed bottom-6 right-6 z-[250] flex flex-col gap-3 max-w-sm w-full pointer-events-none">

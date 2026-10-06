@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Clock, CheckCheck, CheckCircle2, User, Truck, XCircle, AlertTriangle, Salad, ShoppingBag, Bike, UtensilsCrossed, Timer, X } from 'lucide-react';
+import { useAviso } from './ui';
 
 const parseDeliveryInfo = (code) => {
   if (!code || !code.startsWith('DELIVERY -')) return null;
@@ -61,6 +62,7 @@ export default function MonitorPreparacion({
   textoVacio = 'Sin pedidos pendientes',
   subtextoVacio = 'Todo al día.',
 }) {
+  const aviso = useAviso();
   const [pedidos, setPedidos] = useState([]);
   const [cancelaciones, setCancelaciones] = useState([]);
   const [ahora, setAhora] = useState(() => Date.now());
@@ -158,7 +160,7 @@ export default function MonitorPreparacion({
       await marcarPedidoListo(pedidoId);
       await fetchPedidos();
     } catch (err) {
-      alert('Error al marcar listo: ' + err.message);
+      aviso.error('Error al marcar listo: ' + err.message);
     } finally {
       setDespachando(false);
     }
@@ -169,7 +171,7 @@ export default function MonitorPreparacion({
       setConfirmandoItemId(null);
       marcarItemListo(itemId)
         .then(fetchPedidos)
-        .catch(err => alert('Error al marcar listo el plato: ' + err.message));
+        .catch(err => aviso.error('Error al marcar listo el plato: ' + err.message));
     } else {
       setConfirmandoItemId(itemId);
       setTimeout(() => setConfirmandoItemId(prev => (prev === itemId ? null : prev)), 3500);

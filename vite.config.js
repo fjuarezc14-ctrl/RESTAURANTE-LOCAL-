@@ -33,6 +33,12 @@ export default defineConfig({
     react(),
     usarLogoCliente && logoDelCliente(),
   ],
+  resolve: {
+    alias: {
+      '@shared': path.resolve(__dirname, 'backend/shared'),
+    },
+    dedupe: ['zod'],
+  },
   server: {
     hmr: {
       overlay: false
