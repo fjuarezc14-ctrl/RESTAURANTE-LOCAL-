@@ -6,11 +6,12 @@ const { evaluarEstadoEnsalada, expandPedidoItemsForDb } = require('../servicios/
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { pedidoLlevar } = require('../../shared/esquemas/pedidos.js');
+const { requierePermiso } = require('../middlewares/permisos');
 
 const router = express.Router();
 validarIdsEnUrl(router);
 
-router.post('/api/pedidos/llevar', validar({ body: pedidoLlevar }), async (req, res, next) => {
+router.post('/api/pedidos/llevar', requierePermiso('Caja'), validar({ body: pedidoLlevar }), async (req, res, next) => {
   const {
     codigoPedidosYa,
     cajero,
@@ -208,7 +209,7 @@ router.post('/api/pedidos/llevar', validar({ body: pedidoLlevar }), async (req, 
 });
 
 // GET /api/pedidos/llevar → Pedidos de delivery activos para CajaPage
-router.get('/api/pedidos/llevar', async (req, res, next) => {
+router.get('/api/pedidos/llevar', requierePermiso('Caja'), async (req, res, next) => {
   try {
     const pedidos = await prisma.pedido.findMany({
       where: { tipoEntrega: { in: ['llevar', 'delivery'] }, estado: { in: ['Cocina', 'Servido'] } },
@@ -256,7 +257,7 @@ router.get('/api/pedidos/llevar', async (req, res, next) => {
 });
 
 // PUT /api/pedidos/llevar/:id → Modificar un pedido de llevar/delivery activo
-router.put('/api/pedidos/llevar/:id', validar({ body: pedidoLlevar }), async (req, res, next) => {
+router.put('/api/pedidos/llevar/:id', requierePermiso('Caja'), validar({ body: pedidoLlevar }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const {
     codigoPedidosYa,
@@ -439,7 +440,7 @@ router.put('/api/pedidos/llevar/:id', validar({ body: pedidoLlevar }), async (re
 });
 
 // PATCH /api/pedidos/:id/entregar → Caja confirma entrega del delivery
-router.patch('/api/pedidos/:id/entregar', async (req, res, next) => {
+router.patch('/api/pedidos/:id/entregar', requierePermiso('Caja'), async (req, res, next) => {
   try {
     await prisma.pedido.update({
       where: { id: parseInt(req.params.id) },

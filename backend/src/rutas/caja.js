@@ -6,6 +6,7 @@ const { ErrorApp } = require('../middlewares/errores');
 const { buscarUsuarioPorPin } = require('../servicios/auth');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { aperturaCaja, cierreCaja, cierreForzado, consultaCierres, consultaMovimientos, movimientoCaja } = require('../../shared/esquemas/caja.js');
+const { requierePermiso } = require('../middlewares/permisos');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -15,7 +16,7 @@ validarIdsEnUrl(router);
 // ============================================================
 
 // GET /api/caja/estado → Estado en vivo de la caja (ABIERTO / CERRADO) y supervisión en tiempo real
-router.get('/api/caja/estado', async (req, res, next) => {
+router.get('/api/caja/estado', requierePermiso('Caja', 'Dashboard'), async (req, res, next) => {
   try {
     const turnoAbierto = await prisma.cierreCaja.findFirst({
       where: { estado: 'ABIERTO' },
@@ -136,7 +137,7 @@ router.get('/api/caja/estado', async (req, res, next) => {
 });
 
 // POST /api/caja/movimientos → Registrar salida (retiro de emergencia) o ingreso extra en la gaveta
-router.post('/api/caja/movimientos', validar({ body: movimientoCaja }), async (req, res, next) => {
+router.post('/api/caja/movimientos', requierePermiso('Caja'), validar({ body: movimientoCaja }), async (req, res, next) => {
   try {
     const { monto, motivo, tipo = 'RETIRO', cajeroNombre } = req.body;
     const parsedMonto = parseFloat(monto || 0);
@@ -173,7 +174,7 @@ router.post('/api/caja/movimientos', validar({ body: movimientoCaja }), async (r
 });
 
 // GET /api/caja/movimientos → Listar salidas y movimientos del turno activo o histórico
-router.get('/api/caja/movimientos', validar({ query: consultaMovimientos }), async (req, res, next) => {
+router.get('/api/caja/movimientos', requierePermiso('Caja', 'Reportes'), validar({ query: consultaMovimientos }), async (req, res, next) => {
   try {
     const { turnoId, desde, hasta } = req.query;
     let whereClause = {};
@@ -216,7 +217,7 @@ router.get('/api/caja/movimientos', validar({ query: consultaMovimientos }), asy
 });
 
 // POST /api/caja/apertura → Registrar la apertura formal de turno con fondo inicial
-router.post('/api/caja/apertura', validar({ body: aperturaCaja }), async (req, res, next) => {
+router.post('/api/caja/apertura', requierePermiso('Caja'), validar({ body: aperturaCaja }), async (req, res, next) => {
   try {
     const { cajeroNombre, montoInicial, notaApertura } = req.body;
 
@@ -258,7 +259,7 @@ router.post('/api/caja/apertura', validar({ body: aperturaCaja }), async (req, r
 });
 
 // POST /api/caja/cierre → Registrar un arqueo y cierre de turno
-router.post('/api/caja/cierre', validar({ body: cierreCaja }), async (req, res, next) => {
+router.post('/api/caja/cierre', requierePermiso('Caja'), validar({ body: cierreCaja }), async (req, res, next) => {
   try {
     const {
       fechaApertura,
@@ -352,7 +353,7 @@ router.post('/api/caja/cierre', validar({ body: cierreCaja }), async (req, res, 
 });
 
 // POST /api/caja/cierre-forzado → Cierre administrativo por parte del Administrador
-router.post('/api/caja/cierre-forzado', validar({ body: cierreForzado }), async (req, res, next) => {
+router.post('/api/caja/cierre-forzado', requierePermiso('Caja', 'Dashboard'), validar({ body: cierreForzado }), async (req, res, next) => {
   try {
     const { adminNombre, adminPin, motivo } = req.body;
 
@@ -395,7 +396,7 @@ router.post('/api/caja/cierre-forzado', validar({ body: cierreForzado }), async 
 });
 
 // GET /api/caja/ultimo-cierre → Obtener el último cierre de caja registrado
-router.get('/api/caja/ultimo-cierre', async (req, res, next) => {
+router.get('/api/caja/ultimo-cierre', requierePermiso('Caja', 'Dashboard'), async (req, res, next) => {
   try {
     const ultimo = await prisma.cierreCaja.findFirst({
       where: { estado: 'CERRADO' },
@@ -408,7 +409,7 @@ router.get('/api/caja/ultimo-cierre', async (req, res, next) => {
 });
 
 // GET /api/caja/cierres → Historial de los últimos cierres de caja
-router.get('/api/caja/cierres', validar({ query: consultaCierres }), async (req, res, next) => {
+router.get('/api/caja/cierres', requierePermiso('Caja', 'Reportes'), validar({ query: consultaCierres }), async (req, res, next) => {
   try {
     const limit = parseInt(req.query.limit || 30);
     const cierres = await prisma.cierreCaja.findMany({

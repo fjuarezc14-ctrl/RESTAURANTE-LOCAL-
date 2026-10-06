@@ -7,6 +7,7 @@ const { buscarUsuarioPorPin } = require('../servicios/auth');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { anulacion, cobro, correccionDatosCliente, correccionMetodoPago, correccionTipoEntrega } = require('../../shared/esquemas/ventas.js');
 const { consultaDesde, rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
+const { requierePermiso } = require('../middlewares/permisos');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -16,7 +17,7 @@ validarIdsEnUrl(router);
 // ============================================================
 
 // PATCH /api/ventas/:ventaId/metodo-pago → Corregir método de pago (requiere PIN Administrador)
-router.patch('/api/ventas/:ventaId/metodo-pago', validar({ body: correccionMetodoPago }), async (req, res, next) => {
+router.patch('/api/ventas/:ventaId/metodo-pago', requierePermiso('Caja'), validar({ body: correccionMetodoPago }), async (req, res, next) => {
   const { ventaId } = req.params;
   const { metodoPago, pin, montoEfectivo, montoTarjeta, montoYape, montoCredito, clienteCreditoId } = req.body;
 
@@ -122,7 +123,7 @@ router.patch('/api/ventas/:ventaId/metodo-pago', validar({ body: correccionMetod
 });
 
 // PATCH /api/ventas/:ventaId/tipo-entrega → Corregir tipo de entrega (PedidosYa, Para Llevar, Delivery)
-router.patch('/api/ventas/:ventaId/tipo-entrega', validar({ body: correccionTipoEntrega }), async (req, res, next) => {
+router.patch('/api/ventas/:ventaId/tipo-entrega', requierePermiso('Caja'), validar({ body: correccionTipoEntrega }), async (req, res, next) => {
   const { ventaId } = req.params;
   const {
     tipoEntrega, // "ParaLlevar", "DeliveryPropio", "PedidosYa"
@@ -226,7 +227,7 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', validar({ body: correccionTipo
 });
 
 // PATCH /api/ventas/:ventaId/datos-cliente → Corregir datos de facturación / datos de cliente de una venta
-router.patch('/api/ventas/:ventaId/datos-cliente', validar({ body: correccionDatosCliente }), async (req, res, next) => {
+router.patch('/api/ventas/:ventaId/datos-cliente', requierePermiso('Caja'), validar({ body: correccionDatosCliente }), async (req, res, next) => {
   const { ventaId } = req.params;
   const {
     tipoComprobante, // "Boleta" | "Factura" | "Ticket"
@@ -287,7 +288,7 @@ router.patch('/api/ventas/:ventaId/datos-cliente', validar({ body: correccionDat
 });
 
 // PATCH /api/ventas/:ventaId/anular → Anular / Registrar devolución de un pedido entregado
-router.patch('/api/ventas/:ventaId/anular', validar({ body: anulacion }), async (req, res, next) => {
+router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), validar({ body: anulacion }), async (req, res, next) => {
   const { ventaId } = req.params;
   const { pin, motivo } = req.body;
 
@@ -401,7 +402,7 @@ router.patch('/api/ventas/:ventaId/anular', validar({ body: anulacion }), async 
 });
 
 // POST /api/ventas → Cobrar mesa (acepta pedidoIds array o pedidoId simple)
-router.post('/api/ventas', validar({ body: cobro }), async (req, res, next) => {
+router.post('/api/ventas', requierePermiso('Caja'), validar({ body: cobro }), async (req, res, next) => {
   const {
     pedidoId,
     pedidoIds,
@@ -761,7 +762,7 @@ router.post('/api/ventas', validar({ body: cobro }), async (req, res, next) => {
 });
 
 // GET /api/ventas → Historial detallado de las ventas del día o rango de fechas (hora Perú)
-router.get('/api/ventas', validar({ query: rangoFechasOpcional }), async (req, res, next) => {
+router.get('/api/ventas', requierePermiso('Caja', 'Reportes'), validar({ query: rangoFechasOpcional }), async (req, res, next) => {
   const { desde, hasta } = req.query;
   try {
     let filtroFecha = {};
@@ -855,7 +856,7 @@ router.get('/api/ventas', validar({ query: rangoFechasOpcional }), async (req, r
 });
 
 // GET /api/ventas/resumen → Estadísticas del día (hora Perú)
-router.get('/api/ventas/resumen', validar({ query: consultaDesde }), async (req, res, next) => {
+router.get('/api/ventas/resumen', requierePermiso('Caja', 'Dashboard'), validar({ query: consultaDesde }), async (req, res, next) => {
   try {
     const { desde } = req.query;
     let filterDate;

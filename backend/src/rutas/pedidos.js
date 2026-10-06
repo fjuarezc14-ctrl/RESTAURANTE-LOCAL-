@@ -6,6 +6,7 @@ const { BARRA_CATEGORIAS } = require('../servicios/empresa');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { cancelacionItem, cancelacionPedido, notasItem, preparacion } = require('../../shared/esquemas/pedidos.js');
+const { requierePermiso } = require('../middlewares/permisos');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -15,7 +16,7 @@ validarIdsEnUrl(router);
 // ============================================================
 
 // GET /api/pedidos/cocina → Todos los pedidos en Cocina para el monitor
-router.get('/api/pedidos/cocina', async (req, res, next) => {
+router.get('/api/pedidos/cocina', requierePermiso('Cocina'), async (req, res, next) => {
   try {
     const pedidos = await prisma.pedido.findMany({
       where: { estado: 'Cocina' },
@@ -75,7 +76,7 @@ router.get('/api/pedidos/cocina', async (req, res, next) => {
 });
 
 // GET /api/pedidos/barra → Todos los pedidos con bebidas pendientes en Cocina
-router.get('/api/pedidos/barra', async (req, res, next) => {
+router.get('/api/pedidos/barra', requierePermiso('Barra'), async (req, res, next) => {
   try {
     const pedidos = await prisma.pedido.findMany({
       where: { estado: 'Cocina' },
@@ -131,7 +132,7 @@ router.get('/api/pedidos/barra', async (req, res, next) => {
 });
 
 // PATCH /api/pedidos/items/:itemId/preparar → Cocinero o Barman marca listo un item de cocina/barra de forma individual
-router.patch('/api/pedidos/items/:itemId/preparar', async (req, res, next) => {
+router.patch('/api/pedidos/items/:itemId/preparar', requierePermiso('Cocina', 'Barra'), async (req, res, next) => {
   const itemId = parseInt(req.params.itemId);
   try {
     const item = await prisma.itemPedido.update({
@@ -168,7 +169,7 @@ router.patch('/api/pedidos/items/:itemId/preparar', async (req, res, next) => {
 });
 
 // PATCH /api/pedidos/:id/preparar → Cocinero o Barman marca listo su sección
-router.patch('/api/pedidos/:id/preparar', validar({ body: preparacion }), async (req, res, next) => {
+router.patch('/api/pedidos/:id/preparar', requierePermiso('Cocina', 'Barra'), validar({ body: preparacion }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { seccion } = req.body; // "cocina" o "barra"
 
@@ -231,7 +232,7 @@ router.patch('/api/pedidos/:id/preparar', validar({ body: preparacion }), async 
 });
 
 // PATCH /api/pedidos/:id/servir → Cocinero marca como Listo
-router.patch('/api/pedidos/:id/servir', async (req, res, next) => {
+router.patch('/api/pedidos/:id/servir', requierePermiso('Cocina', 'Barra', 'Salon'), async (req, res, next) => {
   const id = parseInt(req.params.id);
   try {
     // Marcar items como historial
@@ -266,7 +267,7 @@ router.patch('/api/pedidos/:id/servir', async (req, res, next) => {
 });
 
 // PATCH /api/pedidos/items/:itemId/entregar → Mozo marca un plato de cocina como entregado en la mesa
-router.patch('/api/pedidos/items/:itemId/entregar', async (req, res, next) => {
+router.patch('/api/pedidos/items/:itemId/entregar', requierePermiso('Salon', 'Caja'), async (req, res, next) => {
   const itemId = parseInt(req.params.itemId);
   try {
     await prisma.itemPedido.update({
@@ -280,7 +281,7 @@ router.patch('/api/pedidos/items/:itemId/entregar', async (req, res, next) => {
 });
 
 // PATCH /api/pedidos/:id/entregar-todo → Mozo marca todos los platos listos de cocina del pedido como entregados
-router.patch('/api/pedidos/:id/entregar-todo', async (req, res, next) => {
+router.patch('/api/pedidos/:id/entregar-todo', requierePermiso('Salon', 'Caja'), async (req, res, next) => {
   const id = parseInt(req.params.id);
   try {
     const pedido = await prisma.pedido.findUnique({
@@ -307,7 +308,7 @@ router.patch('/api/pedidos/:id/entregar-todo', async (req, res, next) => {
 });
 
 // Actualizar notas de un ítem de pedido individual
-router.patch('/api/pedidos/items/:id/notas', validar({ body: notasItem }), async (req, res, next) => {
+router.patch('/api/pedidos/items/:id/notas', requierePermiso('Salon', 'Caja'), validar({ body: notasItem }), async (req, res, next) => {
   const { id } = req.params;
   const { notas } = req.body;
   try {
@@ -325,7 +326,7 @@ router.patch('/api/pedidos/items/:id/notas', validar({ body: notasItem }), async
 // CANCELACIÓN DE PEDIDOS (Solo Mozo, límite 5 min)
 // ============================================================
 
-router.patch('/api/pedidos/:id/cancelar', validar({ body: cancelacionPedido }), async (req, res, next) => {
+router.patch('/api/pedidos/:id/cancelar', requierePermiso('Salon', 'Caja'), validar({ body: cancelacionPedido }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { canceladoPor, motivo, force } = req.body;
 
@@ -473,30 +474,30 @@ router.patch('/api/pedidos/:id/cancelar', validar({ body: cancelacionPedido }), 
 });
 
 // GET /api/cocina/cancelaciones → Devuelve las alertas de cancelación pendientes de confirmación para Cocina
-router.get('/api/cocina/cancelaciones', (req, res, next) => {
+router.get('/api/cocina/cancelaciones', requierePermiso('Cocina'), (req, res, next) => {
   res.json(alertasCancelacion.cocina);
 });
 
 // DELETE /api/cocina/cancelaciones/:id → Cocina confirma que vio la alerta ("Entendido")
-router.delete('/api/cocina/cancelaciones/:id', (req, res, next) => {
+router.delete('/api/cocina/cancelaciones/:id', requierePermiso('Cocina'), (req, res, next) => {
   const { id } = req.params;
   alertasCancelacion.cocina = alertasCancelacion.cocina.filter(c => c.id !== id);
   res.json({ ok: true });
 });
 
 // GET /api/barra/cancelaciones → Devuelve las alertas de cancelación pendientes de confirmación para Barra
-router.get('/api/barra/cancelaciones', (req, res, next) => {
+router.get('/api/barra/cancelaciones', requierePermiso('Barra'), (req, res, next) => {
   res.json(alertasCancelacion.barra);
 });
 
 // DELETE /api/barra/cancelaciones/:id → Barra confirma que vio la alerta ("Entendido")
-router.delete('/api/barra/cancelaciones/:id', (req, res, next) => {
+router.delete('/api/barra/cancelaciones/:id', requierePermiso('Barra'), (req, res, next) => {
   const { id } = req.params;
   alertasCancelacion.barra = alertasCancelacion.barra.filter(c => c.id !== id);
   res.json({ ok: true });
 });
 
-router.patch('/api/pedidos/:id/cancelar-item', validar({ body: cancelacionItem }), async (req, res, next) => {
+router.patch('/api/pedidos/:id/cancelar-item', requierePermiso('Salon', 'Caja'), validar({ body: cancelacionItem }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { productoId, itemId, cantidadACancelar, motivo, canceladoPor, force } = req.body;
 

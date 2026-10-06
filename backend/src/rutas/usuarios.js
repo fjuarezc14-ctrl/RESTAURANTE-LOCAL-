@@ -8,6 +8,7 @@ const { cerrarSesionesDeUsuario } = require('../servicios/sesiones');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { loginPin, usuarioEdicion, usuarioNuevo } = require('../../shared/esquemas/usuarios.js');
+const { soloAdmin } = require('../middlewares/permisos');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -38,7 +39,7 @@ async function datosDeAcceso(body) {
 // El rol Administrador siempre tiene acceso a todos los módulos
 const PERMISOS_ADMINISTRADOR = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
 
-router.post('/api/usuarios', validar({ body: usuarioNuevo }), async (req, res, next) => {
+router.post('/api/usuarios', soloAdmin, validar({ body: usuarioNuevo }), async (req, res, next) => {
   try {
     // Validar PIN único
     const duplicate = await buscarUsuarioPorPin(req.body.pin);
@@ -62,7 +63,7 @@ router.post('/api/usuarios', validar({ body: usuarioNuevo }), async (req, res, n
   }
 });
 
-router.put('/api/usuarios/:id', validar({ body: usuarioEdicion }), async (req, res, next) => {
+router.put('/api/usuarios/:id', soloAdmin, validar({ body: usuarioEdicion }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   try {
     const target = await prisma.usuario.findUnique({ where: { id } });
@@ -178,7 +179,7 @@ router.get('/api/usuarios/check/:usuarioId', async (req, res, next) => {
   }
 });
 
-router.delete('/api/usuarios/:id', async (req, res, next) => {
+router.delete('/api/usuarios/:id', soloAdmin, async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const target = await prisma.usuario.findUnique({ where: { id } });
