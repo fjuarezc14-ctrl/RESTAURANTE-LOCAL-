@@ -55,6 +55,21 @@ async function asegurarAccesoAdministrador() {
   return { usuario, contrasena, generada };
 }
 
+// Rescate de soporte (scripts/restablecer-admin.js): nueva contraseña para UN administrador elegido por su
+// usuario o ID. La anterior no se puede mostrar: solo se guarda su hash. Las sesiones y equipos activados siguen.
+async function restablecerContrasenaAdmin(identificador, contrasenaNueva) {
+  const id = /^\d+$/.test(String(identificador)) ? Number(identificador) : null;
+  const admin = await prisma.usuario.findFirst({
+    where: { rol: 'Administrador', activo: true, OR: [...(id ? [{ id }] : []), { usuario: String(identificador).toLowerCase() }] },
+  });
+  if (!admin) return null;
+  const ocupado = admin.usuario ? null : await prisma.usuario.findFirst({ where: { usuario: 'admin' } });
+  const usuario = admin.usuario || (ocupado ? `admin${admin.id}` : 'admin');
+  const contrasena = contrasenaNueva || crypto.randomBytes(9).toString('base64url');
+  await prisma.usuario.update({ where: { id: admin.id }, data: { usuario, contrasenaHash: await bcrypt.hash(contrasena, 10) } });
+  return { id: admin.id, nombre: admin.nombre, usuario, contrasena };
+}
+
 // Lo único que la API devuelve de un usuario: nunca el PIN ni los hashes
 function usuarioPublico(u) {
   if (!u) return u;
@@ -67,4 +82,6 @@ function generarPinSignature(pinHash, userId) {
   return crypto.createHash('sha256').update(`${pinHash || ''}_${userId}_salt_hernandez_auth`).digest('hex').substring(0, 16);
 }
 
-module.exports = { hashPin, buscarUsuarioPorPin, migrarPinesAHash, asegurarAccesoAdministrador, usuarioPublico, generarPinSignature };
+module.exports = {
+  hashPin, buscarUsuarioPorPin, migrarPinesAHash, asegurarAccesoAdministrador, restablecerContrasenaAdmin, usuarioPublico, generarPinSignature,
+};

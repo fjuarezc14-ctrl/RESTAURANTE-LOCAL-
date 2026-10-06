@@ -194,3 +194,28 @@ describe('acceso inicial del administrador', () => {
     expect(await asegurarAccesoAdministrador()).toBeNull(); // no vuelve a cambiarla
   });
 });
+
+describe('rescate de soporte: restablecer la contraseña de un administrador', () => {
+  const { restablecerContrasenaAdmin } = require('../src/servicios/auth.js');
+
+  it('solo cambia la del administrador elegido y la nueva sirve para activar', async () => {
+    const otro = await prisma.usuario.create({ data: { nombre: 'Dueño', rol: 'Administrador', permisos: [], usuario: 'dueno' } });
+    await api().put(`/api/usuarios/${otro.id}`).send({ contrasena: 'clave-del-dueno' });
+    const nav = navegador();
+    await activar(nav);
+
+    const r = await restablecerContrasenaAdmin('admin');
+    expect(r).toMatchObject({ id: admin.id, usuario: 'admin' });
+    esperarError(await activar(navegador()), 401, 'CREDENCIALES_INCORRECTAS'); // la anterior ya no sirve
+    expect((await activar(navegador(), { contrasena: r.contrasena })).status).toBe(200);
+    expect((await activar(navegador(), { usuario: 'dueno', contrasena: 'clave-del-dueno' })).status).toBe(200); // el otro no cambió
+    expect((await nav.get('/api/auth/yo')).status).toBe(200); // las sesiones abiertas siguen
+  });
+
+  it('acepta el ID y una contraseña elegida; no toca a quien no es administrador', async () => {
+    expect((await restablecerContrasenaAdmin(String(admin.id), 'elegida-123')).contrasena).toBe('elegida-123');
+    const cajero = await prisma.usuario.findFirst({ where: { rol: 'Cajero' } });
+    expect(await restablecerContrasenaAdmin(String(cajero.id))).toBeNull();
+    expect(await restablecerContrasenaAdmin('no-existe')).toBeNull();
+  });
+});
