@@ -5,7 +5,7 @@ const { PrismaClient } = require('@prisma/client');
 // Optimización de Conexiones Prisma (Pool size y timeout para concurrencia)
 let dbUrl = process.env.DATABASE_URL || '';
 if (dbUrl && !dbUrl.includes('connection_limit')) {
-  dbUrl += (dbUrl.includes('?') ? '&' : '?') + 'connection_limit=20&pool_timeout=10';
+  dbUrl += (dbUrl.includes('?') ? '&' : '?') + 'connection_limit=20&pool_timeout=20';
   process.env.DATABASE_URL = dbUrl;
 }
 

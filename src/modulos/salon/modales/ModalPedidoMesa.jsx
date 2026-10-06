@@ -1,4 +1,3 @@
-import React from 'react';
 import { 
   Edit3, Link2, User, X, Utensils, Receipt, Search, List, LayoutGrid, Flame, 
   Tag, Plus, Minus, PlusCircle, ChevronRight, ShoppingBag, Trash, Trash2, AlertTriangle, 
@@ -503,7 +502,7 @@ export default function ModalPedidoMesa({
                     if (item.yaEnviado) {
                       const esCancelable = item.pedidoId === mesa.pedidoData?.pedidoId;
                       return (
-                        <li key={idx} className="bg-slate-50 border border-slate-200 p-2.5 md:p-3 rounded-xl flex flex-col gap-1.5 opacity-60 grayscale">
+                        <li key={idx} className="bg-slate-50/80 border border-slate-200/90 p-2.5 md:p-3 rounded-xl flex flex-col gap-1.5 shadow-2xs">
                           <div className="flex items-center justify-between">
                             <div className="flex-1 pr-2">
                               <p className={`font-bold text-[10px] md:text-xs leading-tight ${item.historial ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
@@ -523,11 +522,12 @@ export default function ModalPedidoMesa({
                               })()}
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="font-black text-slate-400 text-sm px-3">
-                                {item.cant} <span className="text-[10px]">{item.historial ? '✔ Ready' : '⏳ Pendiente'}</span>
+                              <div className="font-black text-slate-500 text-xs px-2.5 py-1 bg-slate-100 rounded-lg border border-slate-200/70 shrink-0">
+                                {item.cant} <span className="text-[10px] font-bold text-slate-400">{item.historial ? '✔ Ready' : '⏳ Cocina'}</span>
                               </div>
                               {esCancelable && (
                                 <button 
+                                  type="button"
                                   onClick={() => {
                                     if (mesa.estado === 'Servido' || item.historial) {
                                       requestSupervisorAuth(`Anular "${item.nombre}"`, (supervisor) => handleCancelarItem(item, supervisor));
@@ -535,10 +535,11 @@ export default function ModalPedidoMesa({
                                       handleCancelarItem(item, null);
                                     }
                                   }} 
-                                  title="Anular o reducir cantidad de este producto"
-                                  className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg hover:text-red-700 transition-colors pointer-events-auto shrink-0"
+                                  title="Anular plato de comanda"
+                                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-600 hover:text-rose-700 border border-rose-200 hover:border-rose-300 rounded-xl transition-all pointer-events-auto shrink-0 flex items-center gap-1.5 text-xs font-bold shadow-2xs active:scale-95 cursor-pointer"
                                 >
-                                  <Trash className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                  <span>Anular</span>
                                 </button>
                               )}
                             </div>

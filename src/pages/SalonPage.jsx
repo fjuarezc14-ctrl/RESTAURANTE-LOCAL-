@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ChefHat, CheckCircle, PlusCircle, Receipt, X, Edit3, ShoppingBag, User, AlertTriangle, Clock, Trash, Lock, Tag, Percent, Link2, Bell, Settings, Plus, Utensils, Save, Trash2, Search, Check, ChevronRight, Wifi, WifiOff, LayoutGrid, List, Sparkles, Flame, Minus } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Bell, Wifi, WifiOff, Receipt, ChefHat, CheckCircle, Link2 } from 'lucide-react';
 import { api } from '../api';
-import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
+import { parsePasosOpciones, pasoComplementos, tieneComplementos } from '../utils/combos';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 import { matchProductSemantic, relevanciaBusqueda, ordenarCategorias } from '../utils/busquedaProductos';
-import { useAviso, useConfirmar, usePedirDato } from '../components/ui';
+import { useAviso, useConfirmar } from '../components/ui';
 import {
   ModalCancelarPedido,
   ModalAutorizacionPin,
@@ -33,9 +33,10 @@ function formatCuentaRegresiva(ms) {
 
 // --- SISTEMA DE AUDIO Y VIBRACIÓN OPTIMIZADO PARA SALÓN / MOZOS ---
 let globalAudioCtx = null;
+let userHasInteracted = false;
 
 function getAudioContext() {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined' || !userHasInteracted) return null;
   if (!globalAudioCtx) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (AudioContextClass) {
@@ -48,12 +49,22 @@ function getAudioContext() {
   return globalAudioCtx;
 }
 
-// Desbloquear AudioContext en el primer gesto del usuario (táctil, click o teclado)
+// Desbloquear AudioContext tras el primer gesto táctil o click del usuario
 if (typeof window !== 'undefined') {
   const unlockAudio = () => {
-    const ctx = getAudioContext();
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
+    userHasInteracted = true;
+    try {
+      if (!globalAudioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          globalAudioCtx = new AudioContextClass();
+        }
+      }
+      if (globalAudioCtx && globalAudioCtx.state === 'suspended') {
+        globalAudioCtx.resume().catch(() => {});
+      }
+    } catch {
+      // Ignorar restricciones de audio del navegador
     }
   };
   ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(evt => {
@@ -68,7 +79,10 @@ function playChimeNotification() {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try {
         navigator.vibrate([250, 100, 250]);
-      } catch (err) {}
+      } catch (err) {
+        // Dispositivo sin hardware de vibración o bloqueado por permisos
+        console.debug('[SalonPage] Vibración no disponible:', err?.message);
+      }
     }
 
     // 2. Campana sonora Web Audio API
@@ -149,7 +163,6 @@ const getComboConfig = (nombre) => {
 export default function SalonPage({ currentUser }) {
   const aviso = useAviso();
   const confirmar = useConfirmar();
-  const pedirDato = usePedirDato();
   const [mesas, setMesas] = useState([]);
   const [productos, setProductos] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -1342,7 +1355,7 @@ export default function SalonPage({ currentUser }) {
           setSelectedProduct(null);
         }}
         onConfirmarItem={(item, notas, extras) => {
-          agregarItemDirecto(item, notas, extras);
+          agregarAlTicketDirecto(item, notas, extras);
           setOptionsModalOpen(false);
           setSelectedProduct(null);
         }}

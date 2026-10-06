@@ -208,162 +208,7 @@ function CalculadoraEfectivoPEN({
   );
 }
 
-// Componente Selector de Cliente con Buscador Integrado y Card de Saldo
-function SelectorClienteCreditoCombobox({
-  clientes = [],
-  clienteSeleccionado,
-  onSelectCliente,
-  label = "Cliente para Crédito:",
-  placeholder = "Buscar por nombre, DNI o RUC..."
-}) {
-  const [busqueda, setBusqueda] = useState('');
-  const [abierto, setAbierto] = useState(false);
 
-  const filtrados = (clientes || []).filter(c => {
-    if (!busqueda.trim()) return true;
-    const term = busqueda.toLowerCase().trim();
-    const nom = (c.nombre || '').toLowerCase();
-    const doc = (c.numDoc || '').toLowerCase();
-    return nom.includes(term) || doc.includes(term);
-  });
-
-  return (
-    <div className="space-y-1 relative">
-      {label && (
-        <div className="flex justify-between items-center mb-1">
-          <label className="block text-slate-500 font-bold text-[9px] tracking-widest uppercase">{label}</label>
-          {clienteSeleccionado && (
-            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
-              (clienteSeleccionado.saldo || 0) > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
-            }`}>
-              {(clienteSeleccionado.saldo || 0) > 0 ? `Debe S/ ${(clienteSeleccionado.saldo || 0).toFixed(2)}` : 'Al día'}
-            </span>
-          )}
-        </div>
-      )}
-
-      {clienteSeleccionado ? (
-        <div className="bg-amber-50/60 border-2 border-amber-300 rounded-xl p-2 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-2 overflow-hidden">
-            <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
-              clienteSeleccionado.esTrabajador ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'
-            }`}>
-              <Users className="w-3.5 h-3.5" />
-            </div>
-            <div className="truncate">
-              <div className="flex items-center gap-1.5">
-                <p className="text-xs font-black text-slate-900 uppercase truncate leading-tight">
-                  {clienteSeleccionado.nombre}
-                </p>
-                <span className={`text-[8px] font-black uppercase px-1 py-0.2 rounded shrink-0 ${
-                  clienteSeleccionado.esTrabajador ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {clienteSeleccionado.esTrabajador ? 'STAFF' : 'CLIENTE'}
-                </span>
-              </div>
-              <p className="text-[10px] font-medium text-slate-500 truncate">
-                {clienteSeleccionado.tipoDoc || 'DOC'}: {clienteSeleccionado.numDoc || 'S/D'}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              onSelectCliente(null);
-              setBusqueda('');
-              setAbierto(true);
-            }}
-            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors ml-1 shrink-0"
-            title="Cambiar cliente"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      ) : (
-        <div className="relative">
-          <div className="relative flex items-center">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
-            <input
-              type="text"
-              placeholder={placeholder}
-              value={busqueda}
-              onFocus={() => setAbierto(true)}
-              onChange={(e) => {
-                setBusqueda(e.target.value);
-                setAbierto(true);
-              }}
-              className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-7 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 shadow-sm"
-            />
-            {busqueda && (
-              <button
-                type="button"
-                onClick={() => setBusqueda('')}
-                className="absolute right-2 text-slate-400 hover:text-slate-600 p-0.5"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-
-          {abierto && (
-            <>
-              <div 
-                className="fixed inset-0 z-[120]" 
-                onClick={() => setAbierto(false)} 
-              />
-              <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl z-[130] max-h-48 overflow-y-auto custom-scrollbar p-1.5 space-y-1">
-                {filtrados.length === 0 ? (
-                  <div className="p-3 text-center text-xs text-slate-400 font-bold">
-                    No se encontraron clientes
-                  </div>
-                ) : (
-                  filtrados.map(c => {
-                    const debe = (c.saldo || 0) > 0;
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => {
-                          onSelectCliente(c);
-                          setAbierto(false);
-                          setBusqueda('');
-                        }}
-                        className="w-full text-left p-1.5 rounded-xl hover:bg-amber-50/80 transition-colors flex items-center justify-between gap-2 border border-transparent hover:border-amber-200"
-                      >
-                        <div className="truncate">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-slate-800 uppercase truncate">
-                              {c.nombre}
-                            </span>
-                            <span className={`text-[8px] font-black uppercase px-1 py-0.2 rounded ${
-                              c.esTrabajador ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {c.esTrabajador ? 'STAFF' : 'CLIENTE'}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            {c.tipoDoc || 'DOC'}: {c.numDoc || 'S/D'}
-                          </span>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <span className={`text-[10px] font-black font-mono px-1.5 py-0.5 rounded ${
-                            debe ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
-                          }`}>
-                            {debe ? `Debe S/ ${(c.saldo).toFixed(2)}` : 'S/ 0.00'}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const PRODUCT_OPTIONS_CONFIG = {
   "Combo Criollo (Almuerzo)": {
@@ -734,51 +579,73 @@ export default function CajaPage({ currentUser }) {
     }
   };
 
-  const fetchCajaData = useCallback(async () => {
-    try {
-      const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList, ultimoCierreRes, estadoCajaRes, usuariosList] = await Promise.all([
-        api.getMesas().catch(() => null),
-        api.getResumenVentas().catch(() => ({ atendidas: 0, ingresos: 0 })),
-        api.getPedidosLlevar().catch(() => null),
-        api.getHistorialVentas().catch(() => null),
-        api.getProductos().catch(() => null),
-        api.getClientes().catch(() => []),
-        api.getAbonos().catch(() => []),
-        api.getCompras().catch(() => []),
-        api.getUltimoCierre().catch(() => null),
-        api.getEstadoCaja().catch(() => null),
-        api.getUsuarios().catch(() => []),
-      ]);
-      if (mesasData) setMesas(mesasData);
-      if (llevarData) setPedidosLlevar(llevarData);
-      if (resumenData) setStats({ atendidas: resumenData.atendidas || 0, ingresos: resumenData.ingresos || 0 });
-      if (ventasData) setVentas(ventasData);
-      if (prods) setProductosMenu(prods);
-      if (usuariosList && Array.isArray(usuariosList)) setUsuariosSistema(usuariosList);
-      setClientes(clientsList || []);
-      setAbonos(abonosList || []);
-      setComprasTurno(comprasList || []);
+  const isFetchingCajaRef = useRef(false);
 
-      if (estadoCajaRes && typeof estadoCajaRes.abierto === 'boolean') {
-        setCajaEstado(estadoCajaRes);
-        if (estadoCajaRes.abierto && estadoCajaRes.turno?.cajeroNombre) {
-          setCajeroNombre(estadoCajaRes.turno.cajeroNombre);
+  const fetchCajaData = useCallback(async (options = { full: true }) => {
+    if (isFetchingCajaRef.current) return;
+    isFetchingCajaRef.current = true;
+
+    try {
+      if (options?.full) {
+        const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList, ultimoCierreRes, estadoCajaRes, usuariosList] = await Promise.all([
+          api.getMesas().catch(() => null),
+          api.getResumenVentas().catch(() => ({ atendidas: 0, ingresos: 0 })),
+          api.getPedidosLlevar().catch(() => null),
+          api.getHistorialVentas().catch(() => null),
+          api.getProductos().catch(() => null),
+          api.getClientes().catch(() => []),
+          api.getAbonos().catch(() => []),
+          api.getCompras().catch(() => []),
+          api.getUltimoCierre().catch(() => null),
+          api.getEstadoCaja().catch(() => null),
+          api.getUsuarios().catch(() => []),
+        ]);
+        if (mesasData) setMesas(mesasData);
+        if (llevarData) setPedidosLlevar(llevarData);
+        if (resumenData) setStats({ atendidas: resumenData.atendidas || 0, ingresos: resumenData.ingresos || 0 });
+        if (ventasData) setVentas(ventasData);
+        if (prods) setProductosMenu(prods);
+        if (usuariosList && Array.isArray(usuariosList)) setUsuariosSistema(usuariosList);
+        setClientes(clientsList || []);
+        setAbonos(abonosList || []);
+        setComprasTurno(comprasList || []);
+
+        if (estadoCajaRes && typeof estadoCajaRes.abierto === 'boolean') {
+          setCajaEstado(estadoCajaRes);
+          if (estadoCajaRes.abierto && estadoCajaRes.turno?.cajeroNombre) {
+            setCajeroNombre(estadoCajaRes.turno.cajeroNombre);
+          }
+          if (estadoCajaRes.abierto && estadoCajaRes.turno?.fechaApertura) {
+            const fAperturaISO = new Date(estadoCajaRes.turno.fechaApertura).toISOString();
+            setUltimoCierre(fAperturaISO);
+          } else if (estadoCajaRes.ultimoCierre?.fechaCierre) {
+            const fCierreISO = new Date(estadoCajaRes.ultimoCierre.fechaCierre).toISOString();
+            setUltimoCierre(fCierreISO);
+          }
+        } else if (ultimoCierreRes?.ultimoCierre?.fechaCierre) {
+          const fechaDbISO = new Date(ultimoCierreRes.ultimoCierre.fechaCierre).toISOString();
+          setUltimoCierre(prev => (prev !== fechaDbISO ? fechaDbISO : prev));
+          localStorage.setItem('ultimoCierre', fechaDbISO);
         }
-        if (estadoCajaRes.abierto && estadoCajaRes.turno?.fechaApertura) {
-          const fAperturaISO = new Date(estadoCajaRes.turno.fechaApertura).toISOString();
-          setUltimoCierre(fAperturaISO);
-        } else if (estadoCajaRes.ultimoCierre?.fechaCierre) {
-          const fCierreISO = new Date(estadoCajaRes.ultimoCierre.fechaCierre).toISOString();
-          setUltimoCierre(fCierreISO);
+      } else {
+        // Sondeo ligero de alta frecuencia: solo mesas, delivery activo y estado de caja
+        const [mesasData, resumenData, llevarData, estadoCajaRes] = await Promise.all([
+          api.getMesas().catch(() => null),
+          api.getResumenVentas().catch(() => null),
+          api.getPedidosLlevar().catch(() => null),
+          api.getEstadoCaja().catch(() => null),
+        ]);
+        if (mesasData) setMesas(mesasData);
+        if (llevarData) setPedidosLlevar(llevarData);
+        if (resumenData) setStats({ atendidas: resumenData.atendidas || 0, ingresos: resumenData.ingresos || 0 });
+        if (estadoCajaRes && typeof estadoCajaRes.abierto === 'boolean') {
+          setCajaEstado(estadoCajaRes);
         }
-      } else if (ultimoCierreRes?.ultimoCierre?.fechaCierre) {
-        const fechaDbISO = new Date(ultimoCierreRes.ultimoCierre.fechaCierre).toISOString();
-        setUltimoCierre(prev => (prev !== fechaDbISO ? fechaDbISO : prev));
-        localStorage.setItem('ultimoCierre', fechaDbISO);
       }
     } catch (err) {
-      // Ignorar micro-caídas o lags de red Wi-Fi
+      console.debug('[CajaPage] Micro-latencia en sondeo:', err?.message);
     } finally {
+      isFetchingCajaRef.current = false;
       setLoading(false);
     }
   }, []);
@@ -869,10 +736,18 @@ export default function CajaPage({ currentUser }) {
   };
 
   useEffect(() => {
-    fetchCajaData();
+    // Carga inicial completa de todo el turno
+    fetchCajaData({ full: true });
+
+    // Sondeo ligero de alta frecuencia (solo mesas y delivery) cada 6 segundos
     const interval = setInterval(() => {
-      if (!modalOpen && !deliveryModal && !cierreModalOpen && !historialCierresModalOpen) fetchCajaData();
-    }, 4000);
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      if (!modalOpen && !deliveryModal && !cierreModalOpen && !historialCierresModalOpen) {
+        fetchCajaData({ full: false });
+      }
+    }, 6000);
     return () => clearInterval(interval);
   }, [fetchCajaData, modalOpen, deliveryModal, cierreModalOpen, historialCierresModalOpen]);
 
@@ -3146,23 +3021,31 @@ export default function CajaPage({ currentUser }) {
         setMetodoPago={setMetodoPago}
         cortesiaItemIds={cortesiaItemIds}
         setCortesiaItemIds={setCortesiaItemIds}
-        pagaCon={pagaCon}
-        setPagaCon={setPagaCon}
-        vueltoCalculado={vueltoCalculado}
-        montoMixtoEfectivo={montoMixtoEfectivo}
-        setMontoMixtoEfectivo={setMontoMixtoEfectivo}
-        montoMixtoTarjeta={montoMixtoTarjeta}
-        setMontoMixtoTarjeta={setMontoMixtoTarjeta}
-        montoMixtoYape={montoMixtoYape}
-        setMontoMixtoYape={setMontoMixtoYape}
-        consumoUsuario={consumoUsuario}
-        setConsumoUsuario={setConsumoUsuario}
+        pagaConEfectivoMesa={pagaConEfectivoMesa}
+        setPagaConEfectivoMesa={setPagaConEfectivoMesa}
+        mixtoEfectivo={mixtoEfectivo}
+        setMixtoEfectivo={setMixtoEfectivo}
+        mixtoTarjeta={mixtoTarjeta}
+        setMixtoTarjeta={setMixtoTarjeta}
+        mixtoYape={mixtoYape}
+        setMixtoYape={setMixtoYape}
+        codigoPago={codigoPago}
+        setCodigoPago={setCodigoPago}
         consumoPin={consumoPin}
         setConsumoPin={setConsumoPin}
-        consumoMotivo={consumoMotivo}
-        setConsumoMotivo={setConsumoMotivo}
-        codigoOperacionPago={codigoOperacionPago}
-        setCodigoOperacionPago={setCodigoOperacionPago}
+        consumoPinError={consumoPinError}
+        setConsumoPinError={setConsumoPinError}
+        motivoCortesia={motivoCortesia}
+        setMotivoCortesia={setMotivoCortesia}
+        clientes={clientes}
+        clienteCreditoSeleccionado={clienteCreditoSeleccionado}
+        setClienteCreditoSeleccionado={setClienteCreditoSeleccionado}
+        incluirCreditoMixto={incluirCreditoMixto}
+        setIncluirCreditoMixto={setIncluirCreditoMixto}
+        clientesCreditoMixto={clientesCreditoMixto}
+        setClientesCreditoMixto={setClientesCreditoMixto}
+        tipoComprobante={tipoComprobante}
+        setTipoComprobante={setTipoComprobante}
         numDocumento={numDocumento}
         setNumDocumento={setNumDocumento}
         handleDocumentoChange={handleDocumentoChange}
@@ -3170,14 +3053,13 @@ export default function CajaPage({ currentUser }) {
         setClienteNombre={setClienteNombre}
         clienteDireccion={clienteDireccion}
         setClienteDireccion={setClienteDireccion}
-        usuarios={usuarios}
-        DENOMINACIONES_PEN={DENOMINACIONES_PEN}
         procesarCobroYFacturar={procesarCobroYFacturar}
         cobrando={cobrando}
         setMesaSeleccionada={setMesaSeleccionada}
         soles={soles}
         parseMonto={parseMonto}
         campoCodigoPago={campoCodigoPago}
+        estiloMetodo={estiloMetodo}
       />
 
       {/* MODAL DE CONFIRMACIÓN DE COBRO */}
@@ -3224,59 +3106,70 @@ export default function CajaPage({ currentUser }) {
         deliveryVistaMovil={deliveryVistaMovil}
         setDeliveryVistaMovil={setDeliveryVistaMovil}
         deliverySearchInputRef={deliverySearchInputRef}
-        deliveryBusqueda={deliveryBusqueda}
-        setDeliveryBusqueda={setDeliveryBusqueda}
+        deliverySearchQuery={deliverySearchQuery}
+        setDeliverySearchQuery={setDeliverySearchQuery}
         deliveryCategoriaFiltro={deliveryCategoriaFiltro}
         setDeliveryCategoriaFiltro={setDeliveryCategoriaFiltro}
         deliveryCategoriasBarra={deliveryCategoriasBarra}
+        deliveryCategoriasOrdenadas={deliveryCategoriasOrdenadas}
+        CATEGORIAS_VISIBLES={CATEGORIAS_VISIBLES}
         setDeliveryCategoriasModalOpen={setDeliveryCategoriasModalOpen}
-        deliveryProductosFiltrados={deliveryProductosFiltrados}
-        abrirOpcionesParaProductoDelivery={abrirOpcionesParaProductoDelivery}
-        agregarItemDeliveryDirecto={agregarItemDeliveryDirecto}
+        productosMenu={productosMenu}
+        agregarItemDelivery={agregarItemDelivery}
+        alterarItemDelivery={alterarItemDelivery}
+        alterarNotasDelivery={alterarNotasDelivery}
         itemsDelivery={itemsDelivery}
         setItemsDelivery={setItemsDelivery}
         cortesiaDeliveryIndices={cortesiaDeliveryIndices}
         setCortesiaDeliveryIndices={setCortesiaDeliveryIndices}
+        deliveryDescuentoTipo={deliveryDescuentoTipo}
+        setDeliveryDescuentoTipo={setDeliveryDescuentoTipo}
+        deliveryDescuentoValor={deliveryDescuentoValor}
+        setDeliveryDescuentoValor={setDeliveryDescuentoValor}
+        deliveryDescVal={deliveryDescVal}
+        deliveryDescPct={deliveryDescPct}
+        deliveryDescuentoMonto={deliveryDescuentoMonto}
+        totalDelivery={totalDelivery}
+        deliveryShippingFee={deliveryShippingFee}
+        grandTotalDelivery={grandTotalDelivery}
         deliveryMetodoPago={deliveryMetodoPago}
         setDeliveryMetodoPago={setDeliveryMetodoPago}
-        deliveryPagaCon={deliveryPagaCon}
-        setDeliveryPagaCon={setDeliveryPagaCon}
-        deliveryNombreCliente={deliveryNombreCliente}
-        setDeliveryNombreCliente={setDeliveryNombreCliente}
+        deliveryTipoComprobante={deliveryTipoComprobante}
+        setDeliveryTipoComprobante={setDeliveryTipoComprobante}
+        deliveryConCuanto={deliveryConCuanto}
+        setDeliveryConCuanto={setDeliveryConCuanto}
+        deliveryClienteNombre={deliveryClienteNombre}
+        setDeliveryClienteNombre={setDeliveryClienteNombre}
         deliveryTelefono={deliveryTelefono}
         setDeliveryTelefono={setDeliveryTelefono}
         deliveryDireccion={deliveryDireccion}
         setDeliveryDireccion={setDeliveryDireccion}
         deliveryNumDocumento={deliveryNumDocumento}
         setDeliveryNumDocumento={setDeliveryNumDocumento}
-        handleDocumentoDeliveryChange={handleDocumentoDeliveryChange}
-        deliveryDescuentoTipo={deliveryDescuentoTipo}
-        setDeliveryDescuentoTipo={setDeliveryDescuentoTipo}
-        deliveryDescPct={deliveryDescPct}
-        setDeliveryDescPct={setDeliveryDescPct}
-        deliveryDescFijo={deliveryDescFijo}
-        setDeliveryDescFijo={setDeliveryDescFijo}
+        buscarClienteDelivery={buscarClienteDelivery}
+        isBuscando={isBuscando}
         deliveryCodigoPago={deliveryCodigoPago}
         setDeliveryCodigoPago={setDeliveryCodigoPago}
-        deliveryMixtoEfec={deliveryMixtoEfec}
-        setDeliveryMixtoEfec={setDeliveryMixtoEfec}
-        deliveryMixtoTarj={deliveryMixtoTarj}
-        setDeliveryMixtoTarj={setDeliveryMixtoTarj}
+        deliveryMixtoEfectivo={deliveryMixtoEfectivo}
+        setDeliveryMixtoEfectivo={setDeliveryMixtoEfectivo}
+        deliveryMixtoTarjeta={deliveryMixtoTarjeta}
+        setDeliveryMixtoTarjeta={setDeliveryMixtoTarjeta}
         deliveryMixtoYape={deliveryMixtoYape}
         setDeliveryMixtoYape={setDeliveryMixtoYape}
-        deliveryConsumoUsuario={deliveryConsumoUsuario}
-        setDeliveryConsumoUsuario={setDeliveryConsumoUsuario}
-        deliveryConsumoPin={deliveryConsumoPin}
-        setDeliveryConsumoPin={setDeliveryConsumoPin}
-        deliveryConsumoMotivo={deliveryConsumoMotivo}
-        setDeliveryConsumoMotivo={setDeliveryConsumoMotivo}
+        deliveryMontoCredito={deliveryMontoCredito}
+        setDeliveryMontoCredito={setDeliveryMontoCredito}
+        deliveryClienteCreditoSeleccionado={deliveryClienteCreditoSeleccionado}
+        setDeliveryClienteCreditoSeleccionado={setDeliveryClienteCreditoSeleccionado}
+        clientes={clientes}
+        pinAdminDelivery={pinAdminDelivery}
+        setPinAdminDelivery={setPinAdminDelivery}
+        deliveryMotivoCortesia={deliveryMotivoCortesia}
+        setDeliveryMotivoCortesia={setDeliveryMotivoCortesia}
         enviarDeliveryACocina={enviarDeliveryACocina}
         enviandoDelivery={enviandoDelivery}
-        usuarios={usuarios}
-        DENOMINACIONES_PEN={DENOMINACIONES_PEN}
         soles={soles}
-        parseMonto={parseMonto}
         campoCodigoPago={campoCodigoPago}
+        estiloMetodo={estiloMetodo}
       />
 
       {/* MODAL DE SELECCIÓN DE OPCIONES Y COMBOS (INTERACTIVO PARA DELIVERY) */}

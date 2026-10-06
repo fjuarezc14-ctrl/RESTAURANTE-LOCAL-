@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   X,
   Banknote,
@@ -15,9 +14,12 @@ import {
   Bike,
   Truck,
   Flame,
+  Check,
 } from 'lucide-react';
-import { api } from '../../../api';
 import { formatearMoneda } from '../../../utils/dinero';
+import { matchProductSemantic, relevanciaBusqueda, agruparProductos } from '../../../utils/busquedaProductos';
+import SelectorClienteCreditoCombobox from '../componentes/SelectorClienteCreditoCombobox';
+import { getEstiloMetodo } from '../constantes/metodosPago';
 
 /**
  * Modal completo para registrar y gestionar pedidos para llevar, delivery y PedidosYa
@@ -38,61 +40,68 @@ export default function ModalNuevoPedidoDelivery({
   deliveryVistaMovil = 'productos',
   setDeliveryVistaMovil,
   deliverySearchInputRef,
-  deliveryBusqueda = '',
-  setDeliveryBusqueda,
+  deliverySearchQuery = '',
+  setDeliverySearchQuery,
   deliveryCategoriaFiltro = '🔥 Más Pedidos',
   setDeliveryCategoriaFiltro,
   deliveryCategoriasBarra = [],
+  deliveryCategoriasOrdenadas = [],
+  CATEGORIAS_VISIBLES = 5,
   setDeliveryCategoriasModalOpen,
-  deliveryProductosFiltrados = [],
-  abrirOpcionesParaProductoDelivery = () => {},
-  agregarItemDeliveryDirecto = () => {},
+  productosMenu = [],
+  agregarItemDelivery = () => {},
+  alterarItemDelivery = () => {},
+  alterarNotasDelivery = () => {},
   itemsDelivery = [],
   setItemsDelivery,
   cortesiaDeliveryIndices = [],
   setCortesiaDeliveryIndices,
+  deliveryDescuentoTipo = 'porcentaje',
+  setDeliveryDescuentoTipo,
+  deliveryDescuentoValor = '',
+  setDeliveryDescuentoValor,
+  deliveryDescVal = 0,
+  deliveryDescPct = 0,
+  deliveryDescuentoMonto = 0,
+  totalDelivery = 0,
+  deliveryShippingFee = 0,
+  grandTotalDelivery = 0,
   deliveryMetodoPago = 'Efectivo',
   setDeliveryMetodoPago,
-  deliveryPagaCon = '',
-  setDeliveryPagaCon,
-  deliveryNombreCliente = '',
-  setDeliveryNombreCliente,
+  deliveryTipoComprobante = 'Ticket',
+  setDeliveryTipoComprobante,
+  deliveryConCuanto = '',
+  setDeliveryConCuanto,
+  deliveryClienteNombre = '',
+  setDeliveryClienteNombre,
   deliveryTelefono = '',
   setDeliveryTelefono,
   deliveryDireccion = '',
   setDeliveryDireccion,
   deliveryNumDocumento = '',
   setDeliveryNumDocumento,
-  handleDocumentoDeliveryChange = () => {},
-  deliveryDescuentoTipo = 'ninguno',
-  setDeliveryDescuentoTipo,
-  deliveryDescPct = '',
-  setDeliveryDescPct,
-  deliveryDescFijo = '',
-  setDeliveryDescFijo,
+  buscarClienteDelivery = () => {},
+  isBuscando = false,
   deliveryCodigoPago = '',
   setDeliveryCodigoPago,
-  deliveryMixtoEfec = '',
-  setDeliveryMixtoEfec,
-  deliveryMixtoTarj = '',
-  setDeliveryMixtoTarj,
+  deliveryMixtoEfectivo = '',
+  setDeliveryMixtoEfectivo,
+  deliveryMixtoTarjeta = '',
+  setDeliveryMixtoTarjeta,
   deliveryMixtoYape = '',
   setDeliveryMixtoYape,
-  deliveryConsumoUsuario = '',
-  setDeliveryConsumoUsuario,
-  deliveryConsumoPin = '',
-  setDeliveryConsumoPin,
-  deliveryConsumoMotivo = '',
-  setDeliveryConsumoMotivo,
+  deliveryMontoCredito = '',
+  setDeliveryMontoCredito,
+  deliveryClienteCreditoSeleccionado = null,
+  setDeliveryClienteCreditoSeleccionado = () => {},
+  clientes = [],
+  pinAdminDelivery = '',
+  setPinAdminDelivery = () => {},
+  deliveryMotivoCortesia = '',
+  setDeliveryMotivoCortesia,
   enviarDeliveryACocina = () => {},
   enviandoDelivery = false,
-  usuarios = [],
-  DENOMINACIONES_PEN = [],
   soles = (v) => formatearMoneda(v),
-  parseMonto = (val) => {
-    const n = parseFloat(String(val || '').replace(/,/g, '.'));
-    return isNaN(n) ? 0 : n;
-  },
   campoCodigoPago = (valor, setValor, medio) => (
     <div className="animate-fade-in">
       <label className="block text-xs font-medium text-slate-500 mb-1.5">
@@ -109,6 +118,7 @@ export default function ModalNuevoPedidoDelivery({
       />
     </div>
   ),
+  estiloMetodo = getEstiloMetodo,
 }) {
   if (!abierto) return null;
 
