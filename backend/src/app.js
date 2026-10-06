@@ -9,15 +9,24 @@ const path = require('path');
 
 const { prisma } = require('./db');
 const { manejarErrores, rutaNoEncontrada } = require('./middlewares/errores');
+const { cargarSesion } = require('./middlewares/sesion');
 
 const app = express();
+
+// Detrás del proxy de la web, req.ip es la IP del cliente (límite de intentos). En la red local no hay proxy:
+// confiar en X-Forwarded-For permitiría falsear la IP.
+if (process.env.MODO_INSTALACION === 'web') app.set('trust proxy', 1);
 
 app.use(cors());
 // Las compras pueden traer el XML de SUNAT completo; el resto de la API, como máximo 100 KB
 app.use('/api/compras', express.json({ limit: '2mb' }));
 app.use(express.json({ limit: '100kb' }));
 
+// Sesión por cookie en todo /api/* (con AUTH_OBLIGATORIA=false no rechaza a nadie)
+app.use(cargarSesion);
+
 // Un router por módulo (ver src/rutas/)
+app.use(require('./rutas/auth'));
 app.use(require('./rutas/configuracion'));
 app.use(require('./rutas/clientes'));
 app.use(require('./rutas/mesas'));

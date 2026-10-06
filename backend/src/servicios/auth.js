@@ -4,6 +4,7 @@
 // usuario por su PIN y exigir que sea único, y una copia de la BD no basta para conocer los PINs.
 // ============================================================
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { prisma } = require('../db');
 
 const SECRETO_DESARROLLO = 'pin-secret-solo-para-desarrollo';
@@ -38,6 +39,22 @@ async function migrarPinesAHash() {
   return pendientes.length;
 }
 
+// Sin un administrador con contraseña nadie podría activar el primer dispositivo. Al arrancar, si falta,
+// el primer Administrador activo recibe el usuario "admin" y INITIAL_ADMIN_PASSWORD (o una al azar que se muestra en el log).
+async function asegurarAccesoAdministrador() {
+  const conAcceso = await prisma.usuario.count({ where: { rol: 'Administrador', activo: true, contrasenaHash: { not: null } } });
+  if (conAcceso > 0) return null;
+  const admin = await prisma.usuario.findFirst({ where: { rol: 'Administrador', activo: true }, orderBy: { id: 'asc' } });
+  if (!admin) return null;
+
+  const ocupado = await prisma.usuario.findFirst({ where: { usuario: 'admin', id: { not: admin.id } } });
+  const usuario = admin.usuario || (ocupado ? `admin${admin.id}` : 'admin');
+  const generada = !process.env.INITIAL_ADMIN_PASSWORD;
+  const contrasena = process.env.INITIAL_ADMIN_PASSWORD || crypto.randomBytes(9).toString('base64url');
+  await prisma.usuario.update({ where: { id: admin.id }, data: { usuario, contrasenaHash: await bcrypt.hash(contrasena, 10) } });
+  return { usuario, contrasena, generada };
+}
+
 // Lo único que la API devuelve de un usuario: nunca el PIN ni los hashes
 function usuarioPublico(u) {
   if (!u) return u;
@@ -50,4 +67,4 @@ function generarPinSignature(pinHash, userId) {
   return crypto.createHash('sha256').update(`${pinHash || ''}_${userId}_salt_hernandez_auth`).digest('hex').substring(0, 16);
 }
 
-module.exports = { hashPin, buscarUsuarioPorPin, migrarPinesAHash, usuarioPublico, generarPinSignature };
+module.exports = { hashPin, buscarUsuarioPorPin, migrarPinesAHash, asegurarAccesoAdministrador, usuarioPublico, generarPinSignature };

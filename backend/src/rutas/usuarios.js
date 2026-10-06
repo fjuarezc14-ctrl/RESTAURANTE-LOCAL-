@@ -2,7 +2,9 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { loginRateLimiter, registerLoginFailure, registerLoginSuccess } = require('../middlewares/limiteLogin');
+const bcrypt = require('bcryptjs');
 const { buscarUsuarioPorPin, generarPinSignature, hashPin, usuarioPublico } = require('../servicios/auth');
+const { cerrarSesionesDeUsuario } = require('../servicios/sesiones');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { loginPin, usuarioEdicion, usuarioNuevo } = require('../../shared/esquemas/usuarios.js');
@@ -23,6 +25,16 @@ router.get('/api/usuarios', async (req, res, next) => {
   }
 });
 
+// Usuario, correo, contraseña e inactividad: solo se tocan si llegan (null los borra)
+async function datosDeAcceso(body) {
+  const data = {};
+  if (body.usuario !== undefined) data.usuario = body.usuario;
+  if (body.correo !== undefined) data.correo = body.correo;
+  if (body.inactividadMin !== undefined) data.inactividadMin = body.inactividadMin;
+  if (body.contrasena) data.contrasenaHash = await bcrypt.hash(body.contrasena, 10);
+  return data;
+}
+
 // El rol Administrador siempre tiene acceso a todos los módulos
 const PERMISOS_ADMINISTRADOR = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
 
@@ -41,6 +53,7 @@ router.post('/api/usuarios', validar({ body: usuarioNuevo }), async (req, res, n
         rol: String(rol),
         pinHash: hashPin(pin),
         permisos: String(rol) === 'Administrador' ? PERMISOS_ADMINISTRADOR : (Array.isArray(permisos) ? permisos.map(String) : []),
+        ...(await datosDeAcceso(req.body)),
       }
     });
     res.json(usuarioPublico(user));
@@ -73,6 +86,7 @@ router.put('/api/usuarios/:id', validar({ body: usuarioEdicion }), async (req, r
     if (req.body.pin !== undefined) data.pinHash = hashPin(req.body.pin);
     if (req.body.permisos !== undefined) data.permisos = Array.isArray(req.body.permisos) ? req.body.permisos.map(String) : [];
     if (req.body.activo !== undefined) data.activo = Boolean(req.body.activo);
+    Object.assign(data, await datosDeAcceso(req.body));
     if ((data.rol ?? target.rol) === 'Administrador') data.permisos = PERMISOS_ADMINISTRADOR;
 
     if (isInmutableOriginal) {
@@ -91,9 +105,12 @@ router.put('/api/usuarios/:id', validar({ body: usuarioEdicion }), async (req, r
       data.permisos = PERMISOS_ADMINISTRADOR;
     }
 
-    const user = await prisma.usuario.update({
-      where: { id },
-      data
+    // Cambiar el PIN o desactivar al usuario cierra sus sesiones abiertas, en la misma transacción
+    const motivoCierre = data.activo === false ? 'USUARIO_DESACTIVADO' : (data.pinHash ? 'PIN_CAMBIADO' : null);
+    const user = await prisma.$transaction(async (tx) => {
+      const actualizado = await tx.usuario.update({ where: { id }, data });
+      if (motivoCierre) await cerrarSesionesDeUsuario(id, motivoCierre, tx);
+      return actualizado;
     });
     res.json(usuarioPublico(user));
   } catch (err) {
@@ -179,7 +196,10 @@ router.delete('/api/usuarios/:id', async (req, res, next) => {
     if (target.rol === 'Administrador' && admins <= 1) {
       return next(new ErrorApp('CONFLICTO', '¡No puedes eliminar al único Administrador!'));
     }
-    await prisma.usuario.update({ where: { id }, data: { activo: false } });
+    await prisma.$transaction(async (tx) => {
+      await tx.usuario.update({ where: { id }, data: { activo: false } });
+      await cerrarSesionesDeUsuario(id, 'USUARIO_DESACTIVADO', tx);
+    });
     res.json({ ok: true });
   } catch (err) {
     next(err);

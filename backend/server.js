@@ -4,7 +4,7 @@
 const { app, prisma } = require('./src/app');
 const company = require('./config/company');
 
-const { migrarPinesAHash } = require('./src/servicios/auth');
+const { asegurarAccesoAdministrador, migrarPinesAHash } = require('./src/servicios/auth');
 
 const PORT = process.env.PORT || 3003;
 let server;
@@ -13,6 +13,12 @@ async function iniciar() {
   // Los PIN en texto plano (BD antiguas, seeds, instalador) se guardan como hash antes de atender
   const convertidos = await migrarPinesAHash();
   if (convertidos > 0) console.log(`🔐 ${convertidos} PIN(s) convertidos a hash`);
+
+  const acceso = await asegurarAccesoAdministrador();
+  if (acceso) {
+    console.log(`🔑 Acceso para activar dispositivos: usuario "${acceso.usuario}"` +
+      (acceso.generada ? ` / contraseña "${acceso.contrasena}" (cámbiala después de entrar)` : ' / contraseña de INITIAL_ADMIN_PASSWORD'));
+  }
 
   server = app.listen(PORT, () => {
     console.log(`🚀 Backend ${company.COMPANY_NAME} corriendo en http://localhost:${PORT}`);
