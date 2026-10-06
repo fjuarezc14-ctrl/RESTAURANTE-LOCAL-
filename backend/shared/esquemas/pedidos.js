@@ -1,7 +1,7 @@
 // Esquemas de pedidos: mesas, comandas, delivery y cancelaciones
 import { z } from 'zod';
 import {
-  LARGO, booleanoOpcional, cantidad, desdeTexto, idOpcional, metodoPago, monto, montoOpcional, textoOpcional,
+  LARGO, booleanoOpcional, cantidad, desdeTexto, idOpcional, metodoPago, montoCalculado, montoCalculadoOpcional, textoOpcional,
 } from './comunes.js';
 
 const NOTAS_ITEM = 1000; // las notas de un combo incluyen todas las opciones elegidas
@@ -10,7 +10,7 @@ const numeroMesa = (mensaje) => desdeTexto(z.number({ error: mensaje }).int(mens
 export const itemPedido = z.looseObject({
   productoId: idOpcional,
   nombre: textoOpcional(150),
-  precio: desdeTexto(monto),
+  precio: desdeTexto(montoCalculado),
   cantidad: desdeTexto(cantidad.optional()),
   cant: desdeTexto(cantidad.optional()),
   notas: textoOpcional(NOTAS_ITEM),
@@ -22,24 +22,24 @@ const listaItems = z.array(itemPedido, { error: 'Envía la lista de ítems del p
 export const pedidoMesa = z.looseObject({
   mesero: textoOpcional(LARGO.nombre),
   items: listaItems,
-  total: montoOpcional,
+  total: montoCalculadoOpcional,
   adicional: booleanoOpcional,
 });
 
 export const pedidoLlevar = z.looseObject({
   items: listaItems,
-  total: montoOpcional,
+  total: montoCalculadoOpcional,
   metodoPago: z.enum(metodoPago.options, { error: 'Método de pago inválido.' }).optional(),
   tipoDelivery: textoOpcional(30),
   tipoComprobante: textoOpcional(20),
-  montoDelivery: montoOpcional,
-  descuentoMonto: montoOpcional,
+  montoDelivery: montoCalculadoOpcional,
+  descuentoMonto: montoCalculadoOpcional,
   descuentoPorcentaje: desdeTexto(z.number().min(0).max(100, 'El descuento no puede pasar de 100%.').optional()),
   descuentoDescripcion: textoOpcional(LARGO.descripcion),
-  montoEfectivo: montoOpcional,
-  montoTarjeta: montoOpcional,
-  montoYape: montoOpcional,
-  montoCredito: montoOpcional,
+  montoEfectivo: montoCalculadoOpcional,
+  montoTarjeta: montoCalculadoOpcional,
+  montoYape: montoCalculadoOpcional,
+  montoCredito: montoCalculadoOpcional,
   clienteCreditoId: idOpcional,
   nombreCliente: textoOpcional(150),
   numDocumento: textoOpcional(20),

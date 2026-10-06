@@ -1,13 +1,13 @@
 // Esquemas de ventas: cobro, correcciones y anulación
 import { z } from 'zod';
 import {
-  LARGO, TIPOS_COMPROBANTE, desdeTexto, id, idOpcional, metodoPago, montoOpcional, montoPositivo, pinOpcional, textoOpcional,
+  LARGO, TIPOS_COMPROBANTE, desdeTexto, id, idOpcional, metodoPago, montoCalculado, montoCalculadoOpcional, pinOpcional, textoOpcional,
 } from './comunes.js';
 
 export const creditoDetalle = z.looseObject({
   clienteId: id,
   nombre: textoOpcional(150),
-  monto: desdeTexto(montoPositivo),
+  monto: desdeTexto(montoCalculado.refine((n) => n > 0, 'El monto debe ser mayor a 0.')),
 });
 
 export const cobro = z.looseObject({
@@ -18,13 +18,13 @@ export const cobro = z.looseObject({
   numDocumento: textoOpcional(20),
   nombreCliente: textoOpcional(150),
   clienteDireccion: textoOpcional(LARGO.nota),
-  total: montoOpcional,
+  total: montoCalculadoOpcional,
   ofertaDescripcion: textoOpcional(LARGO.descripcion),
-  descuentoAplicado: montoOpcional,
-  montoEfectivo: montoOpcional,
-  montoTarjeta: montoOpcional,
-  montoYape: montoOpcional,
-  montoCredito: montoOpcional,
+  descuentoAplicado: montoCalculadoOpcional,
+  montoEfectivo: montoCalculadoOpcional,
+  montoTarjeta: montoCalculadoOpcional,
+  montoYape: montoCalculadoOpcional,
+  montoCredito: montoCalculadoOpcional,
   clienteCreditoId: idOpcional,
   creditosDetalle: z.array(creditoDetalle).max(20).optional(),
   cortesiaItemIds: z.array(id).max(200).optional(),
@@ -36,10 +36,10 @@ export const cobro = z.looseObject({
 export const correccionMetodoPago = z.looseObject({
   metodoPago: z.enum(metodoPago.options, { error: 'Método de pago inválido.' }),
   pin: pinOpcional,
-  montoEfectivo: montoOpcional,
-  montoTarjeta: montoOpcional,
-  montoYape: montoOpcional,
-  montoCredito: montoOpcional,
+  montoEfectivo: montoCalculadoOpcional,
+  montoTarjeta: montoCalculadoOpcional,
+  montoYape: montoCalculadoOpcional,
+  montoCredito: montoCalculadoOpcional,
   clienteCreditoId: idOpcional,
 });
 
@@ -51,8 +51,8 @@ export const correccionTipoEntrega = z.looseObject({
   nombreCliente: textoOpcional(150),
   telefono: textoOpcional(20),
   metodoPago: z.enum(metodoPago.options, { error: 'Método de pago inválido.' }).optional(),
-  montoConCuanto: montoOpcional,
-  montoDelivery: montoOpcional,
+  montoConCuanto: montoCalculadoOpcional,
+  montoDelivery: montoCalculadoOpcional,
 });
 
 export const correccionDatosCliente = z.looseObject({

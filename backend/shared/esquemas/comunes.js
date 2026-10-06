@@ -91,3 +91,17 @@ export const pinOpcional = z.preprocess((v) => (v === '' || v === null ? undefin
 export const booleanoOpcional = z.boolean().optional();
 export const TIPOS_COMPROBANTE = ['Ticket', 'Boleta', 'Factura'];
 export const consultaDesde = z.looseObject({ desde: fecha.optional() });
+export const consultaDirectorio = z.looseObject({
+  page: desdeTexto(z.number().int().min(1).max(100000).optional()),
+  limit: desdeTexto(z.number().int().min(1).max(500).optional()),
+  search: textoOpcional(100),
+});
+
+// Montos que calcula la pantalla (totales, partes de un pago, descuentos): se redondean a 2 decimales
+// en lugar de rechazarse, porque un descuento porcentual puede dar 1.785. Los que escribe una persona usan `monto`.
+export const montoCalculado = z
+  .number()
+  .min(0, 'El monto no puede ser negativo.')
+  .max(MONTO_MAXIMO, `El monto no puede pasar de ${MONTO_MAXIMO}.`)
+  .transform((n) => Math.round(n * 100) / 100);
+export const montoCalculadoOpcional = desdeTexto(montoCalculado.optional());

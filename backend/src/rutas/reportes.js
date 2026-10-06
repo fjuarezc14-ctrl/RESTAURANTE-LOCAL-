@@ -2,7 +2,8 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
-const { validarIdsEnUrl } = require('../middlewares/validar');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -12,7 +13,7 @@ validarIdsEnUrl(router);
 // ============================================================
 
 // GET /api/reportes/cancelaciones → Pedidos cancelados del día o rango de fechas
-router.get('/api/reportes/cancelaciones', async (req, res, next) => {
+router.get('/api/reportes/cancelaciones', validar({ query: rangoFechasOpcional }), async (req, res, next) => {
   const { desde, hasta } = req.query;
   try {
     let filtroFecha = {};
@@ -83,7 +84,7 @@ router.get('/api/reportes/cancelaciones', async (req, res, next) => {
 });
 
 // GET /api/reportes/mozos → Estadísticas por mozo por rango de fechas
-router.get('/api/reportes/mozos', async (req, res, next) => {
+router.get('/api/reportes/mozos', validar({ query: rangoFechasOpcional }), async (req, res, next) => {
   const { desde, hasta } = req.query;
   try {
     let filtroFecha = {};
@@ -132,7 +133,7 @@ router.get('/api/reportes/mozos', async (req, res, next) => {
 });
 
 // GET /api/reportes/cajeros → Rendimiento y desglose de ventas por cajero
-router.get('/api/reportes/cajeros', async (req, res, next) => {
+router.get('/api/reportes/cajeros', validar({ query: rangoFechasOpcional }), async (req, res, next) => {
   const { desde, hasta } = req.query;
   try {
     let filtroFecha = {};
@@ -212,7 +213,7 @@ router.get('/api/reportes/cajeros', async (req, res, next) => {
 });
 
 // GET /api/reportes/contable → Ventas y compras por rango de fechas
-router.get('/api/reportes/contable', async (req, res, next) => {
+router.get('/api/reportes/contable', validar({ query: rangoFechasOpcional }), async (req, res, next) => {
   const { desde, hasta } = req.query;
   try {
     let filtroFecha = {};
@@ -316,7 +317,7 @@ router.get('/api/reportes/contable', async (req, res, next) => {
 });
 
 // GET /api/reportes/pollos → Reporte de pollos vendidos e inventario con conversión fraccionada
-router.get('/api/reportes/pollos', async (req, res, next) => {
+router.get('/api/reportes/pollos', validar({ query: rangoFechasOpcional }), async (req, res, next) => {
   const { desde, hasta } = req.query;
   try {
     let filtroFecha = {};
@@ -446,7 +447,7 @@ router.get('/api/reportes/pollos', async (req, res, next) => {
 });
 
 // GET /api/reportes/rotacion → Cantidad vendida de cada producto por rango de fechas
-router.get('/api/reportes/rotacion', async (req, res, next) => {
+router.get('/api/reportes/rotacion', validar({ query: rangoFechasOpcional }), async (req, res, next) => {
   const { desde, hasta } = req.query;
   try {
     let filtroFecha = {};

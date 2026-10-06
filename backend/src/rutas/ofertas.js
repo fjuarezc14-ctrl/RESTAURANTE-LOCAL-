@@ -2,7 +2,8 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { ErrorApp } = require('../middlewares/errores');
-const { validarIdsEnUrl } = require('../middlewares/validar');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { activacionOferta, ofertaEdicion, ofertaNueva } = require('../../shared/esquemas/carta.js');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -22,7 +23,7 @@ router.get('/api/ofertas', async (req, res, next) => {
 });
 
 // POST /api/ofertas → Crear nueva oferta (solo Admin)
-router.post('/api/ofertas', async (req, res, next) => {
+router.post('/api/ofertas', validar({ body: ofertaNueva }), async (req, res, next) => {
   try {
     const { nombre, descripcion, tipoDescuento, valorDescuento, categorias, activa, fechaInicio, fechaFin, creadoPor } = req.body;
     if (!nombre || !tipoDescuento || valorDescuento == null || !categorias || !creadoPor) {
@@ -48,7 +49,7 @@ router.post('/api/ofertas', async (req, res, next) => {
 });
 
 // PUT /api/ofertas/:id → Editar oferta
-router.put('/api/ofertas/:id', async (req, res, next) => {
+router.put('/api/ofertas/:id', validar({ body: ofertaEdicion }), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const data = {};
@@ -67,7 +68,7 @@ router.put('/api/ofertas/:id', async (req, res, next) => {
 });
 
 // PATCH /api/ofertas/:id/activar → Activar o desactivar oferta
-router.patch('/api/ofertas/:id/activar', async (req, res, next) => {
+router.patch('/api/ofertas/:id/activar', validar({ body: activacionOferta }), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const { activa } = req.body;

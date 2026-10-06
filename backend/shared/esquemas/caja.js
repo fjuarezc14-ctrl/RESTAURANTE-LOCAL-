@@ -1,7 +1,7 @@
 // Esquemas de caja: apertura, movimientos y cierre
 import { z } from 'zod';
 import {
-  LARGO, desdeTexto, fecha, id, monto, montoOpcional, montoPositivo, nombre, pinOpcional, rangoFechasOpcional, texto, textoOpcional,
+  LARGO, desdeTexto, fecha, id, monto, montoCalculadoOpcional, montoOpcional, montoPositivo, nombre, pinOpcional, rangoFechasOpcional, texto, textoOpcional,
 } from './comunes.js';
 
 export const aperturaCaja = z.looseObject({
@@ -19,19 +19,20 @@ export const movimientoCaja = z.looseObject({
   cajeroNombre: textoOpcional(LARGO.nombre),
 });
 
+// Lo contado lo escribe el cajero; los demás totales los calcula la pantalla.
 // diferencia puede ser negativa (faltante) y además el servidor la recalcula
 export const cierreCaja = z.looseObject({
   cajeroNombre: nombre,
   montoInicial: montoOpcional,
-  efectivoVentas: montoOpcional,
-  efectivoEsperado: montoOpcional,
+  efectivoVentas: montoCalculadoOpcional,
+  efectivoEsperado: montoCalculadoOpcional,
   efectivoContado: montoOpcional,
-  totalTarjeta: montoOpcional,
-  totalYape: montoOpcional,
-  totalConsumo: montoOpcional,
-  totalPedidosYa: montoOpcional,
-  egresosEfectivo: montoOpcional,
-  abonosEfectivo: montoOpcional,
+  totalTarjeta: montoCalculadoOpcional,
+  totalYape: montoCalculadoOpcional,
+  totalConsumo: montoCalculadoOpcional,
+  totalPedidosYa: montoCalculadoOpcional,
+  egresosEfectivo: montoCalculadoOpcional,
+  abonosEfectivo: montoCalculadoOpcional,
   diferencia: desdeTexto(z.number().optional()),
   fechaApertura: textoOpcional(40),
   fechaCierre: textoOpcional(40),

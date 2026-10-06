@@ -36,12 +36,19 @@ describe('cobro', () => {
     esperarError(await cobrar(await pedidoDeMesa(), { metodoPago: 'Bitcoin' }), 400, 'VALIDACION', 'metodoPago');
   });
 
-  it('rechaza montos negativos o con más de 2 decimales', async () => {
+  it('rechaza montos negativos', async () => {
     await abrirCaja();
     const pedidoId = await pedidoDeMesa();
     esperarError(await cobrar(pedidoId, { descuentoAplicado: -10 }), 400, 'VALIDACION', 'descuentoAplicado');
-    esperarError(await cobrar(pedidoId, { metodoPago: 'Mixto', montoEfectivo: 54.555 }), 400, 'VALIDACION', 'montoEfectivo');
+    esperarError(await cobrar(pedidoId, { metodoPago: 'Mixto', montoEfectivo: -1, montoTarjeta: 55.5 }), 400, 'VALIDACION', 'montoEfectivo');
     expect(await prisma.venta.count()).toBe(0);
+  });
+
+  it('redondea a 2 decimales los montos que calcula la pantalla (un descuento porcentual puede dar 1.785)', async () => {
+    await abrirCaja();
+    const res = await cobrar(await pedidoDeMesa(), { metodoPago: 'Mixto', montoEfectivo: 30.004, montoTarjeta: 24.496 });
+    expect(res.status).toBe(200);
+    expect(await prisma.venta.findUnique({ where: { id: res.body.ventaId } })).toMatchObject({ montoEfectivo: 30, montoTarjeta: 24.5 });
   });
 
   it('mixto: las partes tienen que sumar el total', async () => {
@@ -152,5 +159,41 @@ describe('delivery', () => {
   it('rechaza un descuento de más de 100%', async () => {
     await abrirCaja();
     esperarError(await llevar({ metodoPago: 'Efectivo', items: itemsDelivery(), descuentoPorcentaje: 150 }), 400, 'VALIDACION', 'descuentoPorcentaje');
+  });
+});
+
+describe('carta, usuarios, compras y configuración', () => {
+  it('productos: precio negativo o sin categoría → VALIDACION', async () => {
+    esperarError(await api().post('/api/productos').send({ nombre: 'Ceviche', categoria: 'Entradas', precio: -5 }), 400, 'VALIDACION', 'precio');
+    esperarError(await api().post('/api/productos').send({ nombre: 'Ceviche', precio: 30 }), 400, 'VALIDACION', 'categoria');
+    const ok = await api().post('/api/productos').send({ nombre: 'Ceviche', categoria: 'Entradas', precio: '30.50' });
+    expect(ok.body.precio).toBe(30.5);
+  });
+
+  it('usuarios: rol, PIN y permisos válidos', async () => {
+    const usuario = (datos) => api().post('/api/usuarios').send({ nombre: 'Ana', rol: 'Mozo', pin: '5555', permisos: ['Salon'], ...datos });
+    esperarError(await usuario({ rol: 'Jefe' }), 400, 'VALIDACION', 'rol');
+    esperarError(await usuario({ pin: '12a4' }), 400, 'VALIDACION', 'pin');
+    esperarError(await usuario({ permisos: ['Todo'] }), 400, 'VALIDACION', 'permisos.0');
+    expect((await usuario({})).status).toBe(200);
+  });
+
+  it('login: un PIN que no son 4 dígitos → VALIDACION', async () => {
+    esperarError(await api().post('/api/usuarios/login').send({ pin: 'abcd' }), 400, 'VALIDACION', 'pin');
+  });
+
+  it('compras: RUC inválido → VALIDACION; acepta el XML de SUNAT aunque pase de 100 KB', async () => {
+    esperarError(await api().post('/api/compras').send({ proveedor: 'Makro', total: 50, baseImponible: 50, igv: 0, ruc: '123' }), 400, 'VALIDACION', 'ruc');
+    esperarError(await api().post('/api/compras').send({ proveedor: 'Makro', total: 50 }), 400, 'VALIDACION', 'baseImponible');
+    const conXml = await api().post('/api/compras').send({ proveedor: 'Makro', total: '118', baseImponible: 100, igv: 18, ruc: '20100070970', xmlData: 'x'.repeat(300 * 1024) });
+    expect(conXml.status).toBe(200);
+  });
+
+  it('empresa: RUC de 11 dígitos', async () => {
+    esperarError(await api().put('/api/empresa').send({ ruc: '2060' }), 400, 'VALIDACION', 'ruc');
+  });
+
+  it.each(['cancelaciones', 'mozos', 'cajeros', 'contable', 'pollos', 'rotacion'])('reporte %s: rango de fechas al revés → VALIDACION', async (reporte) => {
+    esperarError(await api().get(`/api/reportes/${reporte}?desde=2026-10-05&hasta=2026-10-01`), 400, 'VALIDACION', 'hasta');
   });
 });

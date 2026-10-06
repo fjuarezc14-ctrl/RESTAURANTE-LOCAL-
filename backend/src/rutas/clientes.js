@@ -5,7 +5,7 @@ const { parsearCreditoSplit } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { abono, clienteEdicion, clienteNuevo } = require('../../shared/esquemas/clientes.js');
-const { consultaDesde } = require('../../shared/esquemas/comunes.js');
+const { consultaDesde, consultaDirectorio } = require('../../shared/esquemas/comunes.js');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -78,7 +78,7 @@ router.get('/api/clientes', async (req, res, next) => {
 });
 
 // GET /api/clientes/directorio → Directorio general de clientes de consumo (paginado + buscador)
-router.get('/api/clientes/directorio', async (req, res, next) => {
+router.get('/api/clientes/directorio', validar({ query: consultaDirectorio }), async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 15));

@@ -2,7 +2,8 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { ErrorApp } = require('../middlewares/errores');
-const { validarIdsEnUrl } = require('../middlewares/validar');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { categoriaCompra, compraEdicion, compraNueva, consultaCompras, sincronizacionSunat } = require('../../shared/esquemas/compras.js');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -11,7 +12,7 @@ validarIdsEnUrl(router);
 // COMPRAS (RCE)
 // ============================================================
 
-router.get('/api/compras', async (req, res, next) => {
+router.get('/api/compras', validar({ query: consultaCompras }), async (req, res, next) => {
   const { desde, hasta, categoria, metodoPago, busqueda } = req.query;
   try {
     const conditions = [];
@@ -125,7 +126,7 @@ router.get('/api/compras/stats', async (req, res, next) => {
 
 // POST /api/compras/sincronizar-sunat → Proxy seguro a apisunat.pe
 // Modo demo: si APISUNAT_TOKEN no está configurado, retorna datos de ejemplo reales.
-router.post('/api/compras/sincronizar-sunat', async (req, res, next) => {
+router.post('/api/compras/sincronizar-sunat', validar({ body: sincronizacionSunat }), async (req, res, next) => {
   const { periodo, fechaInicio, fechaFin } = req.body;
   const token = process.env.APISUNAT_TOKEN;
   const MODO_DEMO = !token || token.includes('tu_token') || token === '';
@@ -272,7 +273,7 @@ router.post('/api/compras/sincronizar-sunat', async (req, res, next) => {
   }
 });
 
-router.post('/api/compras', async (req, res, next) => {
+router.post('/api/compras', validar({ body: compraNueva }), async (req, res, next) => {
   try {
     const { proveedor, ruc, tipoDocumento, serieNumero, baseImponible, igv, total, xmlData, origenCarga, categoria, fechaEmision, metodoPago } = req.body;
     const compra = await prisma.compra.create({
@@ -299,7 +300,7 @@ router.post('/api/compras', async (req, res, next) => {
 });
 
 // PATCH /api/compras/:id/categoria → Actualizar categoría de una compra
-router.patch('/api/compras/:id/categoria', async (req, res, next) => {
+router.patch('/api/compras/:id/categoria', validar({ body: categoriaCompra }), async (req, res, next) => {
   const { id } = req.params;
   const { categoria } = req.body;
   try {
@@ -314,7 +315,7 @@ router.patch('/api/compras/:id/categoria', async (req, res, next) => {
 });
 
 // PUT /api/compras/:id → Editar todos los datos de una compra/gasto
-router.put('/api/compras/:id', async (req, res, next) => {
+router.put('/api/compras/:id', validar({ body: compraEdicion }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { proveedor, ruc, tipoDocumento, serieNumero, baseImponible, igv, total, categoria, fechaEmision, metodoPago } = req.body;
   try {
