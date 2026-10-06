@@ -3,7 +3,9 @@ const express = require('express');
 const { prisma } = require('../db');
 const { parsearCreditoSplit } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
-const { validarIdsEnUrl } = require('../middlewares/validar');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { abono, clienteEdicion, clienteNuevo } = require('../../shared/esquemas/clientes.js');
+const { consultaDesde } = require('../../shared/esquemas/comunes.js');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -179,7 +181,7 @@ router.get('/api/clientes/directorio', async (req, res, next) => {
 });
 
 // POST /api/clientes → Crear un nuevo cliente
-router.post('/api/clientes', async (req, res, next) => {
+router.post('/api/clientes', validar({ body: clienteNuevo }), async (req, res, next) => {
   try {
     const { nombre, tipoDoc, numDoc, telefono, direccion, esTrabajador, usuarioId, tieneCredito } = req.body;
     if (!nombre) {
@@ -204,7 +206,7 @@ router.post('/api/clientes', async (req, res, next) => {
 });
 
 // PUT /api/clientes/:id → Editar un cliente
-router.put('/api/clientes/:id', async (req, res, next) => {
+router.put('/api/clientes/:id', validar({ body: clienteEdicion }), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const data = {};
@@ -300,7 +302,7 @@ router.get('/api/clientes/:id', async (req, res, next) => {
 });
 
 // POST /api/clientes/:id/abonar → Registrar un abono al crédito
-router.post('/api/clientes/:id/abonar', async (req, res, next) => {
+router.post('/api/clientes/:id/abonar', validar({ body: abono }), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const { monto, metodoPago, montoEfectivo, montoTarjeta, montoYape, registradoPor, nota } = req.body;
@@ -399,7 +401,7 @@ router.post('/api/clientes/:id/abonar', async (req, res, next) => {
 });
 
 // GET /api/abonos → Listar todos los abonos registrados (opcional: filtrar por fecha desde)
-router.get('/api/abonos', async (req, res, next) => {
+router.get('/api/abonos', validar({ query: consultaDesde }), async (req, res, next) => {
   const { desde } = req.query;
   try {
     const where = {};

@@ -85,3 +85,9 @@ export const rangoFechasOpcional = z
   .looseObject({ desde: fecha.optional(), hasta: fecha.optional() })
   .refine(({ desde, hasta }) => !desde === !hasta, { message: 'Indica las dos fechas del rango.', path: ['hasta'] })
   .refine(({ desde, hasta }) => !desde || desde <= hasta, { message: 'La fecha inicial no puede ser posterior a la final.', path: ['hasta'] });
+
+export const montoPositivo = monto.refine((n) => n > 0, 'El monto debe ser mayor a 0.');
+export const pinOpcional = z.preprocess((v) => (v === '' || v === null ? undefined : v), pin.optional());
+export const booleanoOpcional = z.boolean().optional();
+export const TIPOS_COMPROBANTE = ['Ticket', 'Boleta', 'Factura'];
+export const consultaDesde = z.looseObject({ desde: fecha.optional() });

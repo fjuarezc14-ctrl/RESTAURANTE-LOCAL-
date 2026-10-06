@@ -104,10 +104,16 @@ describe('medios de pago del abono', () => {
     expect(await prisma.abonoCredito.count()).toBe(0);
   });
 
-  it('redondea el monto a 2 decimales', async () => {
+  it('rechaza montos con más de 2 decimales', async () => {
     await abrirCaja();
     await dejarDeuda();
-    const { body } = await abonar({ monto: 10.456 });
-    expect(body.abono.monto).toBe(10.46);
+    esperarError(await abonar({ monto: 10.456 }), 400, 'VALIDACION', 'monto');
+  });
+
+  it('acepta el monto como texto, tal como lo envía el formulario', async () => {
+    await abrirCaja();
+    await dejarDeuda();
+    const { body } = await abonar({ monto: '15,50', metodoPago: 'Mixto', montoEfectivo: '10', montoYape: '5.5' });
+    expect(body.abono).toMatchObject({ monto: 15.5, montoEfectivo: 10, montoYape: 5.5 });
   });
 });

@@ -3,7 +3,8 @@ const express = require('express');
 const { prisma } = require('../db');
 const { obtenerMontosVenta } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
-const { validarIdsEnUrl } = require('../middlewares/validar');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { aperturaCaja, cierreCaja, cierreForzado, consultaCierres, consultaMovimientos, movimientoCaja } = require('../../shared/esquemas/caja.js');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -134,7 +135,7 @@ router.get('/api/caja/estado', async (req, res, next) => {
 });
 
 // POST /api/caja/movimientos → Registrar salida (retiro de emergencia) o ingreso extra en la gaveta
-router.post('/api/caja/movimientos', async (req, res, next) => {
+router.post('/api/caja/movimientos', validar({ body: movimientoCaja }), async (req, res, next) => {
   try {
     const { monto, motivo, tipo = 'RETIRO', cajeroNombre } = req.body;
     const parsedMonto = parseFloat(monto || 0);
@@ -171,7 +172,7 @@ router.post('/api/caja/movimientos', async (req, res, next) => {
 });
 
 // GET /api/caja/movimientos → Listar salidas y movimientos del turno activo o histórico
-router.get('/api/caja/movimientos', async (req, res, next) => {
+router.get('/api/caja/movimientos', validar({ query: consultaMovimientos }), async (req, res, next) => {
   try {
     const { turnoId, desde, hasta } = req.query;
     let whereClause = {};
@@ -214,7 +215,7 @@ router.get('/api/caja/movimientos', async (req, res, next) => {
 });
 
 // POST /api/caja/apertura → Registrar la apertura formal de turno con fondo inicial
-router.post('/api/caja/apertura', async (req, res, next) => {
+router.post('/api/caja/apertura', validar({ body: aperturaCaja }), async (req, res, next) => {
   try {
     const { cajeroNombre, montoInicial, notaApertura } = req.body;
 
@@ -256,7 +257,7 @@ router.post('/api/caja/apertura', async (req, res, next) => {
 });
 
 // POST /api/caja/cierre → Registrar un arqueo y cierre de turno
-router.post('/api/caja/cierre', async (req, res, next) => {
+router.post('/api/caja/cierre', validar({ body: cierreCaja }), async (req, res, next) => {
   try {
     const {
       fechaApertura,
@@ -350,7 +351,7 @@ router.post('/api/caja/cierre', async (req, res, next) => {
 });
 
 // POST /api/caja/cierre-forzado → Cierre administrativo por parte del Administrador
-router.post('/api/caja/cierre-forzado', async (req, res, next) => {
+router.post('/api/caja/cierre-forzado', validar({ body: cierreForzado }), async (req, res, next) => {
   try {
     const { adminNombre, adminPin, motivo } = req.body;
 
@@ -412,7 +413,7 @@ router.get('/api/caja/ultimo-cierre', async (req, res, next) => {
 });
 
 // GET /api/caja/cierres → Historial de los últimos cierres de caja
-router.get('/api/caja/cierres', async (req, res, next) => {
+router.get('/api/caja/cierres', validar({ query: consultaCierres }), async (req, res, next) => {
   try {
     const limit = parseInt(req.query.limit || 30);
     const cierres = await prisma.cierreCaja.findMany({
