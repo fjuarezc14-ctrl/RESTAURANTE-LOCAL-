@@ -7,6 +7,7 @@ import { Banknote, AlertTriangle, ChevronDown } from 'lucide-react';
 import { Dialog, DialogHeader, DialogFooter, Button } from '../../../components/ui';
 import { CalculadoraEfectivoPEN } from '../componentes/CalculadoraEfectivoPEN';
 import { api } from '../../../api';
+import { aperturaCaja } from '@shared/esquemas/caja.js';
 
 export function ModalAperturaCaja({
   abierto,
@@ -56,14 +57,16 @@ export function ModalAperturaCaja({
   const handleSubmit = async (e) => {
     e.preventDefault();
     const nombreFinal = (cajeroNombre || '').trim();
-    if (!nombreFinal) {
-      setError('Debes seleccionar o ingresar el nombre del cajero(a).');
-      return;
-    }
-
     const montoNum = parseFloat(montoInicialInput) || 0;
-    if (montoNum < 0) {
-      setError('El fondo inicial no puede ser negativo.');
+
+    const validacion = aperturaCaja.safeParse({
+      cajeroNombre: nombreFinal,
+      montoInicial: montoNum,
+      notaApertura: notaAperturaInput.trim() || undefined,
+    });
+
+    if (!validacion.success) {
+      setError(validacion.error.issues?.[0]?.message || 'Verifica los datos de apertura.');
       return;
     }
 
@@ -71,11 +74,7 @@ export function ModalAperturaCaja({
     setError('');
 
     try {
-      const res = await api.abrirCaja({
-        cajeroNombre: nombreFinal,
-        montoInicial: montoNum,
-        notaApertura: notaAperturaInput.trim() || undefined,
-      });
+      const res = await api.abrirCaja(validacion.data);
 
       if (res.error) {
         throw new Error(res.error);

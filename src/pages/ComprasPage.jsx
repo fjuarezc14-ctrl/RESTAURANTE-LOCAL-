@@ -7,6 +7,7 @@ import {
 import { api } from '../api';
 import { COMPANY_CONFIG } from '../config/company';
 import { ModalDetalleGasto, ModalFormGasto, ModalEliminarGasto } from '../modulos/compras/modales';
+import { compraNueva, compraEdicion } from '@shared/esquemas/compras.js';
 
 const CATEGORIAS = [
   'Insumos y Alimentos',
@@ -306,14 +307,22 @@ export default function ComprasPage() {
       categoria: form.categoria || 'Otros',
       fechaEmision: form.fechaEmision || null,
       metodoPago: finalMetodoPago,
+      origenCarga: 'manual',
     };
+
+    const esquema = editandoId ? compraEdicion : compraNueva;
+    const validacion = esquema.safeParse(payload);
+    if (!validacion.success) {
+      showToast(validacion.error.issues?.[0]?.message || 'Verifica los datos del gasto.', 'error');
+      return;
+    }
 
     setGuardando(true);
     try {
       if (editandoId) {
-        await api.editarCompra(editandoId, payload);
+        await api.editarCompra(editandoId, validacion.data);
       } else {
-        await api.crearCompra({ ...payload, origenCarga: 'manual' });
+        await api.crearCompra(validacion.data);
       }
       await fetchTodo();
       setFormAbierto(false);

@@ -4,6 +4,7 @@ import { api } from '../api';
 import { safeJsonParse } from '../utils/safeJson';
 import { useAviso, useConfirmar } from '../components/ui';
 import { pin as pinEsquema, nombre as nombreEsquema } from '@shared/esquemas/comunes.js';
+import { usuarioNuevo, usuarioEdicion } from '@shared/esquemas/usuarios.js';
 
 // El Administrador siempre tiene acceso a todos los módulos
 const TODOS_LOS_PERMISOS = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
@@ -94,6 +95,7 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
 
     const datos = {
       ...newUser,
+      nombre: (newUser.nombre || '').trim(),
       permisos: newUser.rol === 'Administrador' ? [...TODOS_LOS_PERMISOS] : newUser.permisos,
     };
     if (editingUser && !datos.pin) delete datos.pin;
@@ -101,16 +103,23 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
     if (!datos.correo?.trim()) delete datos.correo;
     if (!datos.contrasena?.trim()) delete datos.contrasena;
 
+    const esquema = editingUser ? usuarioEdicion : usuarioNuevo;
+    const validacion = esquema.safeParse(datos);
+    if (!validacion.success) {
+      aviso.advertencia(validacion.error.issues?.[0]?.message || 'Verifica los datos del usuario.');
+      return;
+    }
+
     setGuardando(true);
     try {
       if (editingUser) {
         // Modo Edición
-        const res = await api.editarUsuario(editingUser.id, datos);
+        const res = await api.editarUsuario(editingUser.id, validacion.data);
         if (res.error) throw new Error(res.error);
         aviso.exito('Usuario actualizado correctamente.');
       } else {
         // Modo Creación
-        const res = await api.crearUsuario(datos);
+        const res = await api.crearUsuario(validacion.data);
         if (res.error) throw new Error(res.error);
         aviso.exito('Usuario creado correctamente.');
       }

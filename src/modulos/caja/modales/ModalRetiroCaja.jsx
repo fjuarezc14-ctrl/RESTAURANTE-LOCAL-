@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowUpRight, ArrowDownLeft, AlertTriangle } from 'lucide-react';
 import { Dialog, DialogHeader, DialogFooter, Button } from '../../../components/ui';
 import { api } from '../../../api';
+import { movimientoCaja } from '@shared/esquemas/caja.js';
 
 export function ModalRetiroCaja({
   abierto,
@@ -52,28 +53,23 @@ export function ModalRetiroCaja({
     setError('');
 
     const montoNum = parseFloat(monto) || 0;
-    if (montoNum <= 0) {
-      setError('Ingresa un monto válido mayor a S/ 0.00');
-      return;
-    }
+    const motivoTexto = (motivo || '').trim();
 
-    if (!motivo.trim()) {
-      setError(
-        esIngreso
-          ? 'Ingresa el motivo del ingreso de dinero.'
-          : 'Ingresa el motivo del retiro o salida de dinero.'
-      );
+    const validacion = movimientoCaja.safeParse({
+      monto: montoNum,
+      motivo: motivoTexto,
+      tipo,
+      cajeroNombre: cajeroNombre || undefined,
+    });
+
+    if (!validacion.success) {
+      setError(validacion.error.issues?.[0]?.message || 'Verifica los datos del movimiento.');
       return;
     }
 
     setGuardando(true);
     try {
-      const res = await api.registrarMovimientoCaja({
-        monto: montoNum,
-        motivo: motivo.trim(),
-        tipo,
-        cajeroNombre,
-      });
+      const res = await api.registrarMovimientoCaja(validacion.data);
 
       if (res.error) {
         throw new Error(res.error);

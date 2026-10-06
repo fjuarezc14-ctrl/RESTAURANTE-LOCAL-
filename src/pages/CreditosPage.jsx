@@ -7,6 +7,7 @@ import {
   ModalAbonoCredito,
   ModalDetalleCuentaCredito,
 } from '../modulos/creditos/modales';
+import { clienteNuevo, clienteEdicion, abono as abonoEsquema } from '@shared/esquemas/clientes.js';
 
 const METODOS_PAGO = ['Efectivo', 'Tarjeta', 'Yape', 'Mixto'];
 
@@ -108,13 +109,24 @@ export default function CreditosPage({ currentUser }) {
   };
 
   const guardarCliente = async () => {
-    if (!formCliente.nombre.trim()) { showToast('El nombre es obligatorio.', 'error'); return; }
+    const esquema = editandoCliente ? clienteEdicion : clienteNuevo;
+    const datosParsear = {
+      ...formCliente,
+      nombre: (formCliente.nombre || '').trim(),
+      usuarioId: formCliente.usuarioId ? parseInt(formCliente.usuarioId) : undefined,
+    };
+    const validacion = esquema.safeParse(datosParsear);
+    if (!validacion.success) {
+      showToast(validacion.error.issues?.[0]?.message || 'Verifica los datos del cliente.', 'error');
+      return;
+    }
+
     try {
       if (editandoCliente) {
-        await api.editarCliente(editandoCliente.id, formCliente);
+        await api.editarCliente(editandoCliente.id, validacion.data);
         showToast('✅ Cliente actualizado correctamente.');
       } else {
-        await api.crearCliente(formCliente);
+        await api.crearCliente(validacion.data);
         showToast('✅ Cliente creado correctamente.');
       }
       setModalCliente(false);
@@ -159,12 +171,18 @@ export default function CreditosPage({ currentUser }) {
   };
 
   const guardarAbono = async () => {
-    if (!formAbono.monto || parseFloat(formAbono.monto) <= 0) { showToast('Ingresa un monto válido.', 'error'); return; }
+    const validacion = abonoEsquema.safeParse({
+      ...formAbono,
+      monto: formAbono.monto,
+      registradoPor: currentUser?.nombre || 'Cajero',
+    });
+    if (!validacion.success) {
+      showToast(validacion.error.issues?.[0]?.message || 'Ingresa un monto válido para el abono.', 'error');
+      return;
+    }
+
     try {
-      await api.abonarCredito(clienteAbono.id, {
-        ...formAbono,
-        registradoPor: currentUser?.nombre || 'Cajero',
-      });
+      await api.abonarCredito(clienteAbono.id, validacion.data);
       showToast('✅ Abono registrado correctamente.');
       setModalAbono(false);
       await fetchTodo();
