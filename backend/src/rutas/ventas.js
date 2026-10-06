@@ -3,6 +3,7 @@ const express = require('express');
 const { prisma } = require('../db');
 const { calcularSubtotalEIgv, limpiarCodigoPago, obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
+const { buscarUsuarioPorPin } = require('../servicios/auth');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { anulacion, cobro, correccionDatosCliente, correccionMetodoPago, correccionTipoEntrega } = require('../../shared/esquemas/ventas.js');
 const { consultaDesde, rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
@@ -29,7 +30,7 @@ router.patch('/api/ventas/:ventaId/metodo-pago', validar({ body: correccionMetod
 
   try {
     // Validar PIN
-    const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
+    const admin = await buscarUsuarioPorPin(pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar el método de pago.'));
@@ -141,7 +142,7 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', validar({ body: correccionTipo
 
   try {
     // Validar PIN
-    const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
+    const admin = await buscarUsuarioPorPin(pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar el tipo de entrega.'));
@@ -241,7 +242,7 @@ router.patch('/api/ventas/:ventaId/datos-cliente', validar({ body: correccionDat
 
   try {
     // Validar PIN
-    const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
+    const admin = await buscarUsuarioPorPin(pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar los datos del cliente.'));
@@ -295,7 +296,7 @@ router.patch('/api/ventas/:ventaId/anular', validar({ body: anulacion }), async 
   }
 
   try {
-    const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
+    const admin = await buscarUsuarioPorPin(pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede anular o registrar devolución de ventas.'));

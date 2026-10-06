@@ -11,6 +11,7 @@ prepararEntorno();
 // La app es CommonJS: se carga con require nativo, sin pasar por Vite
 const require = createRequire(import.meta.url);
 export const { app, prisma } = require('../src/app.js');
+const { migrarPinesAHash } = require('../src/servicios/auth.js');
 
 export const api = () => request(app);
 
@@ -39,6 +40,7 @@ export async function crearBase() {
       { nombre: 'Carla Caja', rol: 'Cajero', pin: PIN_CAJERO, permisos: ['Caja'] },
     ],
   });
+  await migrarPinesAHash(); // como al arrancar el servidor: los PIN quedan como hash
   const [lomo, gaseosa, postre] = await Promise.all([
     prisma.producto.create({ data: { nombre: 'Lomo Saltado', categoria: 'Platos de Fondo', precio: 25.5 } }),
     prisma.producto.create({ data: { nombre: 'Inca Kola', categoria: 'Bebidas', precio: 3.5 } }),

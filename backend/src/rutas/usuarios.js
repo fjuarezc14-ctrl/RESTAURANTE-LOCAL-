@@ -2,7 +2,7 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { loginRateLimiter, registerLoginFailure, registerLoginSuccess } = require('../middlewares/limiteLogin');
-const { generarPinSignature } = require('../servicios/auth');
+const { buscarUsuarioPorPin, generarPinSignature, hashPin, usuarioPublico } = require('../servicios/auth');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { loginPin, usuarioEdicion, usuarioNuevo } = require('../../shared/esquemas/usuarios.js');
@@ -17,7 +17,7 @@ validarIdsEnUrl(router);
 router.get('/api/usuarios', async (req, res, next) => {
   try {
     const usuarios = await prisma.usuario.findMany({ where: { activo: true } });
-    res.json(usuarios);
+    res.json(usuarios.map(usuarioPublico));
   } catch (err) {
     next(err);
   }
@@ -29,9 +29,7 @@ const PERMISOS_ADMINISTRADOR = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja',
 router.post('/api/usuarios', validar({ body: usuarioNuevo }), async (req, res, next) => {
   try {
     // Validar PIN único
-    const duplicate = await prisma.usuario.findFirst({
-      where: { pin: String(req.body.pin), activo: true }
-    });
+    const duplicate = await buscarUsuarioPorPin(req.body.pin);
     if (duplicate) {
       return next(new ErrorApp('YA_EXISTE', 'Este PIN ya está asignado a otro empleado. Elige uno diferente.', { campo: 'pin' }));
     }
@@ -41,12 +39,11 @@ router.post('/api/usuarios', validar({ body: usuarioNuevo }), async (req, res, n
       data: {
         nombre: String(nombre),
         rol: String(rol),
-        pin: String(pin),
+        pinHash: hashPin(pin),
         permisos: String(rol) === 'Administrador' ? PERMISOS_ADMINISTRADOR : (Array.isArray(permisos) ? permisos.map(String) : []),
       }
     });
-    const { pin: userPin, ...seguro } = user;
-    res.json(seguro);
+    res.json(usuarioPublico(user));
   } catch (err) {
     next(err);
   }
@@ -64,9 +61,7 @@ router.put('/api/usuarios/:id', validar({ body: usuarioEdicion }), async (req, r
     const isInmutableOriginal = nombresInmutables.includes(target.nombre.toLowerCase().trim());
 
     if (req.body.pin) {
-      const duplicate = await prisma.usuario.findFirst({
-        where: { pin: String(req.body.pin), activo: true, id: { not: id } }
-      });
+      const duplicate = await buscarUsuarioPorPin(req.body.pin, { id: { not: id } });
       if (duplicate) {
         return next(new ErrorApp('YA_EXISTE', 'Este PIN ya está asignado a otro empleado. Elige uno diferente.', { campo: 'pin' }));
       }
@@ -75,7 +70,7 @@ router.put('/api/usuarios/:id', validar({ body: usuarioEdicion }), async (req, r
     const data = {};
     if (req.body.nombre !== undefined) data.nombre = String(req.body.nombre);
     if (req.body.rol !== undefined) data.rol = String(req.body.rol);
-    if (req.body.pin !== undefined) data.pin = String(req.body.pin);
+    if (req.body.pin !== undefined) data.pinHash = hashPin(req.body.pin);
     if (req.body.permisos !== undefined) data.permisos = Array.isArray(req.body.permisos) ? req.body.permisos.map(String) : [];
     if (req.body.activo !== undefined) data.activo = Boolean(req.body.activo);
     if ((data.rol ?? target.rol) === 'Administrador') data.permisos = PERMISOS_ADMINISTRADOR;
@@ -100,7 +95,7 @@ router.put('/api/usuarios/:id', validar({ body: usuarioEdicion }), async (req, r
       where: { id },
       data
     });
-    res.json(user);
+    res.json(usuarioPublico(user));
   } catch (err) {
     next(err);
   }
@@ -109,16 +104,13 @@ router.put('/api/usuarios/:id', validar({ body: usuarioEdicion }), async (req, r
 router.post('/api/usuarios/login', loginRateLimiter, validar({ body: loginPin }), async (req, res, next) => {
   const { pin } = req.body;
   try {
-    const user = await prisma.usuario.findFirst({
-      where: { pin, activo: true }
-    });
+    const user = await buscarUsuarioPorPin(pin);
     if (!user) {
       registerLoginFailure(req);
       return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto. Inténtalo de nuevo.', { campo: 'pin' }));
     }
     registerLoginSuccess(req);
-    const { pin: userPin, ...safeUser } = user;
-    safeUser.pinSignature = generarPinSignature(user.pin, user.id);
+    const safeUser = { ...usuarioPublico(user), pinSignature: generarPinSignature(user.pinHash, user.id) };
     res.json({ ok: true, user: safeUser });
   } catch (err) {
     next(err);
@@ -128,9 +120,7 @@ router.post('/api/usuarios/login', loginRateLimiter, validar({ body: loginPin })
 router.post('/api/usuarios/validate-auth', validar({ body: loginPin }), async (req, res, next) => {
   const { pin } = req.body;
   try {
-    const user = await prisma.usuario.findFirst({
-      where: { pin, activo: true }
-    });
+    const user = await buscarUsuarioPorPin(pin);
     if (!user) {
       return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     }
@@ -164,7 +154,7 @@ router.get('/api/usuarios/check/:usuarioId', async (req, res, next) => {
       nombre: user.nombre,
       rol: user.rol,
       permisos: user.permisos,
-      pinSignature: generarPinSignature(user.pin, user.id)
+      pinSignature: generarPinSignature(user.pinHash, user.id)
     });
   } catch (err) {
     res.json({ exists: false, error: err.message });
