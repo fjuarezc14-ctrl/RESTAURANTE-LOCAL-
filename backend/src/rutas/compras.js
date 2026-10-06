@@ -1,6 +1,7 @@
 // Rutas de compras y gastos (RCE)
 const express = require('express');
 const { prisma } = require('../db');
+const { ErrorApp } = require('../middlewares/errores');
 
 const router = express.Router();
 
@@ -8,7 +9,7 @@ const router = express.Router();
 // COMPRAS (RCE)
 // ============================================================
 
-router.get('/api/compras', async (req, res) => {
+router.get('/api/compras', async (req, res, next) => {
   const { desde, hasta, categoria, metodoPago, busqueda } = req.query;
   try {
     const conditions = [];
@@ -72,12 +73,12 @@ router.get('/api/compras', async (req, res) => {
     });
     res.json(compras);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /api/compras/stats → KPIs del mes actual
-router.get('/api/compras/stats', async (req, res) => {
+router.get('/api/compras/stats', async (req, res, next) => {
   try {
     const ahora = new Date();
     const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
@@ -116,13 +117,13 @@ router.get('/api/compras/stats', async (req, res) => {
       porCategoria,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /api/compras/sincronizar-sunat → Proxy seguro a apisunat.pe
 // Modo demo: si APISUNAT_TOKEN no está configurado, retorna datos de ejemplo reales.
-router.post('/api/compras/sincronizar-sunat', async (req, res) => {
+router.post('/api/compras/sincronizar-sunat', async (req, res, next) => {
   const { periodo, fechaInicio, fechaFin } = req.body;
   const token = process.env.APISUNAT_TOKEN;
   const MODO_DEMO = !token || token.includes('tu_token') || token === '';
@@ -201,7 +202,8 @@ router.post('/api/compras/sincronizar-sunat', async (req, res) => {
 
       if (!resp.ok) {
         const txt = await resp.text();
-        return res.status(resp.status).json({ error: `apisunat.pe respondió con ${resp.status}: ${txt}` });
+        console.error(`apisunat.pe respondió con ${resp.status}: ${txt}`);
+        return next(new ErrorApp('SERVICIO_NO_DISPONIBLE', `No se pudo consultar SUNAT (apisunat.pe respondió con ${resp.status}). Inténtalo más tarde.`));
       }
 
       const data = await resp.json();
@@ -264,11 +266,11 @@ router.post('/api/compras/sincronizar-sunat', async (req, res) => {
     });
   } catch (err) {
     console.error('[Sync SUNAT]', err);
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-router.post('/api/compras', async (req, res) => {
+router.post('/api/compras', async (req, res, next) => {
   try {
     const { proveedor, ruc, tipoDocumento, serieNumero, baseImponible, igv, total, xmlData, origenCarga, categoria, fechaEmision, metodoPago } = req.body;
     const compra = await prisma.compra.create({
@@ -290,12 +292,12 @@ router.post('/api/compras', async (req, res) => {
     });
     res.json(compra);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /api/compras/:id/categoria → Actualizar categoría de una compra
-router.patch('/api/compras/:id/categoria', async (req, res) => {
+router.patch('/api/compras/:id/categoria', async (req, res, next) => {
   const { id } = req.params;
   const { categoria } = req.body;
   try {
@@ -305,12 +307,12 @@ router.patch('/api/compras/:id/categoria', async (req, res) => {
     });
     res.json(compra);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT /api/compras/:id → Editar todos los datos de una compra/gasto
-router.put('/api/compras/:id', async (req, res) => {
+router.put('/api/compras/:id', async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { proveedor, ruc, tipoDocumento, serieNumero, baseImponible, igv, total, categoria, fechaEmision, metodoPago } = req.body;
   try {
@@ -336,12 +338,12 @@ router.put('/api/compras/:id', async (req, res) => {
     });
     res.json(compra);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /api/compras/:id → Eliminar una compra o gasto
-router.delete('/api/compras/:id', async (req, res) => {
+router.delete('/api/compras/:id', async (req, res, next) => {
   const id = parseInt(req.params.id);
   try {
     await prisma.compra.delete({
@@ -349,7 +351,7 @@ router.delete('/api/compras/:id', async (req, res) => {
     });
     res.json({ ok: true, mensaje: 'Gasto/Compra eliminada exitosamente.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

@@ -3,11 +3,12 @@ const express = require('express');
 const { prisma } = require('../db');
 const { COLORES_CATEGORIA, actualizarDestinoCategoria, mismoNombre, renombrarCategoriaEnOfertas, sincronizarCategorias } = require('../servicios/categorias');
 const { getEmpresaConfig, isBarraCategoria } = require('../servicios/empresa');
+const { ErrorApp } = require('../middlewares/errores');
 
 const router = express.Router();
 
 // GET /api/categorias → Categorías con destino y cantidad de productos
-router.get('/api/categorias', async (req, res) => {
+router.get('/api/categorias', async (req, res, next) => {
   try {
     await getEmpresaConfig();
     await sincronizarCategorias();
@@ -19,21 +20,21 @@ router.get('/api/categorias', async (req, res) => {
       productos: conteo.find(x => x.categoria === c.nombre)?._count._all || 0,
     })));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /api/categorias → Crear categoría
-router.post('/api/categorias', async (req, res) => {
+router.post('/api/categorias', async (req, res, next) => {
   try {
     const nombre = String(req.body.nombre || '').trim();
     const destino = req.body.destino === 'barra' ? 'barra' : 'cocina';
     const color = COLORES_CATEGORIA.includes(req.body.color) ? req.body.color : (destino === 'barra' ? 'sky' : 'amber');
-    if (!nombre) return res.status(400).json({ error: 'Escribe el nombre de la categoría.' });
+    if (!nombre) return next(new ErrorApp('VALIDACION', 'Escribe el nombre de la categoría.', { campo: 'nombre' }));
 
     const todas = await prisma.categoria.findMany({ select: { nombre: true } });
     if (todas.some(c => mismoNombre(c.nombre, nombre))) {
-      return res.status(409).json({ error: `Ya existe la categoría "${nombre}".` });
+      return next(new ErrorApp('YA_EXISTE', `Ya existe la categoría "${nombre}".`, { campo: 'nombre' }));
     }
 
     await getEmpresaConfig();
@@ -44,19 +45,19 @@ router.post('/api/categorias', async (req, res) => {
     });
     res.json({ ...cat, destino, productos: 0 });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT /api/categorias/:id → Renombrar, cambiar destino o color (arrastra los productos)
-router.put('/api/categorias/:id', async (req, res) => {
+router.put('/api/categorias/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const actual = await prisma.categoria.findUnique({ where: { id } });
-    if (!actual) return res.status(404).json({ error: 'Categoría no encontrada.' });
+    if (!actual) return next(new ErrorApp('NO_ENCONTRADO', 'Categoría no encontrada.'));
 
     const nombre = req.body.nombre !== undefined ? String(req.body.nombre).trim() : actual.nombre;
-    if (!nombre) return res.status(400).json({ error: 'Escribe el nombre de la categoría.' });
+    if (!nombre) return next(new ErrorApp('VALIDACION', 'Escribe el nombre de la categoría.', { campo: 'nombre' }));
     await getEmpresaConfig();
     const esBarra = req.body.destino !== undefined ? req.body.destino === 'barra' : isBarraCategoria(actual.nombre);
     const color = COLORES_CATEGORIA.includes(req.body.color) ? req.body.color : actual.color;
@@ -64,7 +65,7 @@ router.put('/api/categorias/:id', async (req, res) => {
     if (nombre !== actual.nombre) {
       const otras = await prisma.categoria.findMany({ where: { id: { not: id } }, select: { nombre: true } });
       if (otras.some(c => mismoNombre(c.nombre, nombre))) {
-        return res.status(409).json({ error: `Ya existe la categoría "${nombre}".` });
+        return next(new ErrorApp('YA_EXISTE', `Ya existe la categoría "${nombre}".`, { campo: 'nombre' }));
       }
     }
 
@@ -79,26 +80,26 @@ router.put('/api/categorias/:id', async (req, res) => {
     });
     res.json({ ...cat, destino: esBarra ? 'barra' : 'cocina' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /api/categorias/:id?moverA=Nombre → Eliminar; si tiene productos se deben mover a otra
-router.delete('/api/categorias/:id', async (req, res) => {
+router.delete('/api/categorias/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const actual = await prisma.categoria.findUnique({ where: { id } });
-    if (!actual) return res.status(404).json({ error: 'Categoría no encontrada.' });
+    if (!actual) return next(new ErrorApp('NO_ENCONTRADO', 'Categoría no encontrada.'));
 
     const moverA = req.query.moverA ? String(req.query.moverA).trim() : '';
     const enUso = await prisma.producto.count({ where: { categoria: actual.nombre, activo: true } });
 
     if (enUso > 0) {
       if (!moverA) {
-        return res.status(409).json({ error: `La categoría tiene ${enUso} producto(s). Elige a dónde moverlos.`, productos: enUso });
+        return next(new ErrorApp('CONFLICTO', `La categoría tiene ${enUso} producto(s). Elige a dónde moverlos.`, { datos: { productos: enUso } }));
       }
       const destino = await prisma.categoria.findUnique({ where: { nombre: moverA } });
-      if (!destino || destino.id === id) return res.status(400).json({ error: 'Elige otra categoría válida para mover los productos.' });
+      if (!destino || destino.id === id) return next(new ErrorApp('VALIDACION', 'Elige otra categoría válida para mover los productos.', { campo: 'moverA' }));
     }
 
     await getEmpresaConfig();
@@ -112,7 +113,7 @@ router.delete('/api/categorias/:id', async (req, res) => {
     });
     res.json({ ok: true, movidos: enUso });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

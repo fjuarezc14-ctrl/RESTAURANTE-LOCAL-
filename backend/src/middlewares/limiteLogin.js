@@ -1,4 +1,5 @@
 // Límite de intentos fallidos de login por IP
+const { ErrorApp } = require('./errores');
 
 // ============================================================
 // SEGURIDAD: RATE LIMITER CONTRA FUERZA BRUTA EN LOGIN POR PIN
@@ -12,9 +13,7 @@ function loginRateLimiter(req, res, next) {
 
   if (attempt && attempt.blockedUntil && now < attempt.blockedUntil) {
     const remainingSeconds = Math.ceil((attempt.blockedUntil - now) / 1000);
-    return res.status(429).json({
-      error: `Demasiados intentos fallidos. Acceso temporalmente bloqueado por ${remainingSeconds} segundos.`
-    });
+    return next(new ErrorApp('DEMASIADOS_INTENTOS', `Demasiados intentos fallidos. Acceso temporalmente bloqueado por ${remainingSeconds} segundos.`, { datos: { reintentarEnSeg: remainingSeconds } }));
   }
   next();
 }

@@ -1,7 +1,7 @@
 // Caja: apertura, movimientos, arqueo en vivo, cierre y anulación de ventas
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  PIN_ADMIN, PIN_CAJERO, abrirCaja, api, cobrar, crearBase, crearCliente, item, limpiarBD, mesaListaParaCobrar, prisma,
+  PIN_ADMIN, PIN_CAJERO, abrirCaja, api, cobrar, crearBase, crearCliente, esperarError, item, limpiarBD, mesaListaParaCobrar, prisma,
 } from './helpers.mjs';
 
 let carta;
@@ -23,14 +23,12 @@ describe('apertura', () => {
   });
 
   it('exige el nombre del cajero', async () => {
-    const res = await api().post('/api/caja/apertura').send({ montoInicial: 100 });
-    expect(res.status).toBe(400);
+    esperarError(await api().post('/api/caja/apertura').send({ montoInicial: 100 }), 400, 'VALIDACION', 'cajeroNombre');
   });
 
   it('no permite dos cajas abiertas a la vez', async () => {
     await abrirCaja();
-    const res = await api().post('/api/caja/apertura').send({ cajeroNombre: 'Otro', montoInicial: 50 });
-    expect(res.status).toBe(400);
+    esperarError(await api().post('/api/caja/apertura').send({ cajeroNombre: 'Otro', montoInicial: 50 }), 409, 'CAJA_YA_ABIERTA');
     expect(await prisma.cierreCaja.count()).toBe(1);
   });
 
@@ -41,16 +39,16 @@ describe('apertura', () => {
 
 describe('movimientos', () => {
   it('no registra movimientos con la caja cerrada', async () => {
-    expect((await movimiento({ monto: 10, motivo: 'Gas' })).status).toBe(400);
+    esperarError(await movimiento({ monto: 10, motivo: 'Gas' }), 409, 'CAJA_CERRADA');
   });
 
   it.each([
-    ['monto 0', { monto: 0, motivo: 'Gas' }],
-    ['monto negativo', { monto: -5, motivo: 'Gas' }],
-    ['sin motivo', { monto: 10, motivo: '  ' }],
-  ])('rechaza %s', async (_caso, datos) => {
+    ['monto 0', { monto: 0, motivo: 'Gas' }, 'monto'],
+    ['monto negativo', { monto: -5, motivo: 'Gas' }, 'monto'],
+    ['sin motivo', { monto: 10, motivo: '  ' }, 'motivo'],
+  ])('rechaza %s', async (_caso, datos, campo) => {
     await abrirCaja();
-    expect((await movimiento(datos)).status).toBe(400);
+    esperarError(await movimiento(datos), 400, 'VALIDACION', campo);
     expect(await prisma.movimientoCaja.count()).toBe(0);
   });
 
@@ -123,27 +121,24 @@ describe('cierre', () => {
 
   it('rechaza montos negativos', async () => {
     await abrirCaja();
-    const res = await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoContado: -1 });
-    expect(res.status).toBe(400);
+    esperarError(await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoContado: -1 }), 400, 'VALIDACION');
     expect((await estado()).abierto).toBe(true);
   });
 
   it('no cierra si no hay caja abierta', async () => {
-    const res = await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoContado: 0 });
-    expect(res.status).toBe(400);
+    esperarError(await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoContado: 0 }), 409, 'CAJA_CERRADA');
   });
 
   it('después del cierre no se puede cobrar', async () => {
     await abrirCaja();
     const pedidoId = await pedidoDeMesa();
     await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoContado: 100, efectivoEsperado: 100 });
-    expect((await cobrar(pedidoId)).body.cajaCerrada).toBe(true);
+    esperarError(await cobrar(pedidoId), 409, 'CAJA_CERRADA');
   });
 
   it('cierre forzado: solo con el PIN de un administrador', async () => {
     await abrirCaja();
-    const conCajero = await api().post('/api/caja/cierre-forzado').send({ adminPin: PIN_CAJERO });
-    expect(conCajero.status).toBe(403);
+    esperarError(await api().post('/api/caja/cierre-forzado').send({ adminPin: PIN_CAJERO }), 403, 'SIN_PERMISO');
 
     const conAdmin = await api().post('/api/caja/cierre-forzado').send({ adminPin: PIN_ADMIN, motivo: 'Fin de día' });
     expect(conAdmin.status).toBe(200);
@@ -155,8 +150,8 @@ describe('anulación de ventas', () => {
   it('solo el administrador puede anular', async () => {
     await abrirCaja();
     const { body } = await cobrar(await pedidoDeMesa());
-    expect((await anular(body.ventaId, '9999')).status).toBe(401);
-    expect((await anular(body.ventaId, PIN_CAJERO)).status).toBe(403);
+    esperarError(await anular(body.ventaId, '9999'), 401, 'PIN_INCORRECTO', 'pin');
+    esperarError(await anular(body.ventaId, PIN_CAJERO), 403, 'SIN_PERMISO');
     expect((await prisma.venta.findUnique({ where: { id: body.ventaId } })).anulado).toBe(false);
   });
 
@@ -177,7 +172,7 @@ describe('anulación de ventas', () => {
     await abrirCaja();
     const { body } = await cobrar(await pedidoDeMesa());
     await anular(body.ventaId);
-    expect((await anular(body.ventaId)).status).toBe(400);
+    esperarError(await anular(body.ventaId), 409, 'CONFLICTO');
   });
 
   it('devuelve el stock de los productos limitados', async () => {
@@ -205,7 +200,8 @@ describe('anulación de ventas', () => {
 describe('stock', () => {
   it('no envía un pedido si no alcanza el stock y no descuenta nada', async () => {
     const res = await api().post('/api/mesas/1/pedido').send({ mesero: 'Mozo', items: [item(carta.postre, 6)] });
-    expect(res.status).toBeGreaterThanOrEqual(400);
+    esperarError(res, 409, 'STOCK_INSUFICIENTE');
+    expect(res.body.error.datos).toEqual({ disponible: 5 });
     expect(await prisma.pedido.count()).toBe(0);
     expect((await prisma.producto.findUnique({ where: { id: carta.postre.id } })).stock).toBe(5);
   });

@@ -3,6 +3,7 @@ const express = require('express');
 const { prisma } = require('../db');
 const { loginRateLimiter, registerLoginFailure, registerLoginSuccess } = require('../middlewares/limiteLogin');
 const { generarPinSignature } = require('../servicios/auth');
+const { ErrorApp } = require('../middlewares/errores');
 
 const router = express.Router();
 
@@ -10,26 +11,26 @@ const router = express.Router();
 // USUARIOS
 // ============================================================
 
-router.get('/api/usuarios', async (req, res) => {
+router.get('/api/usuarios', async (req, res, next) => {
   try {
     const usuarios = await prisma.usuario.findMany({ where: { activo: true } });
     res.json(usuarios);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // El rol Administrador siempre tiene acceso a todos los módulos
 const PERMISOS_ADMINISTRADOR = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
 
-router.post('/api/usuarios', async (req, res) => {
+router.post('/api/usuarios', async (req, res, next) => {
   try {
     // Validar PIN único
     const duplicate = await prisma.usuario.findFirst({
       where: { pin: String(req.body.pin), activo: true }
     });
     if (duplicate) {
-      return res.status(400).json({ error: 'Este PIN ya está asignado a otro empleado. Elige uno diferente.' });
+      return next(new ErrorApp('YA_EXISTE', 'Este PIN ya está asignado a otro empleado. Elige uno diferente.', { campo: 'pin' }));
     }
 
     const { nombre, rol, pin, permisos } = req.body;
@@ -44,16 +45,16 @@ router.post('/api/usuarios', async (req, res) => {
     const { pin: userPin, ...seguro } = user;
     res.json(seguro);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-router.put('/api/usuarios/:id', async (req, res) => {
+router.put('/api/usuarios/:id', async (req, res, next) => {
   const id = parseInt(req.params.id);
   try {
     const target = await prisma.usuario.findUnique({ where: { id } });
     if (!target) {
-      return res.status(404).json({ error: 'Usuario no encontrado' });
+      return next(new ErrorApp('NO_ENCONTRADO', 'Usuario no encontrado'));
     }
 
     const nombresInmutables = ['admin principal', 'eusebio diaz', 'bruno diaz'];
@@ -64,7 +65,7 @@ router.put('/api/usuarios/:id', async (req, res) => {
         where: { pin: String(req.body.pin), activo: true, id: { not: id } }
       });
       if (duplicate) {
-        return res.status(400).json({ error: 'Este PIN ya está asignado a otro empleado. Elige uno diferente.' });
+        return next(new ErrorApp('YA_EXISTE', 'Este PIN ya está asignado a otro empleado. Elige uno diferente.', { campo: 'pin' }));
       }
     }
 
@@ -78,13 +79,13 @@ router.put('/api/usuarios/:id', async (req, res) => {
 
     if (isInmutableOriginal) {
       if (req.body.rol !== undefined && req.body.rol !== 'Administrador') {
-        return res.status(400).json({ error: '⚠️ No puedes cambiar el rol de este administrador principal.' });
+        return next(new ErrorApp('SIN_PERMISO', '⚠️ No puedes cambiar el rol de este administrador principal.'));
       }
       if (req.body.nombre !== undefined && req.body.nombre.toLowerCase().trim() !== target.nombre.toLowerCase().trim()) {
-        return res.status(400).json({ error: '⚠️ No puedes cambiar el nombre de este administrador principal.' });
+        return next(new ErrorApp('SIN_PERMISO', '⚠️ No puedes cambiar el nombre de este administrador principal.'));
       }
       if (req.body.activo !== undefined && !req.body.activo) {
-        return res.status(400).json({ error: '⚠️ No puedes desactivar a este administrador principal.' });
+        return next(new ErrorApp('SIN_PERMISO', '⚠️ No puedes desactivar a este administrador principal.'));
       }
       // Forzar valores correctos para asegurar la inmutabilidad y permisos de administración completos
       data.rol = 'Administrador';
@@ -98,11 +99,11 @@ router.put('/api/usuarios/:id', async (req, res) => {
     });
     res.json(user);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-router.post('/api/usuarios/login', loginRateLimiter, async (req, res) => {
+router.post('/api/usuarios/login', loginRateLimiter, async (req, res, next) => {
   const { pin } = req.body;
   try {
     const user = await prisma.usuario.findFirst({
@@ -110,38 +111,38 @@ router.post('/api/usuarios/login', loginRateLimiter, async (req, res) => {
     });
     if (!user) {
       registerLoginFailure(req);
-      return res.status(401).json({ error: 'PIN incorrecto. Inténtalo de nuevo.' });
+      return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto. Inténtalo de nuevo.', { campo: 'pin' }));
     }
     registerLoginSuccess(req);
     const { pin: userPin, ...safeUser } = user;
     safeUser.pinSignature = generarPinSignature(user.pin, user.id);
     res.json({ ok: true, user: safeUser });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-router.post('/api/usuarios/validate-auth', async (req, res) => {
+router.post('/api/usuarios/validate-auth', async (req, res, next) => {
   const { pin } = req.body;
   try {
     const user = await prisma.usuario.findFirst({
       where: { pin, activo: true }
     });
     if (!user) {
-      return res.status(401).json({ error: 'PIN incorrecto.' });
+      return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     }
     // Solo Administrador o Cajero pueden autorizar cancelaciones/cortesías
     const rolesAutorizados = ['Administrador', 'Cajero'];
     if (!rolesAutorizados.includes(user.rol)) {
-      return res.status(403).json({ error: 'Acceso denegado. Se requiere PIN de Administrador o Cajero.' });
+      return next(new ErrorApp('AUTORIZACION_REQUERIDA', 'Acceso denegado. Se requiere PIN de Administrador o Cajero.', { campo: 'pin' }));
     }
     res.json({ ok: true, nombre: user.nombre, rol: user.rol });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-router.get('/api/usuarios/check/:id', async (req, res) => {
+router.get('/api/usuarios/check/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.json({ exists: false });
@@ -165,28 +166,28 @@ router.get('/api/usuarios/check/:id', async (req, res) => {
   }
 });
 
-router.delete('/api/usuarios/:id', async (req, res) => {
+router.delete('/api/usuarios/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const target = await prisma.usuario.findUnique({ where: { id } });
     if (!target) {
-      return res.status(404).json({ error: 'Usuario no encontrado' });
+      return next(new ErrorApp('NO_ENCONTRADO', 'Usuario no encontrado'));
     }
 
     const nombresInmutables = ['admin principal', 'eusebio diaz', 'bruno diaz'];
     const isInmutable = nombresInmutables.includes(target.nombre.toLowerCase().trim());
     if (isInmutable) {
-      return res.status(400).json({ error: '⚠️ Este usuario administrador es una cuenta principal del sistema y no puede ser eliminado.' });
+      return next(new ErrorApp('SIN_PERMISO', '⚠️ Este usuario administrador es una cuenta principal del sistema y no puede ser eliminado.'));
     }
 
     const admins = await prisma.usuario.count({ where: { rol: 'Administrador', activo: true } });
     if (target.rol === 'Administrador' && admins <= 1) {
-      return res.status(400).json({ error: '¡No puedes eliminar al único Administrador!' });
+      return next(new ErrorApp('CONFLICTO', '¡No puedes eliminar al único Administrador!'));
     }
     await prisma.usuario.update({ where: { id }, data: { activo: false } });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
