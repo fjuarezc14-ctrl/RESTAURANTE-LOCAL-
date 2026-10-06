@@ -16,11 +16,56 @@ datasource db {
 model Usuario {
   id        Int      @id @default(autoincrement())
   nombre    String
-  rol       String   // "Administrador", "Cajero", "Mozo", "Cocinero"
-  pin       String
+  rol       String   // "Administrador", "Cajero", "Mozo", "Cocinero", "Contador"
+  pin       String?  // texto plano heredado: al arrancar se convierte a pinHash y se vacía
+  pinHash   String?  // HMAC-SHA256(PIN_SECRET, pin): permite buscar por PIN sin guardarlo
   permisos  String[] // ["Dashboard", "Salon", "Cocina", "Barra", "Caja", ...]
   activo    Boolean  @default(true)
   creadoEn  DateTime @default(now())
+
+  // Activación de dispositivos (usuario o correo + contraseña)
+  usuario        String? @unique
+  correo         String? @unique
+  contrasenaHash String? // bcrypt
+  inactividadMin Int?    // minutos sin actividad para cerrar la sesión; null = sin límite
+
+  Sesiones               Sesion[]
+  DispositivosActivados  Dispositivo[]
+}
+
+// ============================================================
+// DISPOSITIVOS Y SESIONES (scratch/ACUERDOS.md §2)
+// En la BD se guarda el SHA-256 del token; el token solo viaja en la cookie httpOnly.
+// ============================================================
+model Dispositivo {
+  id          Int       @id @default(autoincrement())
+  tokenHash   String    @unique
+  nombre      String    // "Tablet caja", lo escribe quien activa
+  agente      String    // user-agent, para reconocerlo en la lista
+  activador   Usuario   @relation(fields: [activadoPor], references: [id])
+  activadoPor Int
+  creadoEn    DateTime  @default(now())
+  ultimoUso   DateTime  @default(now())
+  revocadoEn  DateTime?
+  fallosPin   Int       @default(0) // PINs fallidos seguidos; con 10 se revoca
+
+  Sesiones Sesion[]
+}
+
+model Sesion {
+  id              Int         @id @default(autoincrement())
+  tokenHash       String      @unique
+  usuario         Usuario     @relation(fields: [usuarioId], references: [id])
+  usuarioId       Int
+  dispositivo     Dispositivo @relation(fields: [dispositivoId], references: [id])
+  dispositivoId   Int
+  creadaEn        DateTime    @default(now())
+  ultimaActividad DateTime    @default(now())
+  cerradaEn       DateTime?
+  motivoCierre    String?     // LOGOUT | INACTIVIDAD | REVOCADA | USUARIO_DESACTIVADO | PIN_CAMBIADO | OTRA_SESION
+
+  @@index([usuarioId])
+  @@index([dispositivoId])
 }
 
 // ============================================================
@@ -55,11 +100,11 @@ model AbonoCredito {
   id          Int      @id @default(autoincrement())
   cliente     Cliente  @relation(fields: [clienteId], references: [id])
   clienteId   Int
-  monto       Float
+  monto       Decimal @db.Decimal(10, 2)
   metodoPago  String   @default("Efectivo") // "Efectivo" | "Tarjeta" | "Yape" | "Mixto"
-  montoEfectivo Float  @default(0)
-  montoTarjeta  Float  @default(0)
-  montoYape     Float  @default(0)
+  montoEfectivo Decimal @db.Decimal(10, 2) @default(0)
+  montoTarjeta  Decimal @db.Decimal(10, 2) @default(0)
+  montoYape     Decimal @db.Decimal(10, 2) @default(0)
   registradoPor String
   nota        String?
   creadoEn    DateTime @default(now())
@@ -75,7 +120,7 @@ model Producto {
   id        Int      @id @default(autoincrement())
   nombre    String
   categoria String   // "Pollos a la Brasa", "Parrillas y Cortes", "Porciones y Piqueos", "Parrilladas Mixtas", "Platos Criollos", "Tallarines Verdes", "Ensaladas", "Guarniciones", "Combos", "Bebidas y Refrescos", "Cervezas", "Bar y Cocteles", "Postres"
-  precio    Float
+  precio    Decimal @db.Decimal(10, 2)
   tipoStock String   @default("ilimitado") // "ilimitado" | "limitado"
   stock     Int      @default(0)
   activo    Boolean  @default(true)
@@ -117,7 +162,7 @@ model Pedido {
   mesero    String
   estado          String       @default("Cocina") // "Cocina", "Servido", "Cobrado", "Cancelado"
   estadoEnsalada  String       @default("No Aplica") // "Pendiente", "Listo", "No Aplica"
-  total           Float
+  total           Decimal @db.Decimal(10, 2)
   adicional       Boolean      @default(false)
   createdAt       DateTime     @default(now())
 
@@ -145,7 +190,7 @@ model ItemPedido {
   producto   Producto @relation(fields: [productoId], references: [id])
   productoId Int
   nombre     String   // Guardamos el nombre al momento de la venta
-  precio     Float
+  precio     Decimal @db.Decimal(10, 2)
   cantidad   Int
   historial  Boolean  @default(false)
   entregado  Boolean  @default(false)
@@ -167,14 +212,14 @@ model Venta {
   numDocumento    String?  // DNI o RUC del cliente
   nombreCliente   String?
   clienteDireccion String?
-  total           Float
-  igv             Float
-  subtotal        Float
+  total           Decimal @db.Decimal(10, 2)
+  igv             Decimal @db.Decimal(10, 2)
+  subtotal        Decimal @db.Decimal(10, 2)
   metodoPago      String   @default("Efectivo") // "Efectivo", "Tarjeta", "Yape", "PedidosYa", "Crédito", "Mixto"
-  montoEfectivo   Float    @default(0)
-  montoTarjeta    Float    @default(0)
-  montoYape       Float    @default(0)
-  montoCredito    Float    @default(0) // Monto cargado a crédito
+  montoEfectivo   Decimal @db.Decimal(10, 2) @default(0)
+  montoTarjeta    Decimal @db.Decimal(10, 2) @default(0)
+  montoYape       Decimal @db.Decimal(10, 2) @default(0)
+  montoCredito    Decimal @db.Decimal(10, 2) @default(0) // Monto cargado a crédito
   clienteCreditoId Int?    // Cliente al que se le cargó el crédito
   codigoPago      String?  // Nº de operación Yape/Plin o voucher de tarjeta
   estadoNubefact  String   @default("PENDIENTE") // Obsoleto (usar estadoSunat en su lugar)
@@ -186,13 +231,13 @@ model Venta {
   cajeroNombre    String?  // Nombre del cajero en turno que procesó el cobro
   // --- Ofertas / Descuentos ---
   ofertaDescripcion  String?  // Nombre de la oferta aplicada, si hubo
-  descuentoAplicado  Float    @default(0) // Monto total descontado en esta venta
+  descuentoAplicado  Decimal @db.Decimal(10, 2) @default(0) // Monto total descontado en esta venta
   // --- Anulación / Devolución ---
   anulado            Boolean   @default(false)
   motivoAnulacion    String?
   anuladoPor         String?
   anuladoEn          DateTime?
-  montoOriginal      Float?    // Guarda el monto cobrado originalmente antes de ser devuelto
+  montoOriginal      Decimal? @db.Decimal(10, 2) // Guarda el monto cobrado originalmente antes de ser devuelto
   createdAt          DateTime @default(now())
 
   @@index([createdAt])
@@ -212,9 +257,9 @@ model Compra {
   ruc            String?
   tipoDocumento  String    @default("Factura") // "Factura", "Boleta", "Nota de Crédito", "Nota de Débito"
   serieNumero    String?
-  baseImponible  Float
-  igv            Float
-  total          Float
+  baseImponible  Decimal @db.Decimal(10, 2)
+  igv            Decimal @db.Decimal(10, 2)
+  total          Decimal @db.Decimal(10, 2)
   xmlData        String?
   origenCarga    String    @default("manual") // "xml", "manual", "sunat"
   categoria      String?   // "Insumos y Alimentos", "Bebidas", "Gas y Carbón", "Limpieza e Higiene", "Personal", "Otros"
@@ -236,7 +281,7 @@ model Oferta {
   nombre          String   // "Día del Maestro - 20% Bebidas"
   descripcion     String?
   tipoDescuento   String   // "porcentaje" | "monto_fijo"
-  valorDescuento  Float    // ej. 20.0 para 20%, o 5.0 para S/5 fijo
+  valorDescuento  Decimal @db.Decimal(10, 2) // ej. 20.0 para 20%, o 5.0 para S/5 fijo
   categorias      String[] // Categorías afectadas, ej. ["Bebidas y Refrescos"]
   activa          Boolean  @default(false)
   fechaInicio     DateTime?
@@ -273,18 +318,18 @@ model CierreCaja {
   fechaApertura    DateTime
   fechaCierre      DateTime?
   cajeroNombre     String
-  montoInicial     Float     @default(0) // Fondo de sencillo inicial en efectivo
+  montoInicial     Decimal @db.Decimal(10, 2) @default(0) // Fondo de sencillo inicial en efectivo
   notaApertura     String?
-  efectivoVentas   Float     @default(0)
-  efectivoEsperado Float     @default(0)
-  efectivoContado  Float     @default(0)
-  diferencia       Float     @default(0)
-  totalTarjeta     Float     @default(0)
-  totalYape        Float     @default(0)
-  totalConsumo     Float     @default(0)
-  totalPedidosYa   Float     @default(0)
-  egresosEfectivo  Float     @default(0)
-  abonosEfectivo   Float     @default(0)
+  efectivoVentas   Decimal @db.Decimal(10, 2) @default(0)
+  efectivoEsperado Decimal @db.Decimal(10, 2) @default(0)
+  efectivoContado  Decimal @db.Decimal(10, 2) @default(0)
+  diferencia       Decimal @db.Decimal(10, 2) @default(0)
+  totalTarjeta     Decimal @db.Decimal(10, 2) @default(0)
+  totalYape        Decimal @db.Decimal(10, 2) @default(0)
+  totalConsumo     Decimal @db.Decimal(10, 2) @default(0)
+  totalPedidosYa   Decimal @db.Decimal(10, 2) @default(0)
+  egresosEfectivo  Decimal @db.Decimal(10, 2) @default(0)
+  abonosEfectivo   Decimal @db.Decimal(10, 2) @default(0)
   nota             String?
   cerradoPorAdmin  Boolean   @default(false)
   creadoEn         DateTime  @default(now())
@@ -300,7 +345,7 @@ model MovimientoCaja {
   id           Int        @id @default(autoincrement())
   turnoId      Int?       // Vinculado al turno de CierreCaja si aplica
   tipo         String     @default("RETIRO") // "RETIRO" (salida de efectivo) | "INGRESO" (entrada de sencillo extra)
-  monto        Float
+  monto        Decimal @db.Decimal(10, 2)
   motivo       String     // Descripción / concepto del retiro o ingreso
   cajeroNombre String     // Cajero que registró el movimiento
   creadoEn     DateTime   @default(now())

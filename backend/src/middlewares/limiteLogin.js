@@ -1,58 +1,68 @@
-// Límite de intentos fallidos de login por IP
+// Límite de intentos fallidos (login, activación, autorizaciones): 5 fallos en 1 minuto bloquean 30 s
 const { ErrorApp } = require('./errores');
 
-// ============================================================
-// SEGURIDAD: RATE LIMITER CONTRA FUERZA BRUTA EN LOGIN POR PIN
-// ============================================================
-const loginAttempts = new Map(); // ip -> { count, firstAttempt, blockedUntil }
+const VENTANA_MS = 60 * 1000;
+const FALLOS_PARA_BLOQUEAR = 5;
+const BLOQUEO_MS = 30 * 1000;
 
-function loginRateLimiter(req, res, next) {
-  const ip = req.ip || req.connection?.remoteAddress || 'local';
-  const now = Date.now();
-  const attempt = loginAttempts.get(ip);
+const limitadores = []; // para reiniciarlos todos (pruebas)
 
-  if (attempt && attempt.blockedUntil && now < attempt.blockedUntil) {
-    const remainingSeconds = Math.ceil((attempt.blockedUntil - now) / 1000);
-    return next(new ErrorApp('DEMASIADOS_INTENTOS', `Demasiados intentos fallidos. Acceso temporalmente bloqueado por ${remainingSeconds} segundos.`, { datos: { reintentarEnSeg: remainingSeconds } }));
-  }
-  next();
-}
+const ipDe = (req) => req.ip || req.connection?.remoteAddress || 'local';
 
-function registerLoginFailure(req) {
-  const ip = req.ip || req.connection?.remoteAddress || 'local';
-  const now = Date.now();
-  const attempt = loginAttempts.get(ip) || { count: 0, firstAttempt: now, blockedUntil: 0 };
+// Cada limitador lleva su propio contador. `clave(req)` decide qué se cuenta: por defecto, la IP.
+function crearLimitador(clave = ipDe) {
+  const intentos = new Map(); // clave -> { count, firstAttempt, blockedUntil }
 
-  // Si pasaron más de 60 segundos desde el primer intento fallido, resetear ventana
-  if (now - attempt.firstAttempt > 60 * 1000) {
-    attempt.count = 1;
-    attempt.firstAttempt = now;
-    attempt.blockedUntil = 0;
-  } else {
-    attempt.count += 1;
-  }
-
-  // Si supera 5 intentos fallidos consecutivos en menos de 1 minuto, bloquear por 30 segundos
-  if (attempt.count >= 5) {
-    attempt.blockedUntil = now + 30 * 1000;
-  }
-
-  loginAttempts.set(ip, attempt);
-}
-
-function registerLoginSuccess(req) {
-  const ip = req.ip || req.connection?.remoteAddress || 'local';
-  loginAttempts.delete(ip);
-}
-
-// Limpiar periódicamente IPs antiguas cada 10 minutos
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, attempt] of loginAttempts.entries()) {
-    if (now - attempt.firstAttempt > 10 * 60 * 1000 && (!attempt.blockedUntil || now > attempt.blockedUntil)) {
-      loginAttempts.delete(ip);
+  function middleware(req, res, next) {
+    const intento = intentos.get(clave(req));
+    const ahora = Date.now();
+    if (intento && intento.blockedUntil && ahora < intento.blockedUntil) {
+      const segundos = Math.ceil((intento.blockedUntil - ahora) / 1000);
+      return next(new ErrorApp('DEMASIADOS_INTENTOS', `Demasiados intentos fallidos. Acceso temporalmente bloqueado por ${segundos} segundos.`, { datos: { reintentarEnSeg: segundos } }));
     }
+    next();
   }
-}, 10 * 60 * 1000).unref();
 
-module.exports = { loginRateLimiter, registerLoginFailure, registerLoginSuccess };
+  function fallo(req) {
+    const k = clave(req);
+    const ahora = Date.now();
+    const intento = intentos.get(k) || { count: 0, firstAttempt: ahora, blockedUntil: 0 };
+    if (ahora - intento.firstAttempt > VENTANA_MS) {
+      intento.count = 1;
+      intento.firstAttempt = ahora;
+      intento.blockedUntil = 0;
+    } else {
+      intento.count += 1;
+    }
+    if (intento.count >= FALLOS_PARA_BLOQUEAR) intento.blockedUntil = ahora + BLOQUEO_MS;
+    intentos.set(k, intento);
+  }
+
+  const exito = (req) => intentos.delete(clave(req));
+
+  // Limpiar periódicamente las claves antiguas cada 10 minutos
+  setInterval(() => {
+    const ahora = Date.now();
+    for (const [k, intento] of intentos.entries()) {
+      if (ahora - intento.firstAttempt > 10 * VENTANA_MS && (!intento.blockedUntil || ahora > intento.blockedUntil)) intentos.delete(k);
+    }
+  }, 10 * VENTANA_MS).unref();
+
+  const limitador = { middleware, fallo, exito, reiniciar: () => intentos.clear() };
+  limitadores.push(limitador);
+  return limitador;
+}
+
+// Login por PIN antiguo (/api/usuarios/login)
+const limitadorLogin = crearLimitador();
+
+const reiniciarLimitadores = () => limitadores.forEach((l) => l.reiniciar());
+
+module.exports = {
+  crearLimitador,
+  reiniciarLimitadores,
+  ipDe,
+  loginRateLimiter: limitadorLogin.middleware,
+  registerLoginFailure: limitadorLogin.fallo,
+  registerLoginSuccess: limitadorLogin.exito,
+};

@@ -4,8 +4,12 @@ const { prisma } = require('../db');
 const { COLORES_CATEGORIA, actualizarDestinoCategoria, mismoNombre, renombrarCategoriaEnOfertas, sincronizarCategorias } = require('../servicios/categorias');
 const { getEmpresaConfig, isBarraCategoria } = require('../servicios/empresa');
 const { ErrorApp } = require('../middlewares/errores');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { categoria, eliminacionCategoria } = require('../../shared/esquemas/carta.js');
+const { requierePermiso } = require('../middlewares/permisos');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // GET /api/categorias → Categorías con destino y cantidad de productos
 router.get('/api/categorias', async (req, res, next) => {
@@ -25,7 +29,7 @@ router.get('/api/categorias', async (req, res, next) => {
 });
 
 // POST /api/categorias → Crear categoría
-router.post('/api/categorias', async (req, res, next) => {
+router.post('/api/categorias', requierePermiso('Categorias'), validar({ body: categoria }), async (req, res, next) => {
   try {
     const nombre = String(req.body.nombre || '').trim();
     const destino = req.body.destino === 'barra' ? 'barra' : 'cocina';
@@ -50,7 +54,7 @@ router.post('/api/categorias', async (req, res, next) => {
 });
 
 // PUT /api/categorias/:id → Renombrar, cambiar destino o color (arrastra los productos)
-router.put('/api/categorias/:id', async (req, res, next) => {
+router.put('/api/categorias/:id', requierePermiso('Categorias'), validar({ body: categoria }), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const actual = await prisma.categoria.findUnique({ where: { id } });
@@ -85,7 +89,7 @@ router.put('/api/categorias/:id', async (req, res, next) => {
 });
 
 // DELETE /api/categorias/:id?moverA=Nombre → Eliminar; si tiene productos se deben mover a otra
-router.delete('/api/categorias/:id', async (req, res, next) => {
+router.delete('/api/categorias/:id', requierePermiso('Categorias'), validar({ query: eliminacionCategoria }), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const actual = await prisma.categoria.findUnique({ where: { id } });

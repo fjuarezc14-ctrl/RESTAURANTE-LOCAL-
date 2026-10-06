@@ -4,18 +4,37 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const fs = require('fs');
 const path = require('path');
 
 const { prisma } = require('./db');
 const { manejarErrores, rutaNoEncontrada } = require('./middlewares/errores');
+const { cargarSesion } = require('./middlewares/sesion');
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+// Detrás del proxy de la web, req.ip es la IP del cliente (límite de intentos). En la red local no hay proxy:
+// confiar en X-Forwarded-For permitiría falsear la IP.
+if (process.env.MODO_INSTALACION === 'web') app.set('trust proxy', 1);
+
+// Cabeceras de seguridad. La CSP queda apagada hasta probarla con la web servida desde dist/ (instalador Windows);
+// HSTS solo detrás de HTTPS.
+app.use(helmet({ contentSecurityPolicy: false, hsts: process.env.MODO_INSTALACION === 'web' }));
+
+// Mismo origen por defecto: en desarrollo Vite hace de proxy y en Windows el backend sirve la web.
+// Solo si la web vive en otro dominio se habilita CORS para esos orígenes (CORS_ORIGIN=https://a.pe,https://b.pe).
+const origenesPermitidos = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
+if (origenesPermitidos.length) app.use(cors({ origin: origenesPermitidos, credentials: true }));
+// Las compras pueden traer el XML de SUNAT completo; el resto de la API, como máximo 100 KB
+app.use('/api/compras', express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '100kb' }));
+
+// Sesión por cookie en todo /api/* (con AUTH_OBLIGATORIA=false no rechaza a nadie)
+app.use(cargarSesion);
 
 // Un router por módulo (ver src/rutas/)
+app.use(require('./rutas/auth'));
 app.use(require('./rutas/configuracion'));
 app.use(require('./rutas/clientes'));
 app.use(require('./rutas/mesas'));

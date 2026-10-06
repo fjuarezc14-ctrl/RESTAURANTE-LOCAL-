@@ -32,8 +32,9 @@ describe('apertura', () => {
     expect(await prisma.cierreCaja.count()).toBe(1);
   });
 
-  it('un fondo negativo se guarda como 0', async () => {
-    expect((await abrirCaja(-20)).montoInicial).toBe(0);
+  it('rechaza un fondo negativo', async () => {
+    const res = await api().post('/api/caja/apertura').send({ cajeroNombre: 'Carla', montoInicial: -20 });
+    esperarError(res, 400, 'VALIDACION', 'montoInicial');
   });
 });
 

@@ -3,15 +3,21 @@ const express = require('express');
 const { prisma } = require('../db');
 const { calcularSubtotalEIgv, limpiarCodigoPago, obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
+const { buscarUsuarioPorPin } = require('../servicios/auth');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { anulacion, cobro, correccionDatosCliente, correccionMetodoPago, correccionTipoEntrega } = require('../../shared/esquemas/ventas.js');
+const { consultaDesde, rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
+const { requierePermiso } = require('../middlewares/permisos');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // CAJA / VENTAS
 // ============================================================
 
 // PATCH /api/ventas/:ventaId/metodo-pago → Corregir método de pago (requiere PIN Administrador)
-router.patch('/api/ventas/:ventaId/metodo-pago', async (req, res, next) => {
+router.patch('/api/ventas/:ventaId/metodo-pago', requierePermiso('Caja'), validar({ body: correccionMetodoPago }), async (req, res, next) => {
   const { ventaId } = req.params;
   const { metodoPago, pin, montoEfectivo, montoTarjeta, montoYape, montoCredito, clienteCreditoId } = req.body;
 
@@ -25,7 +31,7 @@ router.patch('/api/ventas/:ventaId/metodo-pago', async (req, res, next) => {
 
   try {
     // Validar PIN
-    const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
+    const admin = await buscarUsuarioPorPin(pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar el método de pago.'));
@@ -117,7 +123,7 @@ router.patch('/api/ventas/:ventaId/metodo-pago', async (req, res, next) => {
 });
 
 // PATCH /api/ventas/:ventaId/tipo-entrega → Corregir tipo de entrega (PedidosYa, Para Llevar, Delivery)
-router.patch('/api/ventas/:ventaId/tipo-entrega', async (req, res, next) => {
+router.patch('/api/ventas/:ventaId/tipo-entrega', requierePermiso('Caja'), validar({ body: correccionTipoEntrega }), async (req, res, next) => {
   const { ventaId } = req.params;
   const {
     tipoEntrega, // "ParaLlevar", "DeliveryPropio", "PedidosYa"
@@ -137,7 +143,7 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', async (req, res, next) => {
 
   try {
     // Validar PIN
-    const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
+    const admin = await buscarUsuarioPorPin(pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar el tipo de entrega.'));
@@ -221,7 +227,7 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', async (req, res, next) => {
 });
 
 // PATCH /api/ventas/:ventaId/datos-cliente → Corregir datos de facturación / datos de cliente de una venta
-router.patch('/api/ventas/:ventaId/datos-cliente', async (req, res, next) => {
+router.patch('/api/ventas/:ventaId/datos-cliente', requierePermiso('Caja'), validar({ body: correccionDatosCliente }), async (req, res, next) => {
   const { ventaId } = req.params;
   const {
     tipoComprobante, // "Boleta" | "Factura" | "Ticket"
@@ -237,7 +243,7 @@ router.patch('/api/ventas/:ventaId/datos-cliente', async (req, res, next) => {
 
   try {
     // Validar PIN
-    const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
+    const admin = await buscarUsuarioPorPin(pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar los datos del cliente.'));
@@ -282,7 +288,7 @@ router.patch('/api/ventas/:ventaId/datos-cliente', async (req, res, next) => {
 });
 
 // PATCH /api/ventas/:ventaId/anular → Anular / Registrar devolución de un pedido entregado
-router.patch('/api/ventas/:ventaId/anular', async (req, res, next) => {
+router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), validar({ body: anulacion }), async (req, res, next) => {
   const { ventaId } = req.params;
   const { pin, motivo } = req.body;
 
@@ -291,7 +297,7 @@ router.patch('/api/ventas/:ventaId/anular', async (req, res, next) => {
   }
 
   try {
-    const admin = await prisma.usuario.findFirst({ where: { pin, activo: true } });
+    const admin = await buscarUsuarioPorPin(pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede anular o registrar devolución de ventas.'));
@@ -396,7 +402,7 @@ router.patch('/api/ventas/:ventaId/anular', async (req, res, next) => {
 });
 
 // POST /api/ventas → Cobrar mesa (acepta pedidoIds array o pedidoId simple)
-router.post('/api/ventas', async (req, res, next) => {
+router.post('/api/ventas', requierePermiso('Caja'), validar({ body: cobro }), async (req, res, next) => {
   const {
     pedidoId,
     pedidoIds,
@@ -491,8 +497,9 @@ router.post('/api/ventas', async (req, res, next) => {
       let itemsCortesiaDescuento = 0;
       if (cortesiaItemIds && Array.isArray(cortesiaItemIds) && cortesiaItemIds.length > 0) {
         const itemIds = cortesiaItemIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+        // Solo ítems de los pedidos que se cobran (antes se podía dejar en 0 un plato de otra mesa)
         const itemsAActualizar = await tx.itemPedido.findMany({
-          where: { id: { in: itemIds } }
+          where: { id: { in: itemIds }, pedidoId: { in: idsAPagar } }
         });
 
         for (const item of itemsAActualizar) {
@@ -592,6 +599,15 @@ router.post('/api/ventas', async (req, res, next) => {
         finalMontoCredito = 0;
         finalClienteCreditoId = null;
         validCreditosSplits = [];
+      }
+
+      // Las partes de un pago mixto o de un crédito repartido tienen que sumar el total cobrado
+      const sumaPartes = finalMontoEfectivo + finalMontoTarjeta + finalMontoYape + finalMontoCredito;
+      if (metodoPago === 'Mixto' && Math.abs(sumaPartes - finalTotal) > 0.05) {
+        throw new ErrorApp('PAGO_NO_CUADRA', `La suma de los medios de pago (S/ ${sumaPartes.toFixed(2)}) no coincide con el total (S/ ${finalTotal.toFixed(2)}).`, { campo: 'montoEfectivo' });
+      }
+      if (metodoPago === 'Crédito' && validCreditosSplits.length > 0 && Math.abs(finalMontoCredito - finalTotal) > 0.05) {
+        throw new ErrorApp('PAGO_NO_CUADRA', `La suma de los créditos (S/ ${finalMontoCredito.toFixed(2)}) no coincide con el total (S/ ${finalTotal.toFixed(2)}).`, { campo: 'creditosDetalle' });
       }
 
       if (finalMontoCredito > 0 && !finalClienteCreditoId) {
@@ -746,7 +762,7 @@ router.post('/api/ventas', async (req, res, next) => {
 });
 
 // GET /api/ventas → Historial detallado de las ventas del día o rango de fechas (hora Perú)
-router.get('/api/ventas', async (req, res, next) => {
+router.get('/api/ventas', requierePermiso('Caja', 'Reportes'), validar({ query: rangoFechasOpcional }), async (req, res, next) => {
   const { desde, hasta } = req.query;
   try {
     let filtroFecha = {};
@@ -840,7 +856,7 @@ router.get('/api/ventas', async (req, res, next) => {
 });
 
 // GET /api/ventas/resumen → Estadísticas del día (hora Perú)
-router.get('/api/ventas/resumen', async (req, res, next) => {
+router.get('/api/ventas/resumen', requierePermiso('Caja', 'Dashboard'), validar({ query: consultaDesde }), async (req, res, next) => {
   try {
     const { desde } = req.query;
     let filterDate;

@@ -4,8 +4,12 @@ const os = require('os');
 const { prisma } = require('../db');
 const { DEFAULT_BARRA_CATEGORIAS, getEmpresaConfig, guardarConfigEnCache } = require('../servicios/empresa');
 const { interfacesIPv4, ipRutaPorDefecto, puntajeIp } = require('../servicios/red');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { datosEmpresa } = require('../../shared/esquemas/empresa.js');
+const { soloAdmin } = require('../middlewares/permisos');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // GET /api/empresa -> Obtener datos actuales de la empresa
 router.get('/api/empresa', async (req, res, next) => {
@@ -18,7 +22,7 @@ router.get('/api/empresa', async (req, res, next) => {
 });
 
 // PUT /api/empresa -> Actualizar datos de la empresa desde la app
-router.put('/api/empresa', async (req, res, next) => {
+router.put('/api/empresa', soloAdmin, validar({ body: datosEmpresa }), async (req, res, next) => {
   try {
     const { name, brandShort, tagline, legalName, ruc, address, phone, email, ticketFooter, tipoNegocio, barraCategorias } = req.body;
     let conf = await prisma.empresaConfig.findFirst();

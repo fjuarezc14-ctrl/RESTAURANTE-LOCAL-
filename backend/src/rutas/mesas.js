@@ -3,14 +3,18 @@ const express = require('express');
 const { prisma } = require('../db');
 const { evaluarEstadoEnsalada, expandPedidoItemsForDb } = require('../servicios/pedidos');
 const { ErrorApp } = require('../middlewares/errores');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { mesaNueva, mesaRenumerar, mesaSeparar, mesaUnir, pedidoMesa } = require('../../shared/esquemas/pedidos.js');
+const { requierePermiso } = require('../middlewares/permisos');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // MESAS — Consolidado con todos los pedidos activos
 // ============================================================
 
-router.get('/api/mesas', async (req, res, next) => {
+router.get('/api/mesas', requierePermiso('Salon', 'Caja', 'Dashboard'), async (req, res, next) => {
   try {
     const mesas = await prisma.mesa.findMany({
       orderBy: { numero: 'asc' },
@@ -88,7 +92,7 @@ router.get('/api/mesas', async (req, res, next) => {
 });
 
 // POST /api/mesas → Crear una nueva mesa
-router.post('/api/mesas', async (req, res, next) => {
+router.post('/api/mesas', requierePermiso('Salon'), validar({ body: mesaNueva }), async (req, res, next) => {
   const { numero } = req.body;
   const num = parseInt(numero);
 
@@ -112,7 +116,7 @@ router.post('/api/mesas', async (req, res, next) => {
 });
 
 // PUT /api/mesas/:numero → Modificar el número de una mesa
-router.put('/api/mesas/:numero', async (req, res, next) => {
+router.put('/api/mesas/:numero', requierePermiso('Salon'), validar({ body: mesaRenumerar }), async (req, res, next) => {
   const numeroActual = parseInt(req.params.numero);
   const { nuevoNumero } = req.body;
   const nuevoNum = parseInt(nuevoNumero);
@@ -156,7 +160,7 @@ router.put('/api/mesas/:numero', async (req, res, next) => {
 });
 
 // DELETE /api/mesas/:numero → Eliminar una mesa
-router.delete('/api/mesas/:numero', async (req, res, next) => {
+router.delete('/api/mesas/:numero', requierePermiso('Salon'), async (req, res, next) => {
   const numero = parseInt(req.params.numero);
 
   try {
@@ -184,7 +188,7 @@ router.delete('/api/mesas/:numero', async (req, res, next) => {
 });
 
 // POST /api/mesas/:num/unir → Unir una mesa a otra principal
-router.post('/api/mesas/:num/unir', async (req, res, next) => {
+router.post('/api/mesas/:num/unir', requierePermiso('Salon'), validar({ body: mesaUnir }), async (req, res, next) => {
   try {
     const numPrincipal = parseInt(req.params.num);
     const { numeroMesaAUnir } = req.body;
@@ -235,7 +239,7 @@ router.post('/api/mesas/:num/unir', async (req, res, next) => {
 
 // POST /api/mesas/:num/separar → Separar las mesas unidas a esta.
 // Con body { numeroMesa } separa solo esa mesa; sin body separa todas las de ESTE grupo.
-router.post('/api/mesas/:num/separar', async (req, res, next) => {
+router.post('/api/mesas/:num/separar', requierePermiso('Salon'), validar({ body: mesaSeparar }), async (req, res, next) => {
   try {
     const numPrincipal = parseInt(req.params.num);
     const numeroMesa = req.body?.numeroMesa != null ? parseInt(req.body.numeroMesa) : null;
@@ -263,7 +267,7 @@ router.post('/api/mesas/:num/separar', async (req, res, next) => {
 });
 
 // POST /api/mesas/:num/pedido → Enviar a cocina (con descuento de stock)
-router.post('/api/mesas/:num/pedido', async (req, res, next) => {
+router.post('/api/mesas/:num/pedido', requierePermiso('Salon'), validar({ body: pedidoMesa }), async (req, res, next) => {
   const { num } = req.params;
   const { mesero, items, total, adicional } = req.body;
 

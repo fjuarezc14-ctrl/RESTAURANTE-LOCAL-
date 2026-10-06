@@ -3,15 +3,20 @@ const express = require('express');
 const { prisma } = require('../db');
 const { parsearCreditoSplit } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
+const { validar, validarIdsEnUrl } = require('../middlewares/validar');
+const { abono, clienteEdicion, clienteNuevo } = require('../../shared/esquemas/clientes.js');
+const { consultaDesde, consultaDirectorio } = require('../../shared/esquemas/comunes.js');
+const { requierePermiso } = require('../middlewares/permisos');
 
 const router = express.Router();
+validarIdsEnUrl(router);
 
 // ============================================================
 // CLIENTES CON CRÉDITO (MÓDULO DE CRÉDITOS)
 // ============================================================
 
 // GET /api/clientes → Listar clientes autorizados con crédito activo
-router.get('/api/clientes', async (req, res, next) => {
+router.get('/api/clientes', requierePermiso('Caja', 'Creditos', 'Reportes'), async (req, res, next) => {
   try {
     const clientes = await prisma.cliente.findMany({
       where: { activo: true, tieneCredito: true },
@@ -74,7 +79,7 @@ router.get('/api/clientes', async (req, res, next) => {
 });
 
 // GET /api/clientes/directorio → Directorio general de clientes de consumo (paginado + buscador)
-router.get('/api/clientes/directorio', async (req, res, next) => {
+router.get('/api/clientes/directorio', requierePermiso('Creditos'), validar({ query: consultaDirectorio }), async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 15));
@@ -177,7 +182,7 @@ router.get('/api/clientes/directorio', async (req, res, next) => {
 });
 
 // POST /api/clientes → Crear un nuevo cliente
-router.post('/api/clientes', async (req, res, next) => {
+router.post('/api/clientes', requierePermiso('Creditos'), validar({ body: clienteNuevo }), async (req, res, next) => {
   try {
     const { nombre, tipoDoc, numDoc, telefono, direccion, esTrabajador, usuarioId, tieneCredito } = req.body;
     if (!nombre) {
@@ -202,7 +207,7 @@ router.post('/api/clientes', async (req, res, next) => {
 });
 
 // PUT /api/clientes/:id → Editar un cliente
-router.put('/api/clientes/:id', async (req, res, next) => {
+router.put('/api/clientes/:id', requierePermiso('Creditos'), validar({ body: clienteEdicion }), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const data = {};
@@ -223,7 +228,7 @@ router.put('/api/clientes/:id', async (req, res, next) => {
 });
 
 // DELETE /api/clientes/:id → Desactivar un cliente
-router.delete('/api/clientes/:id', async (req, res, next) => {
+router.delete('/api/clientes/:id', requierePermiso('Creditos'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     await prisma.cliente.update({ where: { id }, data: { activo: false } });
@@ -234,7 +239,7 @@ router.delete('/api/clientes/:id', async (req, res, next) => {
 });
 
 // GET /api/clientes/:id → Ver detalle de cuenta corriente de un cliente
-router.get('/api/clientes/:id', async (req, res, next) => {
+router.get('/api/clientes/:id', requierePermiso('Creditos'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const cliente = await prisma.cliente.findUnique({
@@ -298,7 +303,7 @@ router.get('/api/clientes/:id', async (req, res, next) => {
 });
 
 // POST /api/clientes/:id/abonar → Registrar un abono al crédito
-router.post('/api/clientes/:id/abonar', async (req, res, next) => {
+router.post('/api/clientes/:id/abonar', requierePermiso('Creditos'), validar({ body: abono }), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const { monto, metodoPago, montoEfectivo, montoTarjeta, montoYape, registradoPor, nota } = req.body;
@@ -397,7 +402,7 @@ router.post('/api/clientes/:id/abonar', async (req, res, next) => {
 });
 
 // GET /api/abonos → Listar todos los abonos registrados (opcional: filtrar por fecha desde)
-router.get('/api/abonos', async (req, res, next) => {
+router.get('/api/abonos', requierePermiso('Creditos', 'Reportes'), validar({ query: consultaDesde }), async (req, res, next) => {
   const { desde } = req.query;
   try {
     const where = {};
@@ -416,7 +421,7 @@ router.get('/api/abonos', async (req, res, next) => {
 });
 
 // GET /api/clientes/ventas/credito → Historial de ventas a crédito (para reportes)
-router.get('/api/clientes/ventas/credito', async (req, res, next) => {
+router.get('/api/clientes/ventas/credito', requierePermiso('Creditos'), async (req, res, next) => {
   try {
     const ventas = await prisma.venta.findMany({
       where: { clienteCreditoId: { not: null }, anulado: false },
@@ -445,7 +450,7 @@ router.get('/api/clientes/ventas/credito', async (req, res, next) => {
 // ============================================================
 // CONSULTA RUC/DNI SEGURA (APIsNetPe / Decolecta)
 // ============================================================
-router.get('/api/clientes/consulta/:doc', async (req, res, next) => {
+router.get('/api/clientes/consulta/:doc', requierePermiso('Creditos'), async (req, res, next) => {
   const { doc } = req.params;
   const cleaned = doc.trim();
 

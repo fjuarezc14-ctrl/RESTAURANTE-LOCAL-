@@ -1,0 +1,53 @@
+-- Montos de Float a Decimal(10,2): la BD guarda los céntimos exactos (0.1 + 0.2 = 0.3) y SUM no acumula errores.
+-- Postgres redondea a 2 decimales al convertir. El backend los sigue leyendo como número (src/db.js).
+
+-- AlterTable
+ALTER TABLE "AbonoCredito" ALTER COLUMN "monto" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "montoEfectivo" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "montoTarjeta" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "montoYape" SET DATA TYPE DECIMAL(10,2);
+
+-- AlterTable
+ALTER TABLE "Producto" ALTER COLUMN "precio" SET DATA TYPE DECIMAL(10,2);
+
+-- AlterTable
+ALTER TABLE "Pedido" ALTER COLUMN "total" SET DATA TYPE DECIMAL(10,2);
+
+-- AlterTable
+ALTER TABLE "ItemPedido" ALTER COLUMN "precio" SET DATA TYPE DECIMAL(10,2);
+
+-- AlterTable
+ALTER TABLE "Venta" ALTER COLUMN "total" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "igv" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "subtotal" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "montoEfectivo" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "montoTarjeta" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "montoYape" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "montoCredito" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "descuentoAplicado" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "montoOriginal" SET DATA TYPE DECIMAL(10,2);
+
+-- AlterTable
+ALTER TABLE "Compra" ALTER COLUMN "baseImponible" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "igv" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "total" SET DATA TYPE DECIMAL(10,2);
+
+-- AlterTable
+ALTER TABLE "Oferta" ALTER COLUMN "valorDescuento" SET DATA TYPE DECIMAL(10,2);
+
+-- AlterTable
+ALTER TABLE "CierreCaja" ALTER COLUMN "montoInicial" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "efectivoVentas" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "efectivoEsperado" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "efectivoContado" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "diferencia" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "totalTarjeta" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "totalYape" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "totalConsumo" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "totalPedidosYa" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "egresosEfectivo" SET DATA TYPE DECIMAL(10,2),
+ALTER COLUMN "abonosEfectivo" SET DATA TYPE DECIMAL(10,2);
+
+-- AlterTable
+ALTER TABLE "MovimientoCaja" ALTER COLUMN "monto" SET DATA TYPE DECIMAL(10,2);
+
