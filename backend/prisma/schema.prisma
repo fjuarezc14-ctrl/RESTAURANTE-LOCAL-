@@ -16,11 +16,56 @@ datasource db {
 model Usuario {
   id        Int      @id @default(autoincrement())
   nombre    String
-  rol       String   // "Administrador", "Cajero", "Mozo", "Cocinero"
-  pin       String
+  rol       String   // "Administrador", "Cajero", "Mozo", "Cocinero", "Contador"
+  pin       String?  // texto plano heredado: al arrancar se convierte a pinHash y se vacía
+  pinHash   String?  // HMAC-SHA256(PIN_SECRET, pin): permite buscar por PIN sin guardarlo
   permisos  String[] // ["Dashboard", "Salon", "Cocina", "Barra", "Caja", ...]
   activo    Boolean  @default(true)
   creadoEn  DateTime @default(now())
+
+  // Activación de dispositivos (usuario o correo + contraseña)
+  usuario        String? @unique
+  correo         String? @unique
+  contrasenaHash String? // bcrypt
+  inactividadMin Int?    // minutos sin actividad para cerrar la sesión; null = sin límite
+
+  Sesiones               Sesion[]
+  DispositivosActivados  Dispositivo[]
+}
+
+// ============================================================
+// DISPOSITIVOS Y SESIONES (scratch/ACUERDOS.md §2)
+// En la BD se guarda el SHA-256 del token; el token solo viaja en la cookie httpOnly.
+// ============================================================
+model Dispositivo {
+  id          Int       @id @default(autoincrement())
+  tokenHash   String    @unique
+  nombre      String    // "Tablet caja", lo escribe quien activa
+  agente      String    // user-agent, para reconocerlo en la lista
+  activador   Usuario   @relation(fields: [activadoPor], references: [id])
+  activadoPor Int
+  creadoEn    DateTime  @default(now())
+  ultimoUso   DateTime  @default(now())
+  revocadoEn  DateTime?
+  fallosPin   Int       @default(0) // PINs fallidos seguidos; con 10 se revoca
+
+  Sesiones Sesion[]
+}
+
+model Sesion {
+  id              Int         @id @default(autoincrement())
+  tokenHash       String      @unique
+  usuario         Usuario     @relation(fields: [usuarioId], references: [id])
+  usuarioId       Int
+  dispositivo     Dispositivo @relation(fields: [dispositivoId], references: [id])
+  dispositivoId   Int
+  creadaEn        DateTime    @default(now())
+  ultimaActividad DateTime    @default(now())
+  cerradaEn       DateTime?
+  motivoCierre    String?     // LOGOUT | INACTIVIDAD | REVOCADA | USUARIO_DESACTIVADO | PIN_CAMBIADO | OTRA_SESION
+
+  @@index([usuarioId])
+  @@index([dispositivoId])
 }
 
 // ============================================================

@@ -3,6 +3,7 @@ const express = require('express');
 const { prisma } = require('../db');
 const { obtenerMontosVenta } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
+const { buscarUsuarioPorPin } = require('../servicios/auth');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { aperturaCaja, cierreCaja, cierreForzado, consultaCierres, consultaMovimientos, movimientoCaja } = require('../../shared/esquemas/caja.js');
 
@@ -360,13 +361,7 @@ router.post('/api/caja/cierre-forzado', validar({ body: cierreForzado }), async 
     }
 
     // Validar PIN de administrador
-    const admin = await prisma.usuario.findFirst({
-      where: {
-        pin: adminPin.trim(),
-        rol: 'Administrador',
-        activo: true,
-      },
-    });
+    const admin = await buscarUsuarioPorPin(adminPin, { rol: 'Administrador' });
 
     if (!admin) {
       return next(new ErrorApp('SIN_PERMISO', 'PIN de Administrador inválido o no autorizado.', { campo: 'pin' }));

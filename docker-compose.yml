@@ -43,6 +43,12 @@ services:
       - CLIENTE=${CLIENTE:-}
       - CLIENTES_DIR=/clientes
       - INITIAL_ADMIN_PIN=${INITIAL_ADMIN_PIN:-}
+      # Sesiones (scratch/ACUERDOS.md §2). PIN_SECRET va en el .env del cliente ANTES de su primer arranque:
+      # si cambia después, los PIN guardados dejan de coincidir y hay que volver a asignarlos.
+      - PIN_SECRET=${PIN_SECRET:-}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-}
+      - AUTH_OBLIGATORIA=${AUTH_OBLIGATORIA:-false}
+      - MODO_INSTALACION=${MODO_INSTALACION:-local}
     depends_on:
       db:
         condition: service_healthy

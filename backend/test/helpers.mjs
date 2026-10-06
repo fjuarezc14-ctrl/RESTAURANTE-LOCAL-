@@ -11,6 +11,8 @@ prepararEntorno();
 // La app es CommonJS: se carga con require nativo, sin pasar por Vite
 const require = createRequire(import.meta.url);
 export const { app, prisma } = require('../src/app.js');
+const { migrarPinesAHash } = require('../src/servicios/auth.js');
+const { reiniciarLimitadores } = require('../src/middlewares/limiteLogin.js');
 
 export const api = () => request(app);
 
@@ -25,6 +27,7 @@ export const PIN_ADMIN = '1234';
 export const PIN_CAJERO = '2222';
 
 export async function limpiarBD() {
+  reiniciarLimitadores(); // los contadores de intentos son por IP y en las pruebas todo viene de 127.0.0.1
   const tablas = await prisma.$queryRaw`
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
   const lista = tablas.map((t) => `"public"."${t.tablename}"`).join(', ');
@@ -39,6 +42,7 @@ export async function crearBase() {
       { nombre: 'Carla Caja', rol: 'Cajero', pin: PIN_CAJERO, permisos: ['Caja'] },
     ],
   });
+  await migrarPinesAHash(); // como al arrancar el servidor: los PIN quedan como hash
   const [lomo, gaseosa, postre] = await Promise.all([
     prisma.producto.create({ data: { nombre: 'Lomo Saltado', categoria: 'Platos de Fondo', precio: 25.5 } }),
     prisma.producto.create({ data: { nombre: 'Inca Kola', categoria: 'Bebidas', precio: 3.5 } }),

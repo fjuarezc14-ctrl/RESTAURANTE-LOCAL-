@@ -13,4 +13,5 @@ export function prepararEntorno() {
   process.env.DATABASE_URL = DATABASE_URL_TEST;
   process.env.NODE_ENV = 'test';
   process.env.IGV_RATE = '0.105';
+  process.env.PIN_SECRET = 'pin-secret-de-pruebas';
 }
