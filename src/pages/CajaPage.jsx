@@ -22,11 +22,11 @@ import {
   ModalDetalleMesa,
   ModalDetallePedidoLlevar,
   ModalDetalleVenta,
-  ModalTodasCategorias,
   ModalOpcionesProducto,
   ModalCobroMesa,
   ModalNuevoPedidoDelivery,
 } from '../modulos/caja/modales';
+import ModalTodasCategorias from '../components/modales/ModalTodasCategorias';
 import { useTurnoCaja, useVentasTurno, useCobroMesa, usePedidoDelivery } from '../modulos/caja/hooks';
 import { parseDeliveryInfo, parsearCreditoSplit, parseMonto } from '../utils/ventas';
 import { mesaCobrable, mesaEnPreparacion, platosEnPreparacion, platosSinServir } from '../modulos/caja/utils/mesas';
@@ -749,12 +749,13 @@ export default function CajaPage({ currentUser }) {
         abierto={deliveryModal && deliveryCategoriasModalOpen}
         onCerrar={() => setDeliveryCategoriasModalOpen(false)}
         categorias={deliveryCategoriasOrdenadas}
-        categoriaFiltro={deliveryCategoriaFiltro}
+        categoriaActiva={deliveryCategoriaFiltro}
         onSeleccionar={(cat) => {
           setDeliveryCategoriaFiltro(cat);
           setDeliveryCategoriasModalOpen(false);
         }}
         contarProductos={contarProductosCategoriaDelivery}
+        tema="claro"
       />
 
       {/* MODAL PEDIDOS YA */}
