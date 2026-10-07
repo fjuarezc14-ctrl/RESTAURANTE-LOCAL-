@@ -9,6 +9,8 @@ import { ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
 import { ordenarCategorias } from '../utils/busquedaProductos';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
 import { numeroALetras } from '../utils/numeroALetras';
+import { cobro as cobroEsquema } from '@shared/esquemas/ventas.js';
+import { pedidoLlevar as pedidoLlevarEsquema } from '@shared/esquemas/pedidos.js';
 import { useAviso, useConfirmar, usePedirDato } from '../components/ui';
 import {
   ModalAperturaCaja,
@@ -738,6 +740,32 @@ export default function CajaPage({ currentUser }) {
       vueltoNum = efecIngresado > finalMontoEfectivo ? Math.round((efecIngresado - finalMontoEfectivo) * 100) / 100 : 0;
     }
 
+    const payloadCobro = {
+      pedidoIds: mesaSeleccionada.pedidoData.pedidoIds,
+      tipoComprobante,
+      numDocumento: numDocumento || null,
+      nombreCliente: clienteNombre || 'PÚBLICO GENERAL',
+      total,
+      metodoPago,
+      montoEfectivo: finalMontoEfectivo,
+      montoTarjeta: finalMontoTarjeta,
+      montoYape: finalMontoYape,
+      montoCredito: finalMontoCredito,
+      clienteCreditoId: finalClienteCreditoId,
+      creditosDetalle: finalCreditosDetalle,
+      clienteDireccion: clienteDireccion || '',
+      cortesiaItemIds: cortesiaItemIds,
+      motivoCortesia: motivoCortesia.trim() || null,
+      cajeroNombre: usuarioOperador,
+      codigoPago: codigoPago.trim() || null,
+    };
+    // Mismas reglas que el backend (backend/shared/esquemas/ventas.js)
+    const validacionCobro = cobroEsquema.safeParse(payloadCobro);
+    if (!validacionCobro.success) {
+      aviso.advertencia(validacionCobro.error.issues?.[0]?.message || 'Revisa los datos del cobro.');
+      return;
+    }
+
     // Guardar los datos preparados para la confirmación
     setDatosConfirmacionCobro({
       mesaNum: mesaSeleccionada.num,
@@ -758,25 +786,7 @@ export default function CajaPage({ currentUser }) {
       finalCreditosDetalle,
       cortesiaItemIds,
       itemsParaImpresion: items,
-      payload: {
-        pedidoIds: mesaSeleccionada.pedidoData.pedidoIds,
-        tipoComprobante,
-        numDocumento: numDocumento || null,
-        nombreCliente: clienteNombre || 'PÚBLICO GENERAL',
-        total,
-        metodoPago,
-        montoEfectivo: finalMontoEfectivo,
-        montoTarjeta: finalMontoTarjeta,
-        montoYape: finalMontoYape,
-        montoCredito: finalMontoCredito,
-        clienteCreditoId: finalClienteCreditoId,
-        creditosDetalle: finalCreditosDetalle,
-        clienteDireccion: clienteDireccion || '',
-        cortesiaItemIds: cortesiaItemIds,
-        motivoCortesia: motivoCortesia.trim() || null,
-        cajeroNombre: usuarioOperador,
-        codigoPago: codigoPago.trim() || null,
-      }
+      payload: validacionCobro.data,
     });
 
     // Abrir modal de confirmación antes de ejecutar la transacción
@@ -1487,9 +1497,16 @@ export default function CajaPage({ currentUser }) {
         codigoPago: deliveryCodigoPago.trim() || null,
       };
 
-      const result = editingPedidoId 
-        ? await api.actualizarDelivery(editingPedidoId, payload)
-        : await api.crearPedidoLlevar(payload);
+      // Mismas reglas que el backend (backend/shared/esquemas/pedidos.js)
+      const validacionPedido = pedidoLlevarEsquema.safeParse(payload);
+      if (!validacionPedido.success) {
+        aviso.advertencia(validacionPedido.error.issues?.[0]?.message || 'Revisa los datos del pedido.');
+        return;
+      }
+
+      const result = editingPedidoId
+        ? await api.actualizarDelivery(editingPedidoId, validacionPedido.data)
+        : await api.crearPedidoLlevar(validacionPedido.data);
 
       if (result.error) throw new Error(result.error);
 
