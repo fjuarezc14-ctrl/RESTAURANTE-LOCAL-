@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Receipt, X, Banknote, Search, Clock, CreditCard, Wallet, Truck, PackageCheck, Gift, Users, Layers, Ban, Lock, History, ChevronDown, ChevronRight, ShoppingCart, ShoppingBag, UtensilsCrossed, Smartphone, Eye, EyeOff, Bike, Unlock, ArrowUpRight, ArrowLeftRight } from 'lucide-react';
+import { Receipt, X, Banknote, Search, Clock, Wallet, Truck, PackageCheck, Gift, Ban, Lock, History, ChevronDown, ChevronRight, ShoppingCart, UtensilsCrossed, Eye, EyeOff, Unlock, ArrowUpRight, ArrowLeftRight } from 'lucide-react';
 
 import { api } from '../api';
 
@@ -30,6 +30,8 @@ import {
 import { useTurnoCaja, useVentasTurno, useCobroMesa, usePedidoDelivery } from '../modulos/caja/hooks';
 import { parseDeliveryInfo, parsearCreditoSplit, parseMonto } from '../utils/ventas';
 import { mesaCobrable, mesaEnPreparacion, platosEnPreparacion, platosSinServir, textoBloqueoMesa } from '../modulos/caja/utils/mesas';
+import { clienteDeVenta, esPedidoListo, horaMovimiento, itemsDeVenta, listaVentasTurno, origenDeVenta, origenPedido, resumenTurno, soles } from '../modulos/caja/utils/ventasTurno';
+import { getEstiloMetodo as estiloMetodo } from '../modulos/caja/constantes/metodosPago';
 
 export default function CajaPage({ currentUser }) {
   const { empresa: COMPANY_CONFIG } = useCompany();
@@ -655,66 +657,6 @@ export default function CajaPage({ currentUser }) {
 
 
 
-  const esPedidoListo = (p) => {
-    if (!p) return false;
-    const e = (p.estado || '').toUpperCase();
-    return p.estado === 'Servido' || e.includes('LISTO') || e.includes('SERVIDO');
-  };
-
-  const origenPedido = (codigo = '', pedido = null) => {
-    const cod = typeof codigo === 'string' ? codigo : (codigo != null ? String(codigo) : '');
-    if (cod.startsWith('DELIVERY -')) {
-      const info = parseDeliveryInfo(cod);
-      return { tipo: 'delivery', etiqueta: 'Delivery', nombre: info ? info.nombre : cod.replace('DELIVERY - ', ''), info, Icon: Bike, color: 'bg-indigo-50 text-indigo-600' };
-    }
-    if (cod.startsWith('LLEVAR -')) {
-      const nom = cod.replace('LLEVAR - ', '').trim();
-      return { tipo: 'llevar', etiqueta: 'Para llevar', nombre: nom || 'Para Llevar', info: null, Icon: ShoppingBag, color: 'bg-cyan-50 text-cyan-700' };
-    }
-    if (cod) {
-      return { tipo: 'pedidosya', etiqueta: 'PedidosYa', nombre: cod, info: null, Icon: Truck, color: 'bg-rose-50 text-rose-600' };
-    }
-    // Si no tiene código de PedidosYa, deducir por tipo de pedido o nombre de cliente
-    if (pedido?.tipoEntrega === 'delivery') {
-      return { tipo: 'delivery', etiqueta: 'Delivery', nombre: pedido?.ventaData?.nombreCliente || 'Delivery Local', info: null, Icon: Bike, color: 'bg-indigo-50 text-indigo-600' };
-    }
-    return { tipo: 'llevar', etiqueta: 'Para llevar', nombre: pedido?.ventaData?.nombreCliente || (pedido?.pedidoId ? `Pedido #${pedido.pedidoId}` : 'Para Llevar'), info: null, Icon: ShoppingBag, color: 'bg-cyan-50 text-cyan-700' };
-  };
-
-  const clienteDeVenta = (v) => {
-    if (!v) return 'Consumidor Final';
-    const info = parseDeliveryInfo(v.codigoPedidosYa) || parseDeliveryInfo(v.nombreCliente);
-    if (info) return info.nombre;
-    if (typeof v.nombreCliente === 'string' && v.nombreCliente.startsWith('DELIVERY -')) {
-      return v.nombreCliente.replace('DELIVERY - ', '');
-    }
-    return v.nombreCliente || 'Consumidor Final';
-  };
-
-  const origenDeVenta = (v) => (v?.codigoPedidosYa ? origenPedido(v.codigoPedidosYa).etiqueta : (v?.mesaNum ? `Mesa ${v.mesaNum}` : 'Para Llevar'));
-
-  const itemsDeVenta = (v) => {
-    if (v.items?.length) return v.items.map(i => ({ cant: i.cant, nombre: i.nombre, subtotal: i.cant * i.precio }));
-    return (v.itemsResumen ? v.itemsResumen.split(', ') : []).map(str => {
-      const match = str.match(/^(\d+)x\s+(.+)$/);
-      return match ? { cant: parseInt(match[1]), nombre: match[2], subtotal: null } : { cant: null, nombre: str, subtotal: null };
-    });
-  };
-
-  const METODO_ESTILO = {
-    Efectivo: { Icon: Banknote, chip: 'bg-emerald-50 text-emerald-700', text: 'text-emerald-700', activo: 'bg-emerald-600 border-emerald-600 text-white shadow-sm shadow-emerald-600/25', icono: 'text-emerald-600' },
-    Tarjeta: { Icon: CreditCard, chip: 'bg-blue-50 text-blue-700', text: 'text-blue-700', activo: 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/25', icono: 'text-blue-600' },
-    Yape: { Icon: Smartphone, chip: 'bg-purple-50 text-purple-700', text: 'text-purple-700', activo: 'bg-purple-600 border-purple-600 text-white shadow-sm shadow-purple-600/25', icono: 'text-purple-600' },
-    Mixto: { Icon: Layers, chip: 'bg-amber-50 text-amber-700', text: 'text-amber-700', activo: 'bg-amber-500 border-amber-500 text-white shadow-sm shadow-amber-500/25', icono: 'text-amber-500' },
-    Crédito: { Icon: Wallet, chip: 'bg-teal-50 text-teal-700', text: 'text-teal-700', activo: 'bg-teal-600 border-teal-600 text-white shadow-sm shadow-teal-600/25', icono: 'text-teal-600' },
-    Consumo: { Icon: Users, chip: 'bg-violet-50 text-violet-700', text: 'text-violet-700', activo: 'bg-violet-600 border-violet-600 text-white shadow-sm shadow-violet-600/25', icono: 'text-violet-600' },
-    Cortesía: { Icon: Gift, chip: 'bg-orange-50 text-orange-700', text: 'text-orange-700', activo: 'bg-orange-500 border-orange-500 text-white shadow-sm shadow-orange-500/25', icono: 'text-orange-500' },
-    PedidosYa: { Icon: Truck, chip: 'bg-rose-50 text-rose-600', text: 'text-rose-600', activo: 'bg-rose-600 border-rose-600 text-white', icono: 'text-rose-600' },
-  };
-  const estiloMetodo = (m) => METODO_ESTILO[m] || { Icon: Receipt, chip: 'bg-slate-100 text-slate-600', text: 'text-slate-600', activo: 'bg-slate-900 border-slate-900 text-white', icono: 'text-slate-500' };
-
-  const soles = (n) => `S/ ${Number(n || 0).toFixed(2)}`;
-
   const estadoChip = (listo, textoListo, textoPendiente) => (
     <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${listo ? 'text-emerald-700' : 'text-amber-700'}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${listo ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
@@ -744,115 +686,32 @@ export default function CajaPage({ currentUser }) {
     deliveryCategoriasBarra.push(deliveryCategoriaFiltro);
   }
 
-  // ── Resumen del turno ──
-  const obtenerMontosVentaFrontend = (v) => {
-    if (!v || v.anulado || v.estadoPedido === 'Cancelado') return { efec: 0, tarj: 0, yape: 0 };
-    if (v.metodoPago === 'Cortesía' || v.metodoPago === 'Consumo' || v.metodoPago === 'PedidosYa' || v.metodoPago === 'Crédito') return { efec: 0, tarj: 0, yape: 0 };
+  const {
+    ventasTurno,
+    activeEfectivo,
+    activeTarjeta,
+    activeYape,
+    activeIngresosCaja,
+    activeCortesias,
+    activeConsumoPlanilla,
+    activeConsumoClientes,
+    totalCreditosTurno,
+  } = resumenTurno({ ventas, abonos, clientes, ultimoCierre, mostrarTodoElDia });
 
-    let efec = parseFloat(v.montoEfectivo || 0);
-    let tarj = parseFloat(v.montoTarjeta || 0);
-    let yape = parseFloat(v.montoYape || 0);
-    const total = parseFloat(v.total || 0);
-
-    if (total <= 0) return { efec: 0, tarj: 0, yape: 0 };
-    if (v.metodoPago === 'Efectivo') return { efec: total, tarj: 0, yape: 0 };
-    if (v.metodoPago === 'Tarjeta') return { efec: 0, tarj: total, yape: 0 };
-    if (v.metodoPago === 'Yape') return { efec: 0, tarj: 0, yape: total };
-
-    // Restar la parte a crédito si es mixto
-    const creditAmount = parseFloat(v.montoCredito || 0);
-    const totalFisico = Math.max(0, total - creditAmount);
-    const suma = efec + tarj + yape;
-    if (Math.abs(suma - totalFisico) > 0.01) {
-      if (suma === 0) efec = totalFisico;
-      else if (totalFisico > suma) efec += (totalFisico - suma);
-    }
-    return { efec, tarj, yape };
-  };
-
-  const ventasTurno = (ultimoCierre && !mostrarTodoElDia)
-    ? ventas.filter(v => new Date(v.createdAt) > new Date(ultimoCierre))
-    : ventas;
-  const abonosTurno = (ultimoCierre && !mostrarTodoElDia)
-    ? abonos.filter(a => new Date(a.creadoEn) > new Date(ultimoCierre))
-    : abonos;
-
-  let activeEfectivo = 0;
-  let activeTarjeta = 0;
-  let activeYape = 0;
-  ventasTurno.forEach(v => {
-    const { efec, tarj, yape } = obtenerMontosVentaFrontend(v);
-    activeEfectivo += efec;
-    activeTarjeta += tarj;
-    activeYape += yape;
+  const {
+    busquedaVentasNorm,
+    soloSalidas,
+    ventasLista,
+    ventasVisibles,
+  } = listaVentasTurno({
+    ventasTurno,
+    movimientos: cajaEstado?.resumenEnVivo?.movimientos,
+    ultimoCierre,
+    mostrarTodoElDia,
+    busquedaVentas,
+    filtroMetodoPago,
+    ventasLimite,
   });
-  // Sumar abonos a la caja real
-  abonosTurno.forEach(a => {
-    activeEfectivo += a.montoEfectivo || 0;
-    activeTarjeta += a.montoTarjeta || 0;
-    activeYape += a.montoYape || 0;
-  });
-  const activeIngresosCaja = activeEfectivo + activeTarjeta + activeYape;
-  const activeCortesias = ventasTurno
-    .filter(v => v.metodoPago === 'Cortesía' && !v.anulado && v.estadoPedido !== 'Cancelado')
-    .reduce((sum, v) => sum + (parseFloat(v.descuentoAplicado || v.total) || (v.items?.reduce((s, i) => s + (i.cant * i.precio), 0) || 0)), 0);
-
-  const clienteEsTrabajador = new Map(clientes.map(c => [c.id, c.esTrabajador]));
-  let activeConsumoPlanilla = 0;
-  let activeConsumoClientes = 0;
-  ventasTurno.forEach(v => {
-    if (v.anulado || v.estadoPedido === 'Cancelado') return;
-    if (v.metodoPago === 'Consumo') {
-      activeConsumoPlanilla += (v.descuentoAplicado || v.total || 0);
-    } else {
-      const splits = v.creditoSplit || parsearCreditoSplit(v.ofertaDescripcion, v.clienteCreditoId, (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0)));
-      if (splits.length > 0) {
-        splits.forEach(s => {
-          if (clienteEsTrabajador.get(s.clienteId)) activeConsumoPlanilla += s.monto;
-          else activeConsumoClientes += s.monto;
-        });
-      } else if (v.metodoPago === 'Crédito') {
-        activeConsumoClientes += (v.total || 0);
-      } else if (parseFloat(v.montoCredito || 0) > 0) {
-        activeConsumoClientes += parseFloat(v.montoCredito);
-      }
-    }
-  });
-  const totalCreditosTurno = activeConsumoClientes + activeConsumoPlanilla;
-
-  // ── Lista de ventas (filtro + búsqueda) ──
-  const busquedaVentasNorm = busquedaVentas.trim().toLowerCase();
-  const soloSalidas = filtroMetodoPago === 'Salidas';
-  const ventasFiltradas = soloSalidas ? [] : ventasTurno.filter(v => {
-    if (filtroMetodoPago !== 'Todos') {
-      let method = v.metodoPago;
-      if (method === 'PedidosYa' && (v.codigoPedidosYa?.startsWith('DELIVERY -') || v.codigoPedidosYa?.startsWith('LLEVAR -'))) {
-        method = 'Efectivo';
-      }
-      if (method !== filtroMetodoPago) return false;
-    }
-    if (!busquedaVentasNorm) return true;
-    return [`vt-${v.id}`, String(v.id), clienteDeVenta(v), origenDeVenta(v), v.itemsResumen, v.serie && `${v.serie}-${v.numero}`, v.codigoPago]
-      .some(s => s && String(s).toLowerCase().includes(busquedaVentasNorm));
-  });
-
-  // Salidas (y entradas) de efectivo del turno abierto, mezcladas con las ventas por hora
-  const movimientosTurno = (cajaEstado?.resumenEnVivo?.movimientos || []).filter(m =>
-    !(ultimoCierre && !mostrarTodoElDia) || new Date(m.creadoEn) >= new Date(ultimoCierre)
-  );
-  const movimientosFiltrados = (filtroMetodoPago === 'Todos' || soloSalidas)
-    ? movimientosTurno.filter(m => {
-        if (!busquedaVentasNorm) return true;
-        return [m.motivo, m.cajeroNombre, m.tipo === 'INGRESO' ? 'ingreso de caja' : 'salida de caja']
-          .some(s => s && String(s).toLowerCase().includes(busquedaVentasNorm));
-      })
-    : [];
-  const ventasLista = [
-    ...ventasFiltradas.map(v => ({ tipoFila: 'venta', fecha: new Date(v.createdAt).getTime() || 0, venta: v })),
-    ...movimientosFiltrados.map(m => ({ tipoFila: 'movimiento', fecha: new Date(m.creadoEn).getTime() || 0, mov: m })),
-  ].sort((a, b) => b.fecha - a.fecha);
-  const ventasVisibles = ventasLista.slice(0, ventasLimite);
-  const horaMovimiento = (fecha) => new Date(fecha).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   const ventaDetalle = ventaDetalleId != null ? ventas.find(v => v.id === ventaDetalleId) : null;
   const mesaDetalle = mesaDetalleNum != null ? mesasPendientes.find(m => m.num === mesaDetalleNum) : null;
