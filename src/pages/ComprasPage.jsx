@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  X, Save, Download, AlertCircle, CheckCircle, Trash2, Pencil, Search, Plus,
+  X, Download, AlertCircle, CheckCircle, Search, Plus,
   Banknote, CreditCard, Smartphone, Layers, ArrowUpRight, ChevronDown, Receipt,
   FileText, PieChart, Tag, Calendar
 } from 'lucide-react';
@@ -476,32 +476,7 @@ export default function ComprasPage() {
   };
 
   // ── ESTILOS COMPARTIDOS (mismo lenguaje visual que Caja) ─────────────────
-  const lbl = 'block text-xs font-medium text-slate-500 mb-1.5';
-  const inp = 'w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5 transition';
   const selectFiltro = 'h-9 px-2.5 rounded-lg bg-slate-100/80 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10';
-
-  const modalBase = (onClose, header, body, footer, ancho = 'sm:max-w-lg') => (
-    <div
-      className="fixed inset-0 z-[105] bg-slate-900/50 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 animate-fade-in"
-      onClick={onClose}
-    >
-      <div
-        className={`bg-white w-full ${ancho} max-h-[92dvh] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up`}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-slate-100">
-          <div className="min-w-0">{header}</div>
-          <button type="button" onClick={onClose} className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-5">{body}</div>
-        {footer && <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/70">{footer}</div>}
-      </div>
-    </div>
-  );
 
   const compraDetalle = detalleId != null ? compras.find(c => c.id === detalleId) : null;
   const categoriaMayor = gastosDetalle.categorias[0];

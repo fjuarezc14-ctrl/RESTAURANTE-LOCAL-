@@ -1,21 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Download, TrendingUp, TrendingDown, DollarSign, XCircle, Users, Truck, Calendar, Search, Receipt, Printer, X, Wallet, Briefcase, Award, Flame, UtensilsCrossed, PieChart, Layers, History, AlertTriangle, Filter, Banknote, CreditCard, Smartphone, Gift, Ban, MessageCircle, Scale } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Download, TrendingUp, TrendingDown, DollarSign, XCircle, Users, Truck, Calendar, Search, Receipt, Printer, X, Wallet, Briefcase, Award, Flame, UtensilsCrossed, PieChart, Layers, History, AlertTriangle, Banknote, CreditCard, Smartphone, Gift, Ban, MessageCircle, Scale } from 'lucide-react';
 
 import { api } from '../api';
 import { useCompany } from '../context/CompanyContext';
-import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
-import { exportarReporteExcel, construirCreditosPlanilla, montosVenta } from '../utils/exportarReporteExcel';
+import { numeroALetras } from '../utils/numeroALetras';
+import { exportarReporteExcel } from '../utils/exportarReporteExcel';
 import { useAviso, usePedirDato } from '../components/ui';
 import ModalComprobanteSunat from '../modulos/caja/modales/ModalComprobanteSunat';
 import { ModalReporteGerencial } from '../modulos/reportes/modales';
 
 // Igual que en Caja: el sistema solo emite tickets de venta
 const FACTURACION_ELECTRONICA = false;
-
-const BARRA_CATEGORIAS = (COMPANY_CONFIG.barraCategorias && Array.isArray(COMPANY_CONFIG.barraCategorias))
-  ? COMPANY_CONFIG.barraCategorias
-  : DEFAULT_BARRA_CATEGORIAS;
 
 
 const parseDeliveryInfo = (code) => {
@@ -142,52 +138,13 @@ export default function ReportesPage() {
   }, []);
 
 
-  const numeroALetras = (num) => {
-    const unidades = ["", "UN", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE"];
-    const decenas = ["", "DIEZ", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"];
-    const especiales = ["DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISEIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"];
-    const centenas = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"];
-
-    let entero = Math.floor(num);
-    let decimales = Math.round((num - entero) * 100);
-    let decimalStr = decimales < 10 ? "0" + decimales : decimales;
-
-    if (entero === 0) return "CERO CON " + decimalStr + "/100 SOLES";
-    if (entero === 100) return "CIEN CON " + decimalStr + "/100 SOLES";
-
-    let letras = "";
-
-    if (entero >= 100) {
-      let c = Math.floor(entero / 100);
-      letras += centenas[c] + " ";
-      entero %= 100;
-    }
-
-    if (entero >= 10 && entero <= 19) {
-      letras += especiales[entero - 10] + " ";
-    } else if (entero >= 20 || entero > 0) {
-      let d = Math.floor(entero / 10);
-      let u = entero % 10;
-      if (d > 0) {
-        letras += decenas[d];
-        if (u > 0) letras += " Y ";
-      }
-      if (u > 0) {
-        letras += unidades[u];
-      }
-      letras += " ";
-    }
-
-    return letras.trim() + " CON " + decimalStr + "/100 SOLES";
-  };
-
   const reimprimirComprobante = (v) => {
     if (!v) return;
     const serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
     const correlativoStr = String(v.numero || v.id).padStart(4, '0');
     const igvSafe = Number(v.igv || 0).toFixed(2);
     const totalSafe = Number(v.total || 0).toFixed(2);
-    const qrData = `${rucEmpresa}|03|${serie}|${correlativoStr}|${igvSafe}|${totalSafe}|${v.fecha || new Date(v.createdAt).toLocaleDateString('es-PE')}|${v.tipoComprobante === 'Factura'?'6':'1'}|${v.numDocumento || '00000000'}`;
+    const qrData = `${COMPANY_CONFIG.ruc}|${v.tipoComprobante === 'Factura' ? '01' : '03'}|${serie}|${correlativoStr}|${igvSafe}|${totalSafe}|${v.fecha || new Date(v.createdAt).toLocaleDateString('es-PE')}|${v.tipoComprobante === 'Factura'?'6':'1'}|${v.numDocumento || '00000000'}`;
     const qrImageUrl = generateOfflineQrUrl(qrData);
 
     // Reconstruir items si vienen del backend o parsear de itemsResumen
@@ -234,7 +191,7 @@ export default function ReportesPage() {
       total: v.total,
       descuentoAplicado: v.descuentoAplicado || 0,
       ofertaDescripcion: v.ofertaDescripcion || null,
-      totalLetras,
+      totalLetras: numeroALetras(v.total),
       hashResumen: "gSbTDa" + Math.random().toString(36).substring(2, 8).toUpperCase() + "iIZDyirfA6TBPKJnEI=",
       metodoPago: v.metodoPago,
       montoEfectivo: v.montoEfectivo || 0,
@@ -268,7 +225,6 @@ export default function ReportesPage() {
       return;
     }
     
-    const serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
     const totalSafe = Number(v.total || 0).toFixed(2);
     const mensaje = `Hola *${v.nombreCliente || 'Estimado cliente'}*, el total de su consumo en *${COMPANY_CONFIG.name}* fue de *S/ ${totalSafe}* (ticket de venta N° ${v.id}).\n\n¡Gracias por su preferencia!`;
     

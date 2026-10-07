@@ -66,7 +66,7 @@ router.put('/api/empresa', soloAdmin, validar({ body: datosEmpresa }), async (re
 // ============================================================
 // ESTADO DEL SERVIDOR
 // ============================================================
-router.get('/api/status', async (req, res, next) => {
+router.get('/api/status', async (req, res) => {
   const token = process.env.APISUNAT_TOKEN;
   const modoDemo = !token || token.includes('tu_token') || token.trim() === '';
   const emp = await getEmpresaConfig();

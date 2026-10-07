@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, Phone, MapPin, Trash2, Pencil, PackageCheck } from 'lucide-react';
 import { formatearMoneda } from '../../../utils/dinero';
 

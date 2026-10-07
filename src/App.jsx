@@ -1,8 +1,7 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { UtensilsCrossed, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Tags, Building2, Share2, Copy, Check as CheckIcon, Wifi, Maximize, Minimize, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Tags, Building2, Share2, Copy, Check as CheckIcon, Wifi, Maximize, Minimize, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import logoUrl from './assets/logo.png';
-import { COMPANY_CONFIG } from './config/company';
 import { useCompany } from './context/CompanyContext';
 import { api, esErrorDeSesion, onSesionPerdida } from './api';
 import { generateOfflineQrUrl } from './utils/qrOffline';

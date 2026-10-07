@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { UserPlus, X, Trash2, Edit, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, UsersRound, Save, Salad, BookOpen, Wallet, Tags } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { UserPlus, X, Trash2, Edit, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, UsersRound, Save, BookOpen, Wallet, Tags } from 'lucide-react';
 import { api } from '../api';
 import { safeJsonParse } from '../utils/safeJson';
 import { useAviso, useConfirmar } from '../components/ui';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Clock, X } from 'lucide-react';
 import { formatearMoneda } from '../../../utils/dinero';
 

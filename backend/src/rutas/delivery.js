@@ -16,15 +16,12 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), validar({ body: pedi
     codigoPedidosYa,
     cajero,
     items,
-    total,
     tipoDelivery,
-    tipoComprobante,
     metodoPago,
     numDocumento,
     nombreCliente,
     clienteDireccion,
     montoDelivery,
-    telefono,
     montoEfectivo,
     montoTarjeta,
     montoYape,
@@ -44,7 +41,6 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), validar({ body: pedi
       return next(new ErrorApp('CAJA_CERRADA', 'La caja se encuentra cerrada. Debe aperturar un turno de caja antes de registrar pedidos para llevar o delivery.'));
     }
 
-    const isTakeout = tipoDelivery === 'ParaLlevar';
     const isOwnDelivery = tipoDelivery === 'DeliveryPropio';
 
     // Validación defensiva: no crear pedidos sin ítems
@@ -263,12 +259,9 @@ router.put('/api/pedidos/llevar/:id', requierePermiso('Caja'), validar({ body: p
     codigoPedidosYa,
     cajero,
     items,
-    total,
     tipoDelivery,
     montoDelivery,
-    telefono,
     nombreCliente,
-    clienteDireccion,
     metodoPago,
     numDocumento,
     montoEfectivo,
@@ -283,7 +276,6 @@ router.put('/api/pedidos/llevar/:id', requierePermiso('Caja'), validar({ body: p
   } = req.body;
 
   try {
-    const isTakeout = tipoDelivery === 'ParaLlevar';
     const isOwnDelivery = tipoDelivery === 'DeliveryPropio';
 
     const shippingFee = parseFloat(montoDelivery || 0);

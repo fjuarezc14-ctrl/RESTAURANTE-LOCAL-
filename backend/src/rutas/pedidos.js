@@ -474,24 +474,24 @@ router.patch('/api/pedidos/:id/cancelar', requierePermiso('Salon', 'Caja'), vali
 });
 
 // GET /api/cocina/cancelaciones → Devuelve las alertas de cancelación pendientes de confirmación para Cocina
-router.get('/api/cocina/cancelaciones', requierePermiso('Cocina'), (req, res, next) => {
+router.get('/api/cocina/cancelaciones', requierePermiso('Cocina'), (req, res) => {
   res.json(alertasCancelacion.cocina);
 });
 
 // DELETE /api/cocina/cancelaciones/:id → Cocina confirma que vio la alerta ("Entendido")
-router.delete('/api/cocina/cancelaciones/:id', requierePermiso('Cocina'), (req, res, next) => {
+router.delete('/api/cocina/cancelaciones/:id', requierePermiso('Cocina'), (req, res) => {
   const { id } = req.params;
   alertasCancelacion.cocina = alertasCancelacion.cocina.filter(c => c.id !== id);
   res.json({ ok: true });
 });
 
 // GET /api/barra/cancelaciones → Devuelve las alertas de cancelación pendientes de confirmación para Barra
-router.get('/api/barra/cancelaciones', requierePermiso('Barra'), (req, res, next) => {
+router.get('/api/barra/cancelaciones', requierePermiso('Barra'), (req, res) => {
   res.json(alertasCancelacion.barra);
 });
 
 // DELETE /api/barra/cancelaciones/:id → Barra confirma que vio la alerta ("Entendido")
-router.delete('/api/barra/cancelaciones/:id', requierePermiso('Barra'), (req, res, next) => {
+router.delete('/api/barra/cancelaciones/:id', requierePermiso('Barra'), (req, res) => {
   const { id } = req.params;
   alertasCancelacion.barra = alertasCancelacion.barra.filter(c => c.id !== id);
   res.json({ ok: true });

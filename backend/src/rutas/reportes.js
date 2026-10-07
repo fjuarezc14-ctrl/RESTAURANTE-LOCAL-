@@ -389,7 +389,6 @@ router.get('/api/reportes/pollos', requierePermiso('Reportes'), validar({ query:
     // Acumulación por producto
     const productos = {};
     let totalOctavos = 0, totalCuartos = 0, totalMedios = 0, totalEnteros = 0;
-    let unidadesTotales = 0;
     let ventasConPollo = 0;
 
     for (const p of pedidos) {
@@ -410,7 +409,6 @@ router.get('/api/reportes/pollos', requierePermiso('Reportes'), validar({ query:
           const unidades = fraccion * item.cantidad;
           productos[prodId].cantidadVendida += item.cantidad;
           productos[prodId].unidadesEquivalentes += unidades;
-          unidadesTotales += unidades;
           ventasConPollo++;
 
           if (fraccion === FRACCIONES['1/8']) totalOctavos += item.cantidad;

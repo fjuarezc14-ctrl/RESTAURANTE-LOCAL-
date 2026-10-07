@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, CheckCircle } from 'lucide-react';
 import { formatearMoneda } from '../../../utils/dinero';
 
