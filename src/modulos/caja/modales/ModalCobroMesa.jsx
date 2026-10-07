@@ -18,6 +18,7 @@ import { api } from '../../../api';
 import { formatearMoneda } from '../../../utils/dinero';
 import SelectorClienteCreditoCombobox from '../componentes/SelectorClienteCreditoCombobox';
 import { getEstiloMetodo } from '../constantes/metodosPago';
+import { campoCodigoPago } from '../componentes/camposCaja';
 
 /**
  * Modal principal para cobrar y liberar una mesa activa
@@ -70,22 +71,6 @@ export default function ModalCobroMesa({
     const n = parseFloat(String(val || '').replace(/,/g, '.'));
     return isNaN(n) ? 0 : n;
   },
-  campoCodigoPago = (valor, setValor, medio) => (
-    <div className="animate-fade-in">
-      <label className="block text-xs font-medium text-slate-500 mb-1.5">
-        {medio === 'Tarjeta' ? 'Nº de voucher / operación POS' : medio === 'Yape' ? 'Código de operación Yape / Plin' : 'Código de operación (Yape / tarjeta)'}
-      </label>
-      <input
-        type="text"
-        inputMode="numeric"
-        maxLength={60}
-        value={valor}
-        onChange={(e) => setValor(e.target.value)}
-        placeholder={medio === 'Tarjeta' ? 'Ej. 000456' : 'Ej. 123456'}
-        className="w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-sm font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5 transition"
-      />
-    </div>
-  ),
   estiloMetodo = getEstiloMetodo,
 }) {
   if (!abierto || !mesa) return null;

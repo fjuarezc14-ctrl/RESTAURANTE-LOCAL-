@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Receipt, X, Banknote, Search, Clock, Wallet, Truck, PackageCheck, Gift, Ban, Lock, History, ChevronDown, ChevronRight, ShoppingCart, UtensilsCrossed, Eye, EyeOff, Unlock, ArrowUpRight, ArrowLeftRight } from 'lucide-react';
+import { X } from 'lucide-react';
 
 import { api } from '../api';
 
@@ -29,9 +29,14 @@ import {
 } from '../modulos/caja/modales';
 import { useTurnoCaja, useVentasTurno, useCobroMesa, usePedidoDelivery } from '../modulos/caja/hooks';
 import { parseDeliveryInfo, parsearCreditoSplit, parseMonto } from '../utils/ventas';
-import { mesaCobrable, mesaEnPreparacion, platosEnPreparacion, platosSinServir, textoBloqueoMesa } from '../modulos/caja/utils/mesas';
-import { clienteDeVenta, esPedidoListo, horaMovimiento, itemsDeVenta, listaVentasTurno, origenDeVenta, origenPedido, resumenTurno, soles } from '../modulos/caja/utils/ventasTurno';
+import { mesaCobrable, mesaEnPreparacion, platosEnPreparacion, platosSinServir } from '../modulos/caja/utils/mesas';
+import { clienteDeVenta, esPedidoListo, itemsDeVenta, listaVentasTurno, origenDeVenta, origenPedido, resumenTurno, soles } from '../modulos/caja/utils/ventasTurno';
 import { getEstiloMetodo as estiloMetodo } from '../modulos/caja/constantes/metodosPago';
+import PanelVentasTurno from '../modulos/caja/componentes/PanelVentasTurno';
+import PanelPedidosLlevar from '../modulos/caja/componentes/PanelPedidosLlevar';
+import PanelMesasPorCobrar from '../modulos/caja/componentes/PanelMesasPorCobrar';
+import ResumenTurnoCaja from '../modulos/caja/componentes/ResumenTurnoCaja';
+import EncabezadoCaja from '../modulos/caja/componentes/EncabezadoCaja';
 
 export default function CajaPage({ currentUser }) {
   const { empresa: COMPANY_CONFIG } = useCompany();
@@ -314,54 +319,7 @@ export default function CajaPage({ currentUser }) {
   };
 
   // Cobro de mesas (formulario, confirmación y registro de la venta)
-  const {
-    modalOpen,
-    mesaSeleccionada,
-    tipoComprobante,
-    metodoPago,
-    codigoPago,
-    mixtoEfectivo,
-    mixtoTarjeta,
-    mixtoYape,
-    numDocumento,
-    clienteNombre,
-    clienteDireccion,
-    cobrando,
-    cortesiaItemIds,
-    motivoCortesia,
-    modalConfirmarCobro,
-    datosConfirmacionCobro,
-    consumoPin,
-    consumoPinError,
-    clienteCreditoSeleccionado,
-    clientesCreditoMixto,
-    incluirCreditoMixto,
-    pagaConEfectivoMesa,
-    setModalOpen,
-    setMesaSeleccionada,
-    setTipoComprobante,
-    setMetodoPago,
-    setCodigoPago,
-    setMixtoEfectivo,
-    setMixtoTarjeta,
-    setMixtoYape,
-    setNumDocumento,
-    setClienteNombre,
-    setClienteDireccion,
-    setCortesiaItemIds,
-    setMotivoCortesia,
-    setModalConfirmarCobro,
-    setConsumoPin,
-    setConsumoPinError,
-    setClienteCreditoSeleccionado,
-    setClientesCreditoMixto,
-    setIncluirCreditoMixto,
-    setPagaConEfectivoMesa,
-    handleDocumentoChange,
-    procesarCobroYFacturar,
-    ejecutarCobroFinal,
-    abrirCobroMesa,
-  } = useCobroMesa({
+  const cobro = useCobroMesa({
     aviso,
     addToast,
     clientes,
@@ -371,92 +329,21 @@ export default function CajaPage({ currentUser }) {
     fetchCajaData,
     abrirTicketImpresionDirecto,
   });
+  const {
+    modalOpen,
+    mesaSeleccionada,
+    metodoPago,
+    cobrando,
+    modalConfirmarCobro,
+    datosConfirmacionCobro,
+    setModalOpen,
+    setModalConfirmarCobro,
+    ejecutarCobroFinal,
+    abrirCobroMesa,
+  } = cobro;
 
   // Pedido para llevar / delivery / PedidosYa (estado, productos, pago y envío a cocina)
-  const {
-    deliveryCodigoPago,
-    deliveryMotivoCortesia,
-    deliveryTelefono,
-    deliveryDireccion,
-    deliveryMontoEnvio,
-    deliveryConCuanto,
-    deliveryTipoComprobante,
-    deliveryMetodoPago,
-    deliveryMixtoEfectivo,
-    deliveryMixtoTarjeta,
-    deliveryMixtoYape,
-    deliveryClienteNombre,
-    deliveryNumDocumento,
-    isBuscando,
-    deliveryMontoCredito,
-    deliveryClienteCreditoSeleccionado,
-    deliveryDescuentoValor,
-    deliveryDescuentoTipo,
-    deliveryVistaMovil,
-    pinAdminDelivery,
-    cortesiaDeliveryIndices,
-    deliveryModal,
-    codigoPY,
-    deliverySearchQuery,
-    deliveryCategoriaFiltro,
-    deliveryCategoriasModalOpen,
-    optionsModalOpen,
-    selectedProduct,
-    itemsDelivery,
-    editingPedidoId,
-    enviandoDelivery,
-    tipoDelivery,
-    setDeliveryCodigoPago,
-    setDeliveryMotivoCortesia,
-    setDeliveryTelefono,
-    setDeliveryDireccion,
-    setDeliveryMontoEnvio,
-    setDeliveryConCuanto,
-    setDeliveryTipoComprobante,
-    setDeliveryMetodoPago,
-    setDeliveryMixtoEfectivo,
-    setDeliveryMixtoTarjeta,
-    setDeliveryMixtoYape,
-    setDeliveryClienteNombre,
-    setDeliveryNumDocumento,
-    setDeliveryMontoCredito,
-    setDeliveryClienteCreditoSeleccionado,
-    setDeliveryDescuentoValor,
-    setDeliveryDescuentoTipo,
-    setDeliveryVistaMovil,
-    setPinAdminDelivery,
-    setCortesiaDeliveryIndices,
-    setDeliveryModal,
-    setCodigoPY,
-    setDeliverySearchQuery,
-    setDeliveryCategoriaFiltro,
-    setDeliveryCategoriasModalOpen,
-    setOptionsModalOpen,
-    setSelectedProduct,
-    setItemsDelivery,
-    setEditingPedidoId,
-    setTipoDelivery,
-    deliverySearchInputRef,
-    buscarClienteDelivery,
-    abrirDeliveryModal,
-    iniciarModificarDelivery,
-    getProductSteps,
-    agregarItemDelivery,
-    agregarItemDeliveryDirecto,
-    alterarItemDelivery,
-    alterarNotasDelivery,
-    enviarDeliveryACocina,
-    totalDelivery,
-    deliveryDescVal,
-    deliveryDescPct,
-    deliveryDescuentoMonto,
-    deliveryShippingFee,
-    grandTotalDelivery,
-    CATEGORIAS_VISIBLES,
-    deliveryCategoriasOrdenadas,
-    deliveryCategoriasBarra,
-    contarProductosCategoriaDelivery,
-  } = usePedidoDelivery({
+  const delivery = usePedidoDelivery({
     aviso,
     usuarioOperador,
     cajaEstado,
@@ -467,6 +354,28 @@ export default function CajaPage({ currentUser }) {
     avisarPedidosYaPrueba,
     abrirTicketImpresionDirecto,
   });
+  const {
+    deliveryModal,
+    deliveryCategoriaFiltro,
+    deliveryCategoriasModalOpen,
+    optionsModalOpen,
+    selectedProduct,
+    setDeliveryModal,
+    setCodigoPY,
+    setDeliveryCategoriaFiltro,
+    setDeliveryCategoriasModalOpen,
+    setOptionsModalOpen,
+    setSelectedProduct,
+    setItemsDelivery,
+    setEditingPedidoId,
+    abrirDeliveryModal,
+    iniciarModificarDelivery,
+    getProductSteps,
+    agregarItemDeliveryDirecto,
+    deliveryCategoriasOrdenadas,
+    deliveryCategoriasBarra,
+    contarProductosCategoriaDelivery,
+  } = delivery;
 
 
 
@@ -657,31 +566,6 @@ export default function CajaPage({ currentUser }) {
 
 
 
-  const estadoChip = (listo, textoListo, textoPendiente) => (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${listo ? 'text-emerald-700' : 'text-amber-700'}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${listo ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-      {listo ? textoListo : textoPendiente}
-    </span>
-  );
-
-  // Campo del Nº de operación (Yape/Plin) o voucher (tarjeta), para verificar el pago después
-  const campoCodigoPago = (valor, setValor, medio) => (
-    <div className="animate-fade-in">
-      <label className="block text-xs font-medium text-slate-500 mb-1.5">
-        {medio === 'Tarjeta' ? 'Nº de voucher / operación POS' : medio === 'Yape' ? 'Código de operación Yape / Plin' : 'Código de operación (Yape / tarjeta)'}
-      </label>
-      <input
-        type="text"
-        inputMode="numeric"
-        maxLength={60}
-        value={valor}
-        onChange={(e) => setValor(e.target.value)}
-        placeholder="Ej. 01234567"
-        className="w-full h-11 bg-white border border-slate-200 rounded-xl px-3 text-sm font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5 transition"
-      />
-    </div>
-  );
-
   if (!deliveryCategoriasBarra.includes(deliveryCategoriaFiltro) && deliveryCategoriasOrdenadas.includes(deliveryCategoriaFiltro)) {
     deliveryCategoriasBarra.push(deliveryCategoriaFiltro);
   }
@@ -729,415 +613,64 @@ export default function CajaPage({ currentUser }) {
   return (
     <section className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50">
       <div className="max-w-[1600px] mx-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-7 space-y-5">
+        <EncabezadoCaja
+          abrirDeliveryModal={abrirDeliveryModal}
+          abrirHistorialCierres={abrirHistorialCierres}
+          abrirMovimientoGaveta={abrirMovimientoGaveta}
+          cajaEstado={cajaEstado}
+          cajeroNombre={cajeroNombre}
+          setCierreModalOpen={setCierreModalOpen}
+          setModalAperturaOpen={setModalAperturaOpen}
+        />
 
-        {/* ENCABEZADO + ESTADO DEL TURNO */}
-        <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Caja</h1>
-            {!cajaEstado.cargando && cajaEstado.abierto && (
-              <p className="mt-1 text-sm text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" /> Turno abierto
-                </span>
-                <span className="text-slate-300">·</span>
-                <span className="truncate">{cajaEstado.turno?.cajeroNombre || cajeroNombre}</span>
-                <span className="text-slate-300">·</span>
-                <span>desde {cajaEstado.turno?.fechaApertura ? new Date(cajaEstado.turno.fechaApertura).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '--'}</span>
-                <span className="text-slate-300">·</span>
-                <span>Fondo <span className="font-mono text-slate-700">{soles(cajaEstado.turno?.montoInicial)}</span></span>
-                {(() => {
-                  const notaLimpia = (cajaEstado.turno?.notaApertura || '').replace(/\[Conteo inicial:.*?\]/g, '').trim();
-                  return notaLimpia ? <span className="italic text-slate-400 truncate">“{notaLimpia}”</span> : null;
-                })()}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2 flex-nowrap shrink-0 overflow-x-auto custom-scrollbar pb-1 lg:pb-0">
-            <button
-              type="button"
-              onClick={abrirHistorialCierres}
-              className="h-10 px-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shrink-0 whitespace-nowrap"
-              title="Historial de cierres"
-            >
-              <History className="w-4 h-4" /> <span className="hidden sm:inline">Cierres</span>
-            </button>
-            {cajaEstado.abierto && (
-              <button
-                type="button"
-                onClick={() => abrirMovimientoGaveta('RETIRO')}
-                className="h-10 px-3.5 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs active:scale-[0.98] shrink-0 whitespace-nowrap"
-                title="Retirar o ingresar dinero en la gaveta física"
-              >
-                <ArrowLeftRight className="w-4 h-4 text-slate-500" />
-                <span>Movimiento de caja</span>
-              </button>
-            )}
-            {cajaEstado.abierto ? (
-              <button
-                type="button"
-                onClick={() => setCierreModalOpen(true)}
-                className="h-10 px-3.5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs active:scale-[0.98] shrink-0 whitespace-nowrap"
-                title="Realizar arqueo físico y cerrar turno"
-              >
-                <Lock className="w-4 h-4 text-rose-600" /> Cerrar caja
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setModalAperturaOpen(true)}
-                className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-sm font-bold text-white shadow-sm shadow-emerald-600/25 transition-all active:scale-[0.98] shrink-0 whitespace-nowrap"
-                title="Iniciar turno y registrar fondo de sencillo"
-              >
-                <Unlock className="w-4 h-4" /> Abrir caja
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={abrirDeliveryModal}
-              className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-sky-600 text-sm font-semibold text-white hover:bg-sky-700 shadow-sm shadow-sky-600/25 transition-colors active:scale-[0.98] shrink-0 whitespace-nowrap"
-            >
-              <ShoppingCart className="w-4 h-4" /> Nuevo pedido
-            </button>
-          </div>
-        </header>
-
-        {!cajaEstado.cargando && !cajaEstado.abierto && (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-rose-500 text-white grid place-items-center shrink-0">
-              <Lock className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-rose-800">Caja cerrada</p>
-              <p className="text-sm text-rose-700/80">Inicia un turno con el fondo de sencillo usando el botón "Abrir caja" para habilitar cobros y pedidos.</p>
-            </div>
-          </div>
-        )}
-
-        {/* RESUMEN DEL TURNO */}
-        <div className={`grid grid-cols-2 lg:grid-cols-5 gap-3 ${ingresosDesglose ? 'items-start' : ''}`}>
-          <div className="col-span-2 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white p-4 sm:p-5 shadow-sm shadow-emerald-600/20">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-medium text-emerald-50/90">Ingresos en caja</p>
-              <span className="w-8 h-8 rounded-lg bg-white/15 grid place-items-center"><Banknote className="w-4 h-4" /></span>
-            </div>
-            <div className="mt-1 flex items-center justify-between gap-2">
-              <p className="text-2xl sm:text-3xl font-semibold font-mono tabular-nums tracking-tight truncate">{soles(activeIngresosCaja)}</p>
-              <button
-                type="button"
-                onClick={() => setIngresosDesglose(v => !v)}
-                className="h-7 pl-2.5 pr-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-[11px] font-medium inline-flex items-center gap-1 transition-colors shrink-0"
-                aria-expanded={ingresosDesglose}
-                title={ingresosDesglose ? 'Ocultar detalle' : 'Ver efectivo, tarjeta y Yape'}
-              >
-                Detalle <ChevronDown className={`w-4 h-4 transition-transform ${ingresosDesglose ? 'rotate-180' : ''}`} />
-              </button>
-            </div>
-            {ingresosDesglose && (
-            <div className="mt-3 pt-3 border-t border-white/20 grid grid-cols-3 gap-2 text-xs animate-fade-in">
-              {[['Efectivo', activeEfectivo], ['Tarjeta', activeTarjeta], ['Yape', activeYape]].map(([label, monto]) => (
-                <div key={label} className="min-w-0">
-                  <p className="text-emerald-50/75">{label}</p>
-                  <p className="font-mono tabular-nums text-white truncate">{soles(monto)}</p>
-                </div>
-              ))}
-            </div>
-            )}
-          </div>
-          {[
-            { label: 'Ventas', valor: ventasTurno.length, hint: `${mesasPendientes.length + pedidosLlevar.length} por cobrar/entregar`, Icon: Receipt, color: 'bg-sky-50 text-sky-600', borde: 'border-t-sky-500' },
-            { label: 'Créditos', valor: soles(totalCreditosTurno), hint: `Clientes ${soles(activeConsumoClientes)} · Planilla ${soles(activeConsumoPlanilla)}`, Icon: Wallet, color: 'bg-teal-50 text-teal-600', borde: 'border-t-teal-500' },
-            { label: 'Cortesías', valor: soles(activeCortesias), hint: 'Valor referencial', Icon: Gift, color: 'bg-orange-50 text-orange-600', borde: 'border-t-orange-500' },
-          ].map(({ label, valor, hint, Icon, color, borde }) => (
-            <div key={label} className={`rounded-2xl border border-slate-200/70 border-t-4 ${borde} bg-white p-4 min-w-0`}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-medium text-slate-500">{label}</p>
-                <span className={`w-8 h-8 rounded-lg grid place-items-center ${color}`}><Icon className="w-4 h-4" /></span>
-              </div>
-              <p className="mt-1 text-lg sm:text-xl font-semibold text-slate-900 font-mono tabular-nums truncate">{valor}</p>
-              <p className="mt-1 text-[11px] leading-snug text-slate-400">{hint}</p>
-            </div>
-          ))}
-        </div>
-
+        <ResumenTurnoCaja
+          activeConsumoClientes={activeConsumoClientes}
+          activeConsumoPlanilla={activeConsumoPlanilla}
+          activeCortesias={activeCortesias}
+          activeEfectivo={activeEfectivo}
+          activeIngresosCaja={activeIngresosCaja}
+          activeTarjeta={activeTarjeta}
+          activeYape={activeYape}
+          ingresosDesglose={ingresosDesglose}
+          mesasPendientes={mesasPendientes}
+          pedidosLlevar={pedidosLlevar}
+          setIngresosDesglose={setIngresosDesglose}
+          totalCreditosTurno={totalCreditosTurno}
+          ventasTurno={ventasTurno}
+        />
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 items-start">
           <div className="xl:col-span-3 space-y-5 min-w-0">
 
-            {/* MESAS PENDIENTES POR COBRAR */}
-            <section className="bg-white rounded-2xl border border-slate-200/70">
-              <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-slate-100">
-                <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 grid place-items-center"><UtensilsCrossed className="w-4 h-4" /></span> Mesas por cobrar
-                </h2>
-                <span className="text-xs font-semibold text-amber-700 bg-amber-50 rounded-full px-2.5 py-0.5">{mesasPendientes.length}</span>
-              </div>
-              {mesasPendientes.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-3 p-3 sm:p-4">
-                  {mesasPendientes.map(m => {
-                    const items = (m.pedidoData?.items || []).filter(Boolean);
-                    const unidades = items.reduce((s, i) => s + (i.cant || 0), 0);
-                    const listo = mesaCobrable(m);
-                    return (
-                      <div
-                        key={m.num}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setMesaDetalleNum(m.num)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') setMesaDetalleNum(m.num); }}
-                        className={`group rounded-xl border border-slate-200 border-l-4 ${listo ? 'border-l-emerald-500' : 'border-l-amber-400'} bg-white p-3.5 flex flex-col gap-3 cursor-pointer hover:border-slate-300 hover:shadow-md transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/20`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-slate-900 text-amber-400 grid place-items-center text-sm font-bold shrink-0">{m.num}</div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline justify-between gap-2">
-                              <p className="font-semibold text-slate-900 truncate">Mesa {m.num}</p>
-                              <p className="font-mono font-semibold text-slate-900 tabular-nums shrink-0">{soles(m.pedidoData?.total)}</p>
-                            </div>
-                            <p className="text-xs text-slate-500 truncate">{m.pedidoData?.mesero || '—'} · {m.pedidoData?.hora}</p>
-                          </div>
-                        </div>
-                        <p className="text-xs text-slate-500 truncate">
-                          <span className="font-medium text-slate-700">{unidades} ítem{unidades !== 1 ? 's' : ''}</span>
-                          {items.length > 0 && <> · {items.map(i => `${i.cant}× ${i.nombre}`).join(', ')}</>}
-                        </p>
-                        <div className="flex items-center justify-between gap-2 mt-auto">
-                          <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                            {estadoChip(listo, 'Listo p/ cobrar', mesaEnPreparacion(m) ? 'En preparación' : 'Por servir')}
-                            {m.pedidoData?.estadoEnsalada === 'Pendiente' && <span className="text-[11px] text-emerald-700 bg-emerald-50 rounded-md px-1.5 py-0.5">🥗 Pendiente</span>}
-                            {m.pedidoData?.estadoEnsalada === 'Listo' && <span className="text-[11px] text-blue-700 bg-blue-50 rounded-md px-1.5 py-0.5">🥗 Lista</span>}
-                          </div>
-                          {listo ? (
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); abrirCobroMesa(m); }}
-                              className="h-8 px-3.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 shadow-sm shadow-emerald-600/25 transition-colors active:scale-95 shrink-0"
-                            >
-                              Cobrar
-                            </button>
-                          ) : (
-                            <span
-                              className="h-8 px-3 rounded-lg bg-slate-100 text-slate-400 text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-not-allowed"
-                              title="Se podrá cobrar cuando el mozo marque todos los platos como servidos"
-                            >
-                              <Clock className="w-3.5 h-3.5" /> {textoBloqueoMesa(m)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="px-5 py-10 text-center text-sm text-slate-400">No hay mesas pendientes por cobrar.</p>
-              )}
-            </section>
+            <PanelMesasPorCobrar
+              abrirCobroMesa={abrirCobroMesa}
+              mesasPendientes={mesasPendientes}
+              setMesaDetalleNum={setMesaDetalleNum}
+            />
 
-            {/* PEDIDOS PARA LLEVAR / DELIVERY */}
-            {pedidosLlevar.length > 0 && (
-              <section className="bg-white rounded-2xl border border-slate-200/70">
-                <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-slate-100">
-                  <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                    <span className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 grid place-items-center"><Truck className="w-4 h-4" /></span> Para llevar y delivery
-                  </h2>
-                  <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-full px-2.5 py-0.5">{pedidosLlevar.length}</span>
-                </div>
-                <ul className="divide-y divide-slate-100">
-                  {pedidosLlevar.map(p => {
-                    const o = origenPedido(p.codigoPedidosYa, p);
-                    const listo = esPedidoListo(p);
-                    return (
-                      <li
-                        key={p.pedidoId}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setPedidoDetalleId(p.pedidoId)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') setPedidoDetalleId(p.pedidoId); }}
-                        className="flex items-center gap-3 px-4 sm:px-5 py-3 cursor-pointer hover:bg-slate-50 transition-colors focus:outline-none focus-visible:bg-slate-50"
-                      >
-                        <div className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${o.color}`}>
-                          <o.Icon className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-slate-900 truncate">{o.nombre}</p>
-                          <div className="flex items-center gap-2 text-xs text-slate-500 min-w-0">
-                            <span className="shrink-0">{o.etiqueta} · {p.hora}</span>
-                            <span className="hidden sm:inline">{estadoChip(listo, 'Listo', 'En cocina')}</span>
-                          </div>
-                        </div>
-                        <p className="font-mono text-sm font-semibold text-slate-900 tabular-nums shrink-0">{soles(p.total)}</p>
-                        {listo ? (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); confirmarEntregaDelivery(p.pedidoId, p.codigoPedidosYa); }}
-                            className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors active:scale-95 shrink-0 inline-flex items-center gap-1.5"
-                          >
-                            <PackageCheck className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Entregar</span>
-                          </button>
-                        ) : (
-                          <span className="sm:hidden">{estadoChip(false, '', '')}</span>
-                        )}
-                        <ChevronRight className="w-4 h-4 text-slate-300 shrink-0 hidden sm:block" />
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            )}
+            <PanelPedidosLlevar
+              confirmarEntregaDelivery={confirmarEntregaDelivery}
+              pedidosLlevar={pedidosLlevar}
+              setPedidoDetalleId={setPedidoDetalleId}
+            />
           </div>
 
-          {/* ÚLTIMAS VENTAS */}
-          <section className="xl:col-span-2 bg-white rounded-2xl border border-slate-200/70 min-w-0">
-            <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-slate-100">
-              <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 grid place-items-center"><Receipt className="w-4 h-4" /></span> Ventas y Salidas de Turno
-                <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 rounded-full px-2.5 py-0.5">{ventasLista.length}</span>
-              </h2>
-              <button
-                type="button"
-                onClick={() => setHistorialColapsado(prev => !prev)}
-                className="p-2 -m-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                title={historialColapsado ? 'Mostrar ventas' : 'Ocultar ventas'}
-              >
-                {historialColapsado ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-              </button>
-            </div>
-
-            {!historialColapsado ? (
-              <>
-                <div className="px-4 sm:px-5 py-3 flex flex-wrap items-center gap-2 border-b border-slate-100">
-                  <div className="relative flex-1 min-w-[160px]">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      type="search"
-                      value={busquedaVentas}
-                      onChange={(e) => { setBusquedaVentas(e.target.value); setVentasLimite(20); }}
-                      placeholder="Buscar venta, cliente, mesa…"
-                      className="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-100/80 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-slate-900/10"
-                    />
-                  </div>
-                  <select
-                    value={filtroMetodoPago}
-                    onChange={(e) => { setFiltroMetodoPago(e.target.value); setVentasLimite(20); }}
-                    className="h-9 px-2.5 rounded-lg bg-slate-100/80 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-                  >
-                    <option value="Todos">Todos</option>
-                    <option value="Efectivo">Efectivo</option>
-                    <option value="Tarjeta">Tarjeta</option>
-                    <option value="Yape">Yape / Plin</option>
-                    <option value="PedidosYa">PedidosYa</option>
-                    <option value="Cortesía">Cortesías</option>
-                    <option value="Salidas">💸 Salidas de caja</option>
-                  </select>
-                  {ultimoCierre && (
-                    <div className="inline-flex h-9 p-0.5 rounded-lg bg-slate-100/80 text-xs font-medium">
-                      {[[false, 'Turno'], [true, 'Día']].map(([valor, label]) => (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => { setMostrarTodoElDia(valor); setVentasLimite(20); }}
-                          className={`px-3 rounded-md transition-colors ${mostrarTodoElDia === valor ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-                          title={valor ? 'Mostrar todas las ventas del día' : 'Solo ventas del turno activo'}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {ventasVisibles.length > 0 ? (
-                  <ul className="divide-y divide-slate-100">
-                    {ventasVisibles.map(fila => {
-                      if (fila.tipoFila === 'movimiento') {
-                        const m = fila.mov;
-                        const esIngreso = m.tipo === 'INGRESO';
-                        return (
-                          <li key={`mov-${m.id}`} className="flex items-center gap-3 px-4 sm:px-5 py-3">
-                            <div className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
-                              <ArrowUpRight className={`w-4 h-4 ${esIngreso ? 'rotate-180' : ''}`} />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium truncate text-slate-900">
-                                {esIngreso ? 'Ingreso de Caja' : 'Salida de Caja'} <span className="text-slate-300">·</span> {m.motivo}
-                              </p>
-                              <p className="text-xs text-slate-500 truncate">
-                                {horaMovimiento(m.creadoEn)}
-                                {m.cajeroNombre && <> · <span className="text-slate-600">{m.cajeroNombre}</span></>}
-                              </p>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className={`font-mono text-sm font-semibold tabular-nums ${esIngreso ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {esIngreso ? '+ ' : '- '}{soles(m.monto)}
-                              </p>
-                              <p className={`text-[11px] font-medium ${esIngreso ? 'text-emerald-600' : 'text-red-600'}`}>Efectivo</p>
-                            </div>
-                          </li>
-                        );
-                      }
-                      const v = fila.venta;
-                      const est = estiloMetodo(v.metodoPago);
-                      const conCortesia = v.metodoPago === 'Cortesía' || v.itemsResumen?.includes('CORTESÍA');
-                      return (
-                        <li key={v.id}>
-                          <button
-                            type="button"
-                            onClick={() => setVentaDetalleId(v.id)}
-                            className="w-full text-left flex items-center gap-3 px-4 sm:px-5 py-3 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:bg-slate-50"
-                          >
-                            <div className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${v.anulado ? 'bg-red-50 text-red-500' : est.chip}`}>
-                              {v.anulado ? <Ban className="w-4 h-4" /> : <est.Icon className="w-4 h-4" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className={`text-sm font-medium truncate ${v.anulado ? 'text-slate-400' : 'text-slate-900'}`}>
-                                {origenDeVenta(v)} <span className="text-slate-300">·</span> {clienteDeVenta(v)}
-                              </p>
-                              <p className="text-xs text-slate-500 truncate">
-                                <span className="font-mono">#VT-{v.id}</span> · {v.hora}
-                                {v.cajeroNombre && <> · <span className="text-slate-600">{v.cajeroNombre}</span></>}
-                                {v.descuentoAplicado > 0 && !v.anulado && <span className="text-blue-600"> · Desc.</span>}
-                                {conCortesia && !v.anulado && <span className="text-orange-600"> · Cortesía</span>}
-                              </p>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className={`font-mono text-sm font-semibold tabular-nums ${v.anulado ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-                                {soles(v.anulado ? (v.montoOriginal ?? v.total) : v.total)}
-                              </p>
-                              <p className={`text-[11px] font-medium ${v.anulado ? 'text-red-600' : est.text}`}>{v.anulado ? 'Devuelto' : v.metodoPago}</p>
-                            </div>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p className="px-5 py-10 text-center text-sm text-slate-400">
-                    {soloSalidas && !busquedaVentasNorm
-                      ? 'No hay salidas de caja en este turno.'
-                      : (busquedaVentasNorm || filtroMetodoPago !== 'Todos' ? 'Nada coincide con el filtro.' : 'Aún no se registran ventas en este turno.')}
-                  </p>
-                )}
-
-                {ventasLista.length > ventasVisibles.length && (
-                  <div className="px-4 py-3 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setVentasLimite(l => l + 20)}
-                      className="w-full h-9 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                    >
-                      Mostrar más ({ventasLista.length - ventasVisibles.length})
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setHistorialColapsado(false)}
-                className="w-full px-5 py-8 text-sm text-slate-400 hover:text-slate-700 transition-colors"
-              >
-                Historial oculto · toca para mostrar
-              </button>
-            )}
-          </section>
+          <PanelVentasTurno
+            busquedaVentas={busquedaVentas}
+            busquedaVentasNorm={busquedaVentasNorm}
+            filtroMetodoPago={filtroMetodoPago}
+            historialColapsado={historialColapsado}
+            mostrarTodoElDia={mostrarTodoElDia}
+            setBusquedaVentas={setBusquedaVentas}
+            setFiltroMetodoPago={setFiltroMetodoPago}
+            setHistorialColapsado={setHistorialColapsado}
+            setMostrarTodoElDia={setMostrarTodoElDia}
+            setVentaDetalleId={setVentaDetalleId}
+            setVentasLimite={setVentasLimite}
+            soloSalidas={soloSalidas}
+            ultimoCierre={ultimoCierre}
+            ventasLista={ventasLista}
+            ventasVisibles={ventasVisibles}
+          />
         </div>
       </div>
 
@@ -1191,52 +724,14 @@ export default function CajaPage({ currentUser }) {
 
       {/* MODAL DE COBRO (MESAS) */}
       <ModalCobroMesa
+        {...cobro}
         abierto={modalOpen && !!mesaSeleccionada}
         mesa={mesaSeleccionada}
         onCerrar={() => setModalOpen(false)}
         productosMenu={productosMenu}
-        metodoPago={metodoPago}
-        setMetodoPago={setMetodoPago}
-        cortesiaItemIds={cortesiaItemIds}
-        setCortesiaItemIds={setCortesiaItemIds}
-        pagaConEfectivoMesa={pagaConEfectivoMesa}
-        setPagaConEfectivoMesa={setPagaConEfectivoMesa}
-        mixtoEfectivo={mixtoEfectivo}
-        setMixtoEfectivo={setMixtoEfectivo}
-        mixtoTarjeta={mixtoTarjeta}
-        setMixtoTarjeta={setMixtoTarjeta}
-        mixtoYape={mixtoYape}
-        setMixtoYape={setMixtoYape}
-        codigoPago={codigoPago}
-        setCodigoPago={setCodigoPago}
-        consumoPin={consumoPin}
-        setConsumoPin={setConsumoPin}
-        consumoPinError={consumoPinError}
-        setConsumoPinError={setConsumoPinError}
-        motivoCortesia={motivoCortesia}
-        setMotivoCortesia={setMotivoCortesia}
         clientes={clientes}
-        clienteCreditoSeleccionado={clienteCreditoSeleccionado}
-        setClienteCreditoSeleccionado={setClienteCreditoSeleccionado}
-        incluirCreditoMixto={incluirCreditoMixto}
-        setIncluirCreditoMixto={setIncluirCreditoMixto}
-        clientesCreditoMixto={clientesCreditoMixto}
-        setClientesCreditoMixto={setClientesCreditoMixto}
-        tipoComprobante={tipoComprobante}
-        setTipoComprobante={setTipoComprobante}
-        numDocumento={numDocumento}
-        setNumDocumento={setNumDocumento}
-        handleDocumentoChange={handleDocumentoChange}
-        clienteNombre={clienteNombre}
-        setClienteNombre={setClienteNombre}
-        clienteDireccion={clienteDireccion}
-        setClienteDireccion={setClienteDireccion}
-        procesarCobroYFacturar={procesarCobroYFacturar}
-        cobrando={cobrando}
-        setMesaSeleccionada={setMesaSeleccionada}
         soles={soles}
         parseMonto={parseMonto}
-        campoCodigoPago={campoCodigoPago}
         estiloMetodo={estiloMetodo}
       />
 
@@ -1264,6 +759,7 @@ export default function CajaPage({ currentUser }) {
 
       {/* MODAL PEDIDOS YA */}
       <ModalNuevoPedidoDelivery
+        {...delivery}
         abierto={deliveryModal}
         onCerrar={() => {
           setDeliveryModal(false);
@@ -1271,82 +767,11 @@ export default function CajaPage({ currentUser }) {
           setItemsDelivery([]);
           setEditingPedidoId(null);
         }}
-        editingPedidoId={editingPedidoId}
-        setEditingPedidoId={setEditingPedidoId}
         usuarioOperador={usuarioOperador}
-        tipoDelivery={tipoDelivery}
-        setTipoDelivery={setTipoDelivery}
-        codigoPY={codigoPY}
-        setCodigoPY={setCodigoPY}
-        deliveryMontoEnvio={deliveryMontoEnvio}
-        setDeliveryMontoEnvio={setDeliveryMontoEnvio}
         avisarPedidosYaPrueba={avisarPedidosYaPrueba}
-        deliveryVistaMovil={deliveryVistaMovil}
-        setDeliveryVistaMovil={setDeliveryVistaMovil}
-        deliverySearchInputRef={deliverySearchInputRef}
-        deliverySearchQuery={deliverySearchQuery}
-        setDeliverySearchQuery={setDeliverySearchQuery}
-        deliveryCategoriaFiltro={deliveryCategoriaFiltro}
-        setDeliveryCategoriaFiltro={setDeliveryCategoriaFiltro}
-        deliveryCategoriasBarra={deliveryCategoriasBarra}
-        deliveryCategoriasOrdenadas={deliveryCategoriasOrdenadas}
-        CATEGORIAS_VISIBLES={CATEGORIAS_VISIBLES}
-        setDeliveryCategoriasModalOpen={setDeliveryCategoriasModalOpen}
         productosMenu={productosMenu}
-        agregarItemDelivery={agregarItemDelivery}
-        alterarItemDelivery={alterarItemDelivery}
-        alterarNotasDelivery={alterarNotasDelivery}
-        itemsDelivery={itemsDelivery}
-        setItemsDelivery={setItemsDelivery}
-        cortesiaDeliveryIndices={cortesiaDeliveryIndices}
-        setCortesiaDeliveryIndices={setCortesiaDeliveryIndices}
-        deliveryDescuentoTipo={deliveryDescuentoTipo}
-        setDeliveryDescuentoTipo={setDeliveryDescuentoTipo}
-        deliveryDescuentoValor={deliveryDescuentoValor}
-        setDeliveryDescuentoValor={setDeliveryDescuentoValor}
-        deliveryDescVal={deliveryDescVal}
-        deliveryDescPct={deliveryDescPct}
-        deliveryDescuentoMonto={deliveryDescuentoMonto}
-        totalDelivery={totalDelivery}
-        deliveryShippingFee={deliveryShippingFee}
-        grandTotalDelivery={grandTotalDelivery}
-        deliveryMetodoPago={deliveryMetodoPago}
-        setDeliveryMetodoPago={setDeliveryMetodoPago}
-        deliveryTipoComprobante={deliveryTipoComprobante}
-        setDeliveryTipoComprobante={setDeliveryTipoComprobante}
-        deliveryConCuanto={deliveryConCuanto}
-        setDeliveryConCuanto={setDeliveryConCuanto}
-        deliveryClienteNombre={deliveryClienteNombre}
-        setDeliveryClienteNombre={setDeliveryClienteNombre}
-        deliveryTelefono={deliveryTelefono}
-        setDeliveryTelefono={setDeliveryTelefono}
-        deliveryDireccion={deliveryDireccion}
-        setDeliveryDireccion={setDeliveryDireccion}
-        deliveryNumDocumento={deliveryNumDocumento}
-        setDeliveryNumDocumento={setDeliveryNumDocumento}
-        buscarClienteDelivery={buscarClienteDelivery}
-        isBuscando={isBuscando}
-        deliveryCodigoPago={deliveryCodigoPago}
-        setDeliveryCodigoPago={setDeliveryCodigoPago}
-        deliveryMixtoEfectivo={deliveryMixtoEfectivo}
-        setDeliveryMixtoEfectivo={setDeliveryMixtoEfectivo}
-        deliveryMixtoTarjeta={deliveryMixtoTarjeta}
-        setDeliveryMixtoTarjeta={setDeliveryMixtoTarjeta}
-        deliveryMixtoYape={deliveryMixtoYape}
-        setDeliveryMixtoYape={setDeliveryMixtoYape}
-        deliveryMontoCredito={deliveryMontoCredito}
-        setDeliveryMontoCredito={setDeliveryMontoCredito}
-        deliveryClienteCreditoSeleccionado={deliveryClienteCreditoSeleccionado}
-        setDeliveryClienteCreditoSeleccionado={setDeliveryClienteCreditoSeleccionado}
         clientes={clientes}
-        pinAdminDelivery={pinAdminDelivery}
-        setPinAdminDelivery={setPinAdminDelivery}
-        deliveryMotivoCortesia={deliveryMotivoCortesia}
-        setDeliveryMotivoCortesia={setDeliveryMotivoCortesia}
-        enviarDeliveryACocina={enviarDeliveryACocina}
-        enviandoDelivery={enviandoDelivery}
         soles={soles}
-        campoCodigoPago={campoCodigoPago}
         estiloMetodo={estiloMetodo}
       />
 
