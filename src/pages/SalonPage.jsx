@@ -16,20 +16,13 @@ import {
   ModalAdminMesas,
   ModalCancelarItem,
 } from '../modulos/salon/modales';
+import AvisosFlotantes from '../modulos/salon/componentes/AvisosFlotantes';
 import ModalOpcionesProducto from '../modulos/caja/modales/ModalOpcionesProducto';
 
-const LIMITE_CANCELACION_MS = 5 * 60 * 1000;
 
 const BARRA_CATEGORIAS = (COMPANY_CONFIG.barraCategorias && Array.isArray(COMPANY_CONFIG.barraCategorias))
   ? COMPANY_CONFIG.barraCategorias
   : DEFAULT_BARRA_CATEGORIAS;
-
-function formatCuentaRegresiva(ms) {
-  const seg = Math.max(0, Math.floor(ms / 1000));
-  const min = Math.floor(seg / 60);
-  const s = seg % 60;
-  return `${min}:${s.toString().padStart(2, '0')}`;
-}
 
 // --- SISTEMA DE AUDIO Y VIBRACIÓN OPTIMIZADO PARA SALÓN / MOZOS ---
 let globalAudioCtx = null;
@@ -178,7 +171,6 @@ export default function SalonPage({ currentUser }) {
   const [cancelModal, setCancelModal] = useState(false);
   const [cancelMotivo, setCancelMotivo] = useState('');
   const [cancelandoPedido, setCancelandoPedido] = useState(false);
-  const [tiempoRestante, setTiempoRestante] = useState(LIMITE_CANCELACION_MS);
 
   // Anulación individual de ítem
   const [itemACancelar, setItemACancelar] = useState(null);
@@ -192,7 +184,7 @@ export default function SalonPage({ currentUser }) {
 
   // Estados de Notificación en Tiempo Real
   const prevMesasRef = useRef([]);
-  const [toasts, setToasts] = useState([]);
+  const [toasts, setToasts] = useState([]); // avisos flotantes (AvisosFlotantes)
   const [unionDropdownOpen, setUnionDropdownOpen] = useState(false);
   const [esReclamo, setEsReclamo] = useState(false);
   const [bandejaOpen, setBandejaOpen] = useState(false);
@@ -251,9 +243,6 @@ export default function SalonPage({ currentUser }) {
   // Estados para el Modal de Opciones y Combos
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [currentStepIdx, setCurrentStepIdx] = useState(0);
-  const [selections, setSelections] = useState({});
-  const [additionalNotes, setAdditionalNotes] = useState('');
 
   const isFetchingMesasRef = useRef(false);
 
@@ -629,9 +618,6 @@ export default function SalonPage({ currentUser }) {
       const steps = getProductSteps(prod, {});
       if (steps && steps.length > 0) {
         setSelectedProduct(prod);
-        setCurrentStepIdx(0);
-        setSelections({});
-        setAdditionalNotes('');
         setOptionsModalOpen(true);
         return;
       }
@@ -792,18 +778,6 @@ export default function SalonPage({ currentUser }) {
     prevMesasRef.current = mesas;
   }, [mesas, meseroGlobal, currentUser, esMesaCompartida]);
 
-  // Countdown timer para cancelación
-  useEffect(() => {
-    if (!modalOpen || !mesaActual?.pedidoData?.pedidoCreadoEn) return;
-    const calcular = () => {
-      const elapsed = Date.now() - new Date(mesaActual.pedidoData.pedidoCreadoEn).getTime();
-      setTiempoRestante(Math.max(0, LIMITE_CANCELACION_MS - elapsed));
-    };
-    calcular();
-    const interval = setInterval(calcular, 1000);
-    return () => clearInterval(interval);
-  }, [modalOpen, mesaActual?.pedidoData?.pedidoCreadoEn]);
-
   const handleCancelarPedido = async () => {
     if (!cancelMotivo.trim()) { aviso.advertencia('Por favor escribe o selecciona un motivo para la cancelación.'); return; }
     setCancelandoPedido(true);
@@ -927,31 +901,6 @@ export default function SalonPage({ currentUser }) {
     } catch (err) {
       setAuthModal(prev => ({ ...prev, pin: '', error: err.message || 'PIN no autorizado o incorrecto' }));
     }
-  };
-
-  const handleAuthPinKeyPress = async (num) => {
-    const nuevoPin = (authModal.pin + num).slice(0, 6);
-    setAuthModal(prev => ({ ...prev, pin: nuevoPin, error: '' }));
-    if (nuevoPin.length === 4) {
-      try {
-        const res = await api.validateAuth(nuevoPin);
-        if (!res.error) {
-          if (typeof authModal.callback === 'function') {
-            authModal.callback(res);
-          }
-          setAuthModal({ open: false, pin: '', error: '', callback: null, promptText: '' });
-          return;
-        }
-      } catch (e) {
-        // Permitir seguir ingresando si el PIN tiene más dígitos
-      }
-    } else if (nuevoPin.length >= 6) {
-      submitAuthPin(nuevoPin);
-    }
-  };
-
-  const handleAuthPinBackspace = () => {
-    setAuthModal(prev => ({ ...prev, pin: prev.pin.slice(0, -1), error: '' }));
   };
 
   const requestSupervisorAuth = (promptText, callback) => {
@@ -1412,6 +1361,15 @@ export default function SalonPage({ currentUser }) {
           <span className="bg-indigo-800 text-indigo-200 text-[10px] px-1.5 py-0.5 rounded-full ml-1">0</span>
         )}
       </button>
+      )}
+
+      {/* AVISOS FLOTANTES: plato listo, mesa lista, comanda enviada (se ocultan con la bandeja abierta) */}
+      {!bandejaOpen && (
+        <AvisosFlotantes
+          avisos={toasts}
+          onAbrirBandeja={abrirBandeja}
+          onCerrarAviso={(id) => setToasts(prev => prev.filter(t => t.id !== id))}
+        />
       )}
 
       {/* DRAWER / BANDEJA DE DESPACHO Y CONFIRMACIÓN DE ENTREGA */}
