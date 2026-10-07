@@ -15,7 +15,7 @@ import {
   ModalCancelarItem,
 } from '../modulos/salon/modales';
 import AvisosFlotantes from '../modulos/salon/componentes/AvisosFlotantes';
-import ModalOpcionesProducto from '../modulos/caja/modales/ModalOpcionesProducto';
+import { ModalOpcionesProducto } from '../components/modales';
 import { playChimeNotification } from '../modulos/salon/utils/sonido';
 import { avisosDePlatosListos } from '../modulos/salon/utils/avisosListos';
 import { usePedidoMesa } from '../modulos/salon/hooks/usePedidoMesa';

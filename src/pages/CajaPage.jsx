@@ -12,21 +12,23 @@ import {
   ModalRetiroCaja,
   ModalCierreCaja,
   ModalHistorialCierres,
-  ModalReimpresionCierre,
   ModalCorregirMetodoPago,
   ModalCorregirTipoEntrega,
   ModalCancelarLlevar,
-  ModalComprobanteSunat,
   ModalAnularVenta,
   ModalConfirmacionCobro,
   ModalDetalleMesa,
   ModalDetallePedidoLlevar,
   ModalDetalleVenta,
   ModalTodasCategorias,
-  ModalOpcionesProducto,
   ModalCobroMesa,
   ModalNuevoPedidoDelivery,
 } from '../modulos/caja/modales';
+import {
+  ModalComprobanteSunat,
+  ModalOpcionesProducto,
+  ModalReimpresionCierre,
+} from '../components/modales';
 import { useTurnoCaja, useVentasTurno, useCobroMesa, usePedidoDelivery } from '../modulos/caja/hooks';
 import { parseDeliveryInfo, parsearCreditoSplit, parseMonto } from '../utils/ventas';
 import { mesaCobrable, mesaEnPreparacion, platosEnPreparacion, platosSinServir } from '../modulos/caja/utils/mesas';

@@ -1,5 +1,5 @@
 import { Printer, X } from 'lucide-react';
-import logoUrl from '../../../assets/logo.png';
+import logoUrl from '../../assets/logo.png';
 
 /**
  * Modal para previsualizar e imprimir una copia física del ticket de arqueo/cierre de caja
