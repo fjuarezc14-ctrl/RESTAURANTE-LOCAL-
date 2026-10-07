@@ -27,7 +27,12 @@ const limitadorAutorizacion = crearLimitador((req) => `sesion:${req.sesion?.id}`
 router.get('/api/auth/marca', async (req, res, next) => {
   try {
     const conf = await getEmpresaConfig();
-    res.json({ nombre: conf.name, brandShort: conf.brandShort, tagline: conf.tagline });
+    res.json({
+      nombre: conf.name,
+      brandShort: conf.brandShort,
+      tagline: conf.tagline,
+      modoInstalacion: process.env.MODO_INSTALACION || 'local',
+    });
   } catch (err) {
     next(err);
   }

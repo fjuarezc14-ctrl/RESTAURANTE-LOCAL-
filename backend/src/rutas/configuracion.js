@@ -4,6 +4,7 @@ const os = require('os');
 const { prisma } = require('../db');
 const { DEFAULT_BARRA_CATEGORIAS, getEmpresaConfig, guardarConfigEnCache } = require('../servicios/empresa');
 const { interfacesIPv4, ipRutaPorDefecto, puntajeIp } = require('../servicios/red');
+const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { datosEmpresa } = require('../../shared/esquemas/empresa.js');
 const { soloAdmin } = require('../middlewares/permisos');
@@ -80,6 +81,9 @@ router.get('/api/status', async (req, res, next) => {
 
 // GET /api/red/direcciones -> Direcciones para conectar celulares y tablets (se calculan al momento)
 router.get('/api/red/direcciones', async (req, res, next) => {
+  if (process.env.MODO_INSTALACION === 'web') {
+    return next(new ErrorApp('NO_ENCONTRADO', 'No disponible en esta instalación.', { status: 404 }));
+  }
   try {
     const puerto = process.env.PORT || 3003;
     const ipFija = (process.env.IP_SERVIDOR || '').trim();

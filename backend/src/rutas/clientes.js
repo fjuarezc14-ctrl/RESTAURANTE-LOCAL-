@@ -21,7 +21,7 @@ router.get('/api/clientes', requierePermiso('Caja', 'Creditos', 'Reportes'), asy
     const clientes = await prisma.cliente.findMany({
       where: { activo: true, tieneCredito: true },
       orderBy: { nombre: 'asc' },
-      include: { AbonosCredito: { orderBy: { creadoEn: 'desc' } } },
+      include: { AbonosCredito: { select: { monto: true } } },
     });
 
     // Obtener todas las ventas con crédito o split de crédito
@@ -52,7 +52,7 @@ router.get('/api/clientes', requierePermiso('Caja', 'Creditos', 'Reportes'), asy
 
     const formateados = clientes.map(c => {
       const totalConsumido = Math.round((consumoPorCliente[c.id] || 0) * 100) / 100;
-      const totalAbonado = c.AbonosCredito.reduce((s, a) => s + a.monto, 0);
+      const totalAbonado = Math.round((c.AbonosCredito.reduce((s, a) => s + a.monto, 0)) * 100) / 100;
       const saldo = Math.round((totalConsumido - totalAbonado) * 100) / 100;
       return {
         id: c.id,
@@ -68,7 +68,6 @@ router.get('/api/clientes', requierePermiso('Caja', 'Creditos', 'Reportes'), asy
         totalAbonado,
         totalConsumido,
         saldo,
-        abonos: c.AbonosCredito,
       };
     });
 

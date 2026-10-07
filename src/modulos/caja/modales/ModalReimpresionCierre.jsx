@@ -1,5 +1,6 @@
 import React from 'react';
 import { Printer, X } from 'lucide-react';
+import logoUrl from '../../../assets/logo.png';
 
 /**
  * Modal para previsualizar e imprimir una copia física del ticket de arqueo/cierre de caja
@@ -31,7 +32,7 @@ export default function ModalReimpresionCierre({
         {/* Vista del ticket térmico */}
         <div id="cierre-imprimible-reimpresion" className="bg-amber-50/70 border-2 border-dashed border-amber-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm mb-5 flex flex-col">
           <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4 flex flex-col items-center">
-            <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain mb-1 filter grayscale" />
+            <img src={logoUrl} alt="Logo" className="w-12 h-12 object-contain mb-1 filter grayscale" />
             <h4 className="font-black text-sm text-slate-900 uppercase tracking-wide">{empresa.legalName || 'EMPRESA'}</h4>
             <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">{empresa.address} · RUC: {empresa.ruc}</p>
             <p className="text-[10px] text-purple-700 font-black mt-1 uppercase">COPIA DE CIERRE DE TURNO · #{cierre.id}</p>

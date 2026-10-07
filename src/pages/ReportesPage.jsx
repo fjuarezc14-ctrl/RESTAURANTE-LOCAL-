@@ -4,6 +4,7 @@ import { Download, TrendingUp, TrendingDown, DollarSign, XCircle, Users, Truck, 
 import { api } from '../api';
 import { useCompany } from '../context/CompanyContext';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
+import logoUrl from '../assets/logo.png';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
 import { exportarReporteExcel, construirCreditosPlanilla, montosVenta } from '../utils/exportarReporteExcel';
 import { useAviso, usePedirDato } from '../components/ui';
@@ -1424,7 +1425,7 @@ export default function ReportesPage() {
             {/* Vista del ticket térmico */}
             <div id="cierre-imprimible-reporte" className="bg-amber-50/70 border-2 border-dashed border-amber-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm mb-5 flex flex-col">
               <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4 flex flex-col items-center">
-                <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain mb-1 filter grayscale" />
+                <img src={logoUrl} alt="Logo" className="w-12 h-12 object-contain mb-1 filter grayscale" />
                 <h4 className="font-black text-sm text-slate-900 uppercase tracking-wide">{COMPANY_CONFIG.legalName}</h4>
                 <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">{COMPANY_CONFIG.address} · RUC: {COMPANY_CONFIG.ruc}</p>
                 <p className="text-[10px] text-purple-700 font-black mt-1 uppercase">COPIA DE CIERRE DE TURNO · #{cierreAImprimir.id}</p>

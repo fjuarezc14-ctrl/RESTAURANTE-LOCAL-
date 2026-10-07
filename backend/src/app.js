@@ -5,6 +5,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const fs = require('fs');
 const path = require('path');
 
@@ -13,6 +14,8 @@ const { manejarErrores, rutaNoEncontrada } = require('./middlewares/errores');
 const { cargarSesion } = require('./middlewares/sesion');
 
 const app = express();
+
+app.use(compression({ filter: (req, res) => !req.path.startsWith('/api/eventos') && compression.filter(req, res) }));
 
 // Detrás del proxy de la web, req.ip es la IP del cliente (límite de intentos). En la red local no hay proxy:
 // confiar en X-Forwarded-For permitiría falsear la IP.
@@ -59,8 +62,17 @@ app.use('/api', rutaNoEncontrada);
 // ============================================================
 const FRONTEND_DIST = process.env.FRONTEND_DIST || path.join(__dirname, '..', '..', 'dist');
 if (fs.existsSync(path.join(FRONTEND_DIST, 'index.html'))) {
-  app.use(express.static(FRONTEND_DIST));
+  app.use(express.static(FRONTEND_DIST, {
+    setHeaders: (res, filePath) => {
+      if (filePath.includes(path.sep + 'assets' + path.sep) || filePath.includes('/assets/')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }));
   app.get(/^\/(?!api\/).*/, (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
   });
   console.log(`🖥️ Sirviendo frontend desde ${FRONTEND_DIST}`);
