@@ -14,6 +14,7 @@ import { Dialog } from '../../../components/ui';
 import { CalculadoraEfectivoPEN, DENOMINACIONES_PEN } from '../componentes/CalculadoraEfectivoPEN';
 import { api } from '../../../api';
 import { useAviso, useConfirmar } from '../../../components/ui';
+import logoUrl from '../../../assets/logo.png';
 
 export function ModalCierreCaja({
   abierto,
@@ -447,7 +448,7 @@ export function ModalCierreCaja({
             >
               <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4 flex flex-col items-center">
                 <img
-                  src="/logo.png"
+                  src={logoUrl}
                   alt="Logo"
                   className="w-12 h-12 object-contain mb-1 filter grayscale"
                 />

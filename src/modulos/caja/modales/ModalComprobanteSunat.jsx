@@ -1,4 +1,5 @@
 import { Receipt, X } from 'lucide-react';
+import logoUrl from '../../../assets/logo.png';
 
 /**
  * Modal visor e impresión de comprobante / ticket SUNAT / control interno
@@ -43,7 +44,7 @@ export default function ModalComprobanteSunat({
           )}
 
           <div className="flex justify-center mb-2">
-            <img src="/logo.png" alt="Logo" className="w-14 h-14 object-contain filter grayscale contrast-125" />
+            <img src={logoUrl} alt="Logo" className="w-14 h-14 object-contain filter grayscale contrast-125" />
           </div>
           <div className="text-center font-black tracking-wide" style={{ fontSize: '14px', marginBottom: '2px' }}>{empresa.legalName || 'EMPRESA'}</div>
           <div className="text-center text-[10px] leading-tight mb-2">

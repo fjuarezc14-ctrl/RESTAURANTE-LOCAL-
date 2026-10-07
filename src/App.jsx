@@ -1,22 +1,24 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Tags, Building2, Share2, Copy, Check as CheckIcon, Wifi, Maximize, Minimize, Eye, EyeOff, ShieldCheck } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import logoUrl from './assets/logo.png';
 import { useCompany } from './context/CompanyContext';
 import { api, esErrorDeSesion, onSesionPerdida } from './api';
 import { generateOfflineQrUrl } from './utils/qrOffline';
-import DashboardPage from './pages/DashboardPage';
-import SalonPage from './pages/SalonPage';
-import CocinaPage from './pages/CocinaPage';
-import BarraPage from './pages/BarraPage';
-import CajaPage from './pages/CajaPage';
-import ComprasPage from './pages/ComprasPage';
-import ReportesPage from './pages/ReportesPage';
-import CartaPage from './pages/CartaPage';
-import CategoriasPage from './pages/CategoriasPage';
-import UsuariosPage from './pages/UsuariosPage';
-import CreditosPage from './pages/CreditosPage';
-import ConfiguracionPage from './pages/ConfiguracionPage';
+
+// Carga bajo demanda (code-splitting) de páginas
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const SalonPage = lazy(() => import('./pages/SalonPage'));
+const CocinaPage = lazy(() => import('./pages/CocinaPage'));
+const BarraPage = lazy(() => import('./pages/BarraPage'));
+const CajaPage = lazy(() => import('./pages/CajaPage'));
+const ComprasPage = lazy(() => import('./pages/ComprasPage'));
+const ReportesPage = lazy(() => import('./pages/ReportesPage'));
+const CartaPage = lazy(() => import('./pages/CartaPage'));
+const CategoriasPage = lazy(() => import('./pages/CategoriasPage'));
+const UsuariosPage = lazy(() => import('./pages/UsuariosPage'));
+const CreditosPage = lazy(() => import('./pages/CreditosPage'));
+const ConfiguracionPage = lazy(() => import('./pages/ConfiguracionPage'));
 import { useAviso } from './components/ui';
 
 // === SESIÓN ===
@@ -661,7 +663,7 @@ const ModalCompartirDireccion = ({ onClose }) => {
   );
 };
 
-const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
+const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout, modoInstalacion = 'local' }) => {
   const location = useLocation();
   const { empresa } = useCompany();
   const [brandMain, brandHighlight] = splitBrand(empresa.brandShort);
@@ -759,12 +761,14 @@ const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
               <p className="text-cyan-400 font-mono text-[10px] uppercase font-black">{currentUser?.rol}</p>
             </div>
           </div>
-          <button
-            onClick={() => setCompartirAbierto(true)}
-            className="w-full py-2 bg-slate-800 hover:bg-cyan-500/10 hover:text-cyan-300 hover:border-cyan-500/20 border border-slate-700 text-slate-300 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2"
-          >
-            <Share2 className="w-4 h-4" /> Compartir dirección
-          </button>
+          {modoInstalacion !== 'web' && (
+            <button
+              onClick={() => setCompartirAbierto(true)}
+              className="w-full py-2 bg-slate-800 hover:bg-cyan-500/10 hover:text-cyan-300 hover:border-cyan-500/20 border border-slate-700 text-slate-300 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2"
+            >
+              <Share2 className="w-4 h-4" /> Compartir dirección
+            </button>
+          )}
           <button 
             onClick={onLogout}
             className="w-full py-2 bg-slate-800 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 border border-slate-700 text-slate-300 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2"
@@ -774,7 +778,7 @@ const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout }) => {
         </div>
       </aside>
 
-      {compartirAbierto && <ModalCompartirDireccion onClose={() => setCompartirAbierto(false)} />}
+      {modoInstalacion !== 'web' && compartirAbierto && <ModalCompartirDireccion onClose={() => setCompartirAbierto(false)} />}
     </>
   );
 };
@@ -807,11 +811,11 @@ const Header = ({ toggleSidebar, title, currentUser }) => (
   </header>
 );
 
-const Layout = ({ children, title, currentUser, onLogout }) => {
+const Layout = ({ children, title, currentUser, onLogout, modoInstalacion }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100 relative">
-      <Sidebar isOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(!sidebarOpen)} currentUser={currentUser} onLogout={onLogout} />
+      <Sidebar isOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(!sidebarOpen)} currentUser={currentUser} onLogout={onLogout} modoInstalacion={modoInstalacion} />
       <main className="flex-1 flex flex-col overflow-hidden w-full">
         <Header toggleSidebar={() => setSidebarOpen(!sidebarOpen)} title={title} currentUser={currentUser} />
         {children}
@@ -828,7 +832,17 @@ function App() {
   const [necesitaActivacion, setNecesitaActivacion] = useState(false);
   const [avisoLogin, setAvisoLogin] = useState('');
   const [segundosParaCierre, setSegundosParaCierre] = useState(null);
+  const [modoInstalacion, setModoInstalacion] = useState('local');
   const ultimaEscrituraRef = useRef(0);
+
+  // Obtener modo de instalación (local vs web)
+  useEffect(() => {
+    api.getMarcaAuth().then(res => {
+      if (res?.modoInstalacion) {
+        setModoInstalacion(res.modoInstalacion);
+      }
+    }).catch(() => {});
+  }, []);
 
   // Reactivar la pantalla completa con el primer toque si el mozo la dejó activada
   // (el navegador exige un toque del usuario; no se puede activar sola al abrir).
@@ -1084,20 +1098,26 @@ function App() {
       </div>
     )}
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout title="Resumen de Ventas" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><DashboardPage /></ProtectedRoute></Layout>} />
-        <Route path="/salon" element={<Layout title="Gestión de Salón" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Salon" currentUser={currentUser}><SalonPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-        <Route path="/cocina" element={<Layout title="Monitor de Preparación" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Cocina" currentUser={currentUser}><CocinaPage /></ProtectedRoute></Layout>} />
-        <Route path="/barra" element={<Layout title="Monitor de Barra" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Barra" currentUser={currentUser}><BarraPage /></ProtectedRoute></Layout>} />
-        <Route path="/caja" element={<Layout title="Punto de Cobro" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Caja" currentUser={currentUser}><CajaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-        <Route path="/creditos" element={<Layout title="Módulo de Créditos" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Creditos" currentUser={currentUser}><CreditosPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-        <Route path="/compras" element={<Layout title="Registro de Compras" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Compras" currentUser={currentUser}><ComprasPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-        <Route path="/reportes" element={<Layout title="Panel Contable" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Reportes" currentUser={currentUser}><ReportesPage /></ProtectedRoute></Layout>} />
-        <Route path="/carta" element={<Layout title="Carta e Inventario" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Carta" currentUser={currentUser}><CartaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-        <Route path="/categorias" element={<Layout title="Categorías de la Carta" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Categorias" currentUser={currentUser}><CategoriasPage /></ProtectedRoute></Layout>} />
-        <Route path="/usuarios" element={<Layout title="Personal y Accesos" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Usuarios" currentUser={currentUser}><UsuariosPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-        <Route path="/configuracion" element={<Layout title="Configuración de Empresa" currentUser={currentUser} onLogout={handleLogout}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><ConfiguracionPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-      </Routes>
+      <Suspense fallback={
+        <div className="flex-1 min-h-[50vh] flex items-center justify-center">
+          <div className="w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      }>
+        <Routes>
+          <Route path="/" element={<Layout title="Resumen de Ventas" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><DashboardPage /></ProtectedRoute></Layout>} />
+          <Route path="/salon" element={<Layout title="Gestión de Salón" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Salon" currentUser={currentUser}><SalonPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+          <Route path="/cocina" element={<Layout title="Monitor de Preparación" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Cocina" currentUser={currentUser}><CocinaPage /></ProtectedRoute></Layout>} />
+          <Route path="/barra" element={<Layout title="Monitor de Barra" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Barra" currentUser={currentUser}><BarraPage /></ProtectedRoute></Layout>} />
+          <Route path="/caja" element={<Layout title="Punto de Cobro" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Caja" currentUser={currentUser}><CajaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+          <Route path="/creditos" element={<Layout title="Módulo de Créditos" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Creditos" currentUser={currentUser}><CreditosPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+          <Route path="/compras" element={<Layout title="Registro de Compras" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Compras" currentUser={currentUser}><ComprasPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+          <Route path="/reportes" element={<Layout title="Panel Contable" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Reportes" currentUser={currentUser}><ReportesPage /></ProtectedRoute></Layout>} />
+          <Route path="/carta" element={<Layout title="Carta e Inventario" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Carta" currentUser={currentUser}><CartaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+          <Route path="/categorias" element={<Layout title="Categorías de la Carta" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Categorias" currentUser={currentUser}><CategoriasPage /></ProtectedRoute></Layout>} />
+          <Route path="/usuarios" element={<Layout title="Personal y Accesos" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Usuarios" currentUser={currentUser}><UsuariosPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+          <Route path="/configuracion" element={<Layout title="Configuración de Empresa" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><ConfiguracionPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
     </>
   );
