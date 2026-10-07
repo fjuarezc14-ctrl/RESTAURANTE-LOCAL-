@@ -327,7 +327,7 @@ export function ModalCierreCaja({
   return (
     <div
       id="modal-cierre"
-      className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[200] flex items-end md:items-center justify-center md:p-6 animate-fade-in"
+      className="impresion-ventana fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[200] flex items-end md:items-center justify-center md:p-6 animate-fade-in"
     >
       <div className="bg-white w-full max-w-5xl h-[96dvh] md:h-auto md:max-h-[92dvh] rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
         {/* Header */}
@@ -444,7 +444,7 @@ export function ModalCierreCaja({
 
             <div
               id="cierre-imprimible"
-              className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm flex flex-col"
+              className="impresion-ticket bg-white border-2 border-dashed border-slate-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm flex flex-col"
             >
               <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4 flex flex-col items-center">
                 <img
@@ -487,19 +487,19 @@ export function ModalCierreCaja({
               <div className="space-y-3 mb-4 border-b border-dashed border-slate-300 pb-3">
                 {fondoInicialTurno > 0 && (
                   <div className="flex justify-between font-bold text-slate-700">
-                    <span>💼 FONDO INICIAL (APERTURA):</span>
+                    <span>FONDO INICIAL (APERTURA):</span>
                     <span className="font-black text-emerald-800">
                       + S/ {fondoInicialTurno.toFixed(2)}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-slate-700">
-                  <span>💵 EFECTIVO VENTAS:</span>
+                  <span>EFECTIVO VENTAS:</span>
                   <span className="font-black text-slate-900">S/ {totalEfectivo.toFixed(2)}</span>
                 </div>
                 {ingresosCaja > 0 && (
                   <div className="flex justify-between font-bold text-emerald-700">
-                    <span>📈 INGRESOS A CAJA:</span>
+                    <span>INGRESOS A CAJA:</span>
                     <span className="font-black text-emerald-700">
                       + S/ {ingresosCaja.toFixed(2)}
                     </span>
@@ -507,24 +507,24 @@ export function ModalCierreCaja({
                 )}
                 {egresosEfectivo > 0 && (
                   <div className="flex justify-between font-bold text-rose-600">
-                    <span>📉 SALIDAS DE CAJA:</span>
+                    <span>SALIDAS DE CAJA:</span>
                     <span className="font-black text-rose-600">
                       - S/ {egresosEfectivo.toFixed(2)}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-slate-700 bg-emerald-50/80 p-1.5 rounded-lg border border-emerald-200">
-                  <span>💵 EFECTIVO TOTAL ESPERADO:</span>
+                  <span>EFECTIVO TOTAL ESPERADO:</span>
                   <span className="font-black text-emerald-800">
                     S/ {totalEfectivoEsperado.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between font-bold text-slate-700">
-                  <span>💳 TARJETA POS:</span>
+                  <span>TARJETA POS:</span>
                   <span className="font-black text-slate-900">S/ {totalTarjeta.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-slate-700">
-                  <span>📱 YAPE / PLIN:</span>
+                  <span>YAPE / PLIN:</span>
                   <span className="font-black text-slate-900">S/ {totalYape.toFixed(2)}</span>
                 </div>
                 {abonosFiltrados.length > 0 && (
@@ -561,7 +561,7 @@ export function ModalCierreCaja({
                 )}
                 {totalConsumoClientes > 0 && (
                   <div className="flex justify-between font-bold text-emerald-700 border-t border-dashed border-slate-205 pt-2">
-                    <span>👥 CRÉDITO CLIENTES:</span>
+                    <span>CRÉDITO CLIENTES:</span>
                     <span className="font-black text-emerald-800">
                       S/ {totalConsumoClientes.toFixed(2)}
                     </span>
@@ -569,7 +569,7 @@ export function ModalCierreCaja({
                 )}
                 {totalConsumoPlanilla > 0 && (
                   <div className="flex justify-between font-bold text-violet-700 border-t border-dashed border-slate-205 pt-2">
-                    <span>👤 CONSUMO PLANILLA:</span>
+                    <span>CONSUMO PLANILLA:</span>
                     <span className="font-black text-violet-800">
                       S/ {totalConsumoPlanilla.toFixed(2)}
                     </span>
@@ -577,7 +577,7 @@ export function ModalCierreCaja({
                 )}
                 {totalCortesias > 0 && (
                   <div className="flex justify-between font-bold text-amber-700 border-t border-dashed border-amber-200 pt-2">
-                    <span>🎁 CORTESÍAS (VALOR):</span>
+                    <span>CORTESÍAS (VALOR):</span>
                     <span className="font-black text-amber-900">
                       S/ {totalCortesias.toFixed(2)}
                     </span>
@@ -586,7 +586,7 @@ export function ModalCierreCaja({
                 {totalPedidosYa > 0 && (
                   <div className="flex justify-between font-bold text-blue-700 border-t border-dashed border-blue-200 pt-2">
                     <span>
-                      🛵 PEDIDOS YA <span className="font-normal text-[9px]">(cobro semanal)</span>:
+                      PEDIDOS YA <span className="font-normal text-[9px]">(cobro semanal)</span>:
                     </span>
                     <span className="font-black text-blue-800">
                       S/ {totalPedidosYa.toFixed(2)}
@@ -596,7 +596,7 @@ export function ModalCierreCaja({
               </div>
 
               <div className="flex justify-between items-center text-sm font-black text-slate-900 uppercase">
-                <span>💰 TOTAL RECAUDACIÓN:</span>
+                <span>TOTAL RECAUDACIÓN:</span>
                 <span className="text-base text-emerald-700">
                   S/ {totalCalculado.toFixed(2)}
                 </span>

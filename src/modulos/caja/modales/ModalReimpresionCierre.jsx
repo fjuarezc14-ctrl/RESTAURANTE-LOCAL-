@@ -12,7 +12,7 @@ export default function ModalReimpresionCierre({
   if (!cierre) return null;
 
   return (
-    <div id="modal-cierre-reimpresion" className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[240] flex items-center justify-center p-4">
+    <div id="modal-cierre-reimpresion" className="impresion-ventana fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[240] flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar animate-slide-up relative">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2 text-purple-700">
@@ -29,7 +29,7 @@ export default function ModalReimpresionCierre({
         </div>
 
         {/* Vista del ticket térmico */}
-        <div id="cierre-imprimible-reimpresion" className="bg-amber-50/70 border-2 border-dashed border-amber-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm mb-5 flex flex-col">
+        <div id="cierre-imprimible-reimpresion" className="impresion-ticket bg-amber-50/70 border-2 border-dashed border-amber-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm mb-5 flex flex-col">
           <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4 flex flex-col items-center">
             <img src={logoUrl} alt="Logo" className="w-12 h-12 object-contain mb-1 filter grayscale" />
             <h4 className="font-black text-sm text-slate-900 uppercase tracking-wide">{empresa.legalName || 'EMPRESA'}</h4>
@@ -46,18 +46,18 @@ export default function ModalReimpresionCierre({
 
           <div className="space-y-2.5 mb-4 border-b border-dashed border-slate-300 pb-3">
             <div className="flex justify-between font-bold text-slate-700">
-              <span>💵 EFECTIVO VENTAS:</span>
+              <span>EFECTIVO VENTAS:</span>
               <span className="font-black text-slate-900">S/ {Number(cierre.efectivoVentas || 0).toFixed(2)}</span>
             </div>
             {Number(cierre.egresosEfectivo || 0) > 0 && (
               <div className="flex justify-between font-bold text-rose-600">
-                <span>🔻 GASTOS EFECTIVO:</span>
+                <span>GASTOS EFECTIVO:</span>
                 <span className="font-black">- S/ {Number(cierre.egresosEfectivo || 0).toFixed(2)}</span>
               </div>
             )}
             {Number(cierre.abonosEfectivo || 0) > 0 && (
               <div className="flex justify-between font-bold text-emerald-600">
-                <span>➕ ABONOS EFECTIVO:</span>
+                <span>ABONOS EFECTIVO:</span>
                 <span className="font-black">+ S/ {Number(cierre.abonosEfectivo || 0).toFixed(2)}</span>
               </div>
             )}
@@ -79,22 +79,22 @@ export default function ModalReimpresionCierre({
 
           <div className="space-y-1.5 mb-3 border-b border-dashed border-slate-300 pb-3 text-[11px]">
             <div className="flex justify-between font-bold text-slate-600">
-              <span>💳 TARJETA:</span>
+              <span>TARJETA:</span>
               <span>S/ {Number(cierre.totalTarjeta || 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between font-bold text-slate-600">
-              <span>📱 YAPE / PLIN:</span>
+              <span>YAPE / PLIN:</span>
               <span>S/ {Number(cierre.totalYape || 0).toFixed(2)}</span>
             </div>
             {Number(cierre.totalPedidosYa || 0) > 0 && (
               <div className="flex justify-between font-bold text-rose-500">
-                <span>🛵 PEDIDOS YA:</span>
+                <span>PEDIDOS YA:</span>
                 <span>S/ {Number(cierre.totalPedidosYa || 0).toFixed(2)}</span>
               </div>
             )}
             {Number(cierre.totalConsumo || 0) > 0 && (
               <div className="flex justify-between font-bold text-purple-600">
-                <span>🍽️ CONSUMO / CRÉDITO:</span>
+                <span>CONSUMO / CRÉDITO:</span>
                 <span>S/ {Number(cierre.totalConsumo || 0).toFixed(2)}</span>
               </div>
             )}

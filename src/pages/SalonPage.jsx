@@ -19,12 +19,14 @@ import ModalOpcionesProducto from '../modulos/caja/modales/ModalOpcionesProducto
 import { playChimeNotification } from '../modulos/salon/utils/sonido';
 import { avisosDePlatosListos } from '../modulos/salon/utils/avisosListos';
 import { usePedidoMesa } from '../modulos/salon/hooks/usePedidoMesa';
+import { useCompany } from '../context/CompanyContext';
 
 const BARRA_CATEGORIAS = (COMPANY_CONFIG.barraCategorias && Array.isArray(COMPANY_CONFIG.barraCategorias))
   ? COMPANY_CONFIG.barraCategorias
   : DEFAULT_BARRA_CATEGORIAS;
 
 export default function SalonPage({ currentUser }) {
+  const { empresa } = useCompany();
   const aviso = useAviso();
   const confirmar = useConfirmar();
   const [mesas, setMesas] = useState([]);
@@ -705,8 +707,8 @@ export default function SalonPage({ currentUser }) {
       <ModalPrecuentaMesa
         mesa={precuentaMesa}
         onCerrar={() => setPrecuentaMesa(null)}
-        currentUser={currentUser}
-        meseroGlobal={meseroGlobal}
+        empresa={empresa}
+        mesero={currentUser?.nombre || meseroGlobal}
       />
 
       <style>{`
@@ -734,74 +736,6 @@ export default function SalonPage({ currentUser }) {
           100% { transform: rotate(0); }
         }
 
-        @page {
-          size: auto;
-          margin: 0mm;
-        }
-        @media print {
-          /* Ocultar elementos de navegación y fondos */
-          aside, header, #sidebar-menu, #sidebar-backdrop, button, nav, .no-print {
-            display: none !important;
-          }
-          /* Ocultar el resto del contenido de la página excepto el modal a imprimir */
-          main > *:not(section),
-          section > *:not(#precuenta-print-container) {
-            display: none !important;
-          }
-          /* Garantizar que el body y contenedores no tengan alturas fijas o desbordamientos */
-          html, body, #root, main, section {
-            background: white !important;
-            color: black !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-            height: auto !important;
-            width: auto !important;
-          }
-          /* Formatear el contenedor del ticket en 74mm en la esquina superior izquierda */
-          #precuenta-print-container {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 74mm !important;
-            height: auto !important;
-            display: block !important;
-            background: white !important;
-            z-index: 99999 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          #precuenta-print-container > div {
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            max-width: 74mm !important;
-            width: 74mm !important;
-            height: auto !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          #precuenta-print-container div.bg-slate-950, 
-          #precuenta-print-container div.shrink-0 {
-            display: none !important;
-          }
-          #precuenta-ticket-print {
-            width: 74mm !important;
-            padding: 6px !important;
-            margin: 0 !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
-            font-size: 11px !important;
-            line-height: 1.3 !important;
-            color: #000000 !important;
-            font-weight: 850 !important;
-          }
-          #precuenta-ticket-print * {
-            color: #000000 !important;
-            font-weight: 850 !important;
-          }
-          #precuenta-ticket-print div {
-            page-break-inside: avoid !important;
-          }
-        }
       `}</style>
     </section>
   );

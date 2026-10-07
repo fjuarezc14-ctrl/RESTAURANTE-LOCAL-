@@ -16,7 +16,7 @@ export default function ModalComprobanteSunat({
   const itemsImprimibles = (comprobante.items || []).filter(Boolean);
 
   return (
-    <div id="modal-comprobante-sunat-print-container" className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
+    <div id="modal-comprobante-sunat-print-container" className="impresion-ventana fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[95vh] animate-slide-up">
         <div className="bg-slate-950 p-4 text-white flex justify-between items-center shrink-0">
           <h3 className="font-black text-xs uppercase tracking-wider flex items-center gap-2">
@@ -35,10 +35,10 @@ export default function ModalComprobanteSunat({
           </button>
         </div>
 
-        <div id="comprobante-sunat-ticket-print" className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-white text-slate-900 font-mono text-xs leading-relaxed">
+        <div id="comprobante-sunat-ticket-print" className="impresion-ticket p-6 overflow-y-auto custom-scrollbar flex-1 bg-white text-slate-900 font-mono text-xs leading-relaxed">
           {comprobante.contingencia && comprobante.metodoPago !== 'Cortesía' && comprobante.metodoPago !== 'Consumo' && (
             <div className="bg-amber-100 text-amber-900 border-2 border-dashed border-amber-400 p-2 rounded-lg text-center mb-3 font-bold text-[9px] uppercase tracking-tight no-print">
-              ⚠️ TICKET DE CONTROL INTERNO<br />
+              TICKET DE CONTROL INTERNO<br />
               Emisión electrónica pendiente por contingencia
             </div>
           )}
@@ -53,8 +53,8 @@ export default function ModalComprobanteSunat({
           </div>
 
           <div className="text-center font-bold mb-1" style={{ fontSize: '11px' }}>{
-            comprobante.metodoPago === 'Consumo' ? '👤 VALE DE CONSUMO PERSONAL' :
-            comprobante.metodoPago === 'Cortesía' ? '🎁 CORTESÍA / CONSUMO INTERNO' :
+            comprobante.metodoPago === 'Consumo' ? 'VALE DE CONSUMO PERSONAL' :
+            comprobante.metodoPago === 'Cortesía' ? 'CORTESÍA / CONSUMO INTERNO' :
             'TICKET DE VENTA'
           }</div>
           <div className="text-center font-bold mb-3" style={{ fontSize: '13px' }}>{
@@ -83,7 +83,7 @@ export default function ModalComprobanteSunat({
           {comprobante.deliveryInfo && (
             <div className="mb-3 p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] space-y-0.5">
               <div className="font-bold text-slate-700 uppercase tracking-tight flex items-center gap-1 border-b border-slate-200 pb-1 mb-1">
-                <span>🛵 Datos de Envío / Despacho</span>
+                <span>Datos de Envío / Despacho</span>
               </div>
               {comprobante.deliveryInfo.nombreCliente && (
                 <div><strong>Destinatario:</strong> <span className="uppercase">{comprobante.deliveryInfo.nombreCliente}</span></div>
