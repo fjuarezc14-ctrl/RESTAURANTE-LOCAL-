@@ -1,12 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Clock, CheckCheck, CheckCircle2, User, Truck, XCircle, AlertTriangle, Salad, ShoppingBag, Bike, UtensilsCrossed, Timer, X } from 'lucide-react';
 import { useAviso } from './ui';
-
-const parseDeliveryInfo = (code) => {
-  if (!code || !code.startsWith('DELIVERY -')) return null;
-  const parts = code.split(' | ');
-  return { nombre: parts[0] ? parts[0].replace('DELIVERY - ', '') : '' };
-};
+import { parseDeliveryInfo } from '../utils/ventas';
 
 // Tipo y título visible del ticket
 const origenPedido = (p) => {

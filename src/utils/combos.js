@@ -163,3 +163,48 @@ export function resolverComplementos(prod, selections) {
 export function tieneComplementos(prod) {
   return parseComplementos(prod).length > 0;
 }
+
+// Combos armados a mano antes de que la carta tuviera opciones (se usan solo si el producto pide guarnición)
+export const PRODUCT_OPTIONS_CONFIG = {
+  "Combo Criollo (Almuerzo)": {
+    fondoOptions: [
+      "Saltado (pollo o carne)",
+      "Tallarin saltado (pollo o carne)",
+      "Chaufa (pollo o carne)",
+      "Trucha Frita",
+      "Alitas Fritas",
+      "Milanesa de Pollo",
+      "Chicharron de pollo"
+    ]
+  },
+  "Combo Parrillero (Almuerzo)": {
+    fondoOptions: [
+      "Chuleta de cerdo",
+      "Filete de pollo",
+      "Churrasco",
+      "Pechuga"
+    ]
+  },
+  "Combo Tallarines Verdes (Almuerzo)": {
+    fondoOptions: [
+      "Con Pollo Frito",
+      "Con Bisteck",
+      "Con Pechuga",
+      "Con Chuleta",
+      "Con Pollo Deshuesado"
+    ]
+  },
+  "Combo Junior": {
+    fondoOptions: [
+      "3 unds. de chicharrones de pollo",
+      "1/8 pollo a la brasa",
+      "3 alitas fritas (+ ensalada fruta)"
+    ]
+  }
+};
+
+export const getComboConfig = (nombre) => {
+  if (!nombre) return null;
+  const key = Object.keys(PRODUCT_OPTIONS_CONFIG).find(k => k.toLowerCase() === nombre.toLowerCase());
+  return key ? { config: PRODUCT_OPTIONS_CONFIG[key], key } : null;
+};
