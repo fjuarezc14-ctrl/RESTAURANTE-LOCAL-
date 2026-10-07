@@ -1,4 +1,3 @@
-import React from 'react';
 import { LayoutGrid, X, Flame } from 'lucide-react';
 
 /**

@@ -2,7 +2,7 @@
 // SISTEMA CENTRAL DE NOTIFICACIONES, CONFIRMACIONES Y PROMPTS
 // VT VALETEC — Reemplazo profesional de alert, confirm y prompt
 // ================================================================
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useRef } from 'react';
 import {
   CheckCircle2,
   AlertCircle,

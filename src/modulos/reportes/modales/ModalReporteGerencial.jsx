@@ -1,4 +1,3 @@
-import React from 'react';
 import { Printer, X } from 'lucide-react';
 import { montosVenta, construirCreditosPlanilla } from '../../../utils/exportarReporteExcel';
 

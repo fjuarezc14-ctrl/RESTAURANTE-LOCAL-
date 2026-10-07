@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, Trash2, Pencil } from 'lucide-react';
 
 /**

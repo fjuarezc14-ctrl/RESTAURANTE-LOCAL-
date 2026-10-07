@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Users, Plus, X, Search, Wallet, Phone, MapPin, UserRound, Briefcase, ArrowDownCircle, Eye, Pencil, Trash2, CreditCard, Banknote, Smartphone, CheckCircle, ChevronLeft, ChevronRight, Contact, Clock, ShoppingBag } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Users, Plus, X, Search, Wallet, Phone, MapPin, UserRound, Briefcase, ArrowDownCircle, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Contact, Clock, ShoppingBag } from 'lucide-react';
 import { api } from '../api';
 import { useConfirmar, useAviso } from '../components/ui';
 import {

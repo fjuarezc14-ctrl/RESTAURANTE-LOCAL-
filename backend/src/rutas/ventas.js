@@ -230,7 +230,6 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', requierePermiso('Caja'), valid
 router.patch('/api/ventas/:ventaId/datos-cliente', requierePermiso('Caja'), validar({ body: correccionDatosCliente }), async (req, res, next) => {
   const { ventaId } = req.params;
   const {
-    tipoComprobante, // "Boleta" | "Factura" | "Ticket"
     numDocumento,
     nombreCliente,
     clienteDireccion,
@@ -406,10 +405,8 @@ router.post('/api/ventas', requierePermiso('Caja'), validar({ body: cobro }), as
   const {
     pedidoId,
     pedidoIds,
-    tipoComprobante,
     numDocumento,
     nombreCliente,
-    total,
     metodoPago,
     clienteDireccion,
     ofertaDescripcion,

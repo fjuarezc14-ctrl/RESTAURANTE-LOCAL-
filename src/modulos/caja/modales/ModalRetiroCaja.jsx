@@ -2,7 +2,7 @@
 // MODAL DE MOVIMIENTO DE CAJA (INGRESO / RETIRO DE EFECTIVO)
 // VT VALETEC — Módulo Caja
 // ================================================================
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowUpRight, ArrowDownLeft, AlertTriangle } from 'lucide-react';
 import { Dialog, DialogHeader, DialogFooter, Button } from '../../../components/ui';
 import { api } from '../../../api';

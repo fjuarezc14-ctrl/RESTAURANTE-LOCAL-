@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Sparkles, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { X, Sparkles } from 'lucide-react';
 import { useAviso } from '../../../components/ui';
 import { resolverComplementos } from '../../../utils/combos';
 

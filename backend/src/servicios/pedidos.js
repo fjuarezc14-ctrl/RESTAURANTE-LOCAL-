@@ -129,7 +129,7 @@ async function expandPedidoItemsForDb(itemsList) {
       ];
 
       if (i.notas && i.notas.includes("(Nota:")) {
-        const customNoteMatch = i.notas.match(/\(Nota:\s*([^\)]+)\)/);
+        const customNoteMatch = i.notas.match(/\(Nota:\s*([^)]+)\)/);
         if (customNoteMatch && customNoteMatch[1]) {
           detailedGrillNotesArray.push(`📝 NOTAS CAJA: ${customNoteMatch[1]}`);
         }
@@ -344,7 +344,7 @@ async function expandPedidoItemsForDb(itemsList) {
   return expandedList;
 }
 
-async function evaluarEstadoEnsalada(itemsList) {
+async function evaluarEstadoEnsalada() {
   return 'No Aplica';
 }
 

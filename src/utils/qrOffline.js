@@ -125,7 +125,7 @@ class QRCodeModel {
     this.setupTimingPattern();
     this.setupPositionAdjustPattern();
     this.setupTypeInfo(false, 0);
-    this.mapData(this.createData(), 0);
+    this.mapData(this.createData());
   }
   setupPositionProbePattern(row, col) {
     for (let r = -1; r <= 7; r++) {
@@ -279,7 +279,7 @@ class QRCodeModel {
     }
     return a;
   }
-  mapData(data, maskPattern) {
+  mapData(data) {
     let inc = -1;
     let row = this.moduleCount - 1;
     let bitIndex = 7;

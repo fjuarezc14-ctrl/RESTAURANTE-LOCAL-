@@ -2,15 +2,13 @@
 // MODAL DE CIERRE DE CAJA / ARQUEO DE TURNO
 // VT VALETEC — Módulo Caja
 // ================================================================
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Calculator,
   Lock,
   X,
   Printer,
-  Coins,
-  RotateCcw,
-  AlertTriangle,
+  
 } from 'lucide-react';
 import { Dialog } from '../../../components/ui';
 import { CalculadoraEfectivoPEN, DENOMINACIONES_PEN } from '../componentes/CalculadoraEfectivoPEN';

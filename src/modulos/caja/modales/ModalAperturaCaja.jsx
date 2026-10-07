@@ -2,7 +2,7 @@
 // MODAL DE APERTURA DE CAJA / INICIO DE TURNO
 // VT VALETEC — Módulo Caja
 // ================================================================
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Banknote, AlertTriangle, ChevronDown } from 'lucide-react';
 import { Dialog, DialogHeader, DialogFooter, Button } from '../../../components/ui';
 import { CalculadoraEfectivoPEN } from '../componentes/CalculadoraEfectivoPEN';
