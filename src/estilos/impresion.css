@@ -1,0 +1,145 @@
+/* ================================================================
+   IMPRESIÓN: tickets en impresora térmica (área útil de 74 mm) y reportes en hoja A4
+   Cada modal imprimible marca sus partes con estas clases, así imprime igual en
+   cualquier página que lo abra (antes cada página tenía su copia por id):
+     .impresion-ventana  → la ventana del modal de un ticket
+     .impresion-ticket   → el ticket en sí (74 mm, texto negro)
+     .impresion-hoja     → la ventana de un reporte en hoja A4 (reporte gerencial)
+     .no-print           → lo que nunca se imprime
+   ================================================================ */
+
+/* Ticket térmico: sin márgenes. El reporte A4 usa la página con nombre "hoja" */
+@page {
+  size: auto;
+  margin: 0mm;
+}
+@page hoja {
+  margin: 15mm 20mm;
+}
+
+@media print {
+  /* Navegación, botones y todo lo que no es el modal a imprimir */
+  aside, header, #sidebar-menu, #sidebar-backdrop, button, nav, .no-print {
+    display: none !important;
+  }
+  main > *:not(section),
+  main > section > *:not(.impresion-ventana):not(.impresion-hoja) {
+    display: none !important;
+  }
+
+  /* Que la página fluya sin alturas fijas ni scroll */
+  html, body, #root, #root > div, main, main > section {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    width: auto !important;
+  }
+
+  /* ── Ticket de 74 mm en la esquina superior izquierda ── */
+  .impresion-ventana {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 74mm !important;
+    height: auto !important;
+    display: block !important;
+    background: white !important;
+    backdrop-filter: none !important;
+    z-index: 99999 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .impresion-ventana > div {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    max-width: 74mm !important;
+    width: 74mm !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  /* Dentro de la ventana solo sale el ticket: se ocultan las ramas que no lo contienen
+     (título, botones, conteo de billetes...) y sus contenedores quedan sin estilos de pantalla */
+  .impresion-ventana :not(:has(.impresion-ticket)):not(.impresion-ticket):not(.impresion-ticket *) {
+    display: none !important;
+  }
+  .impresion-ventana :has(.impresion-ticket) {
+    display: block !important;
+    position: static !important;
+    width: 74mm !important;
+    max-width: 74mm !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: white !important;
+  }
+  .impresion-ticket {
+    width: 74mm !important;
+    padding: 6px !important;
+    margin: 0 !important;
+    font-family: 'Arial', 'Helvetica', sans-serif !important;
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+    color: #000000 !important;
+    font-weight: 850 !important;
+  }
+  .impresion-ticket * {
+    color: #000000 !important;
+    font-weight: 850 !important;
+  }
+  .impresion-ticket div,
+  .impresion-ticket blockquote {
+    page-break-inside: avoid !important;
+  }
+
+  /* ── Reporte en hoja A4 ── */
+  .impresion-hoja {
+    page: hoja;
+    position: relative !important;
+    width: 100% !important;
+    height: auto !important;
+    display: block !important;
+    background: white !important;
+    z-index: 99999 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+  .impresion-hoja > div {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    position: static !important;
+  }
+  .impresion-hoja .overflow-y-auto {
+    overflow: visible !important;
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+  }
+  .break-inside-avoid,
+  .break-inside-avoid-page,
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}

@@ -17,7 +17,7 @@ export default function ModalPrecuentaMesa({
   const igv = parseFloat((subtotal - subtotalBase).toFixed(2));
 
   return (
-    <div id="precuenta-print-container" className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+    <div id="precuenta-print-container" className="impresion-ventana fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar animate-slide-up relative">
         <div className="flex justify-between items-center mb-6 shrink-0">
           <div className="flex items-center gap-2 text-indigo-700">
@@ -36,7 +36,7 @@ export default function ModalPrecuentaMesa({
         </div>
 
         {/* Vista del ticket térmico */}
-        <div id="precuenta-ticket-print" className="bg-amber-50/70 border-2 border-dashed border-amber-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm mb-6 flex flex-col">
+        <div id="precuenta-ticket-print" className="impresion-ticket bg-amber-50/70 border-2 border-dashed border-amber-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm mb-6 flex flex-col">
           <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4">
             <h4 className="font-black text-sm text-slate-900 uppercase">{empresa.legalName || 'EMPRESA'}</h4>
             <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">{empresa.address} · RUC: {empresa.ruc}</p>
@@ -81,7 +81,7 @@ export default function ModalPrecuentaMesa({
           </div>
 
           <div className="flex justify-between items-center text-sm font-black text-slate-900 uppercase">
-            <span>💰 TOTAL A PAGAR:</span>
+            <span>TOTAL A PAGAR:</span>
             <span className="text-base text-indigo-700">S/ {subtotal.toFixed(2)}</span>
           </div>
 

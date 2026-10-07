@@ -14,6 +14,7 @@ if (typeof globalThis !== 'undefined') {
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './estilos/impresion.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { CompanyProvider } from './context/CompanyContext.jsx'
