@@ -20,6 +20,7 @@ import { formatearMoneda } from '../../../utils/dinero';
 import { matchProductSemantic, relevanciaBusqueda, agruparProductos } from '../../../utils/busquedaProductos';
 import SelectorClienteCreditoCombobox from '../componentes/SelectorClienteCreditoCombobox';
 import { getEstiloMetodo } from '../constantes/metodosPago';
+import { campoCodigoPago } from '../componentes/camposCaja';
 
 /**
  * Modal completo para registrar y gestionar pedidos para llevar, delivery y PedidosYa
@@ -102,22 +103,6 @@ export default function ModalNuevoPedidoDelivery({
   enviarDeliveryACocina = () => {},
   enviandoDelivery = false,
   soles = (v) => formatearMoneda(v),
-  campoCodigoPago = (valor, setValor, medio) => (
-    <div className="animate-fade-in">
-      <label className="block text-xs font-medium text-slate-500 mb-1.5">
-        {medio === 'Tarjeta' ? 'Nº de voucher / operación POS' : medio === 'Yape' ? 'Código de operación Yape / Plin' : 'Código de operación (Yape / tarjeta)'}
-      </label>
-      <input
-        type="text"
-        inputMode="numeric"
-        maxLength={60}
-        value={valor}
-        onChange={(e) => setValor(e.target.value)}
-        placeholder={medio === 'Tarjeta' ? 'Ej. 000456' : 'Ej. 123456'}
-        className="w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-sm font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5 transition"
-      />
-    </div>
-  ),
   estiloMetodo = getEstiloMetodo,
 }) {
   if (!abierto) return null;

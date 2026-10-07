@@ -1,6 +1,6 @@
 import { 
   Edit3, Link2, User, X, Utensils, Receipt, Search, List, LayoutGrid, Flame, 
-  Tag, Plus, Minus, PlusCircle, ChevronRight, ShoppingBag, Trash, Trash2, AlertTriangle, 
+  Tag, Plus, Minus, PlusCircle, ChevronRight, ShoppingBag, Trash2, AlertTriangle, 
   Lock, ChefHat 
 } from 'lucide-react';
 

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { PlusCircle, Utensils, CupSoda, Wine, Trash2, Save, X, Tag, ToggleLeft, ToggleRight, Edit2, ChevronDown, ChevronUp, Percent, DollarSign, Search, Flame, GlassWater, Package, Plus, Minus, Boxes, MessageCircleQuestion, Infinity as InfinityIcon } from 'lucide-react';
+import { PlusCircle, Utensils, CupSoda, Wine, Trash2, Save, X, Edit2, ChevronDown, Search, Flame, GlassWater, Package, Plus, Minus, Boxes, MessageCircleQuestion, Infinity as InfinityIcon } from 'lucide-react';
 import { api } from '../api';
 import { parseComponentes, calcularPrecioComponentes, normalizarOpcion, extractIngredientesTexto } from '../utils/combos';
 import { ordenarCategorias } from '../utils/categorias';

@@ -262,14 +262,12 @@ router.post('/api/caja/apertura', requierePermiso('Caja'), validar({ body: apert
 router.post('/api/caja/cierre', requierePermiso('Caja'), validar({ body: cierreCaja }), async (req, res, next) => {
   try {
     const {
-      fechaApertura,
       fechaCierre,
       cajeroNombre,
       montoInicial,
       efectivoVentas,
       efectivoEsperado,
       efectivoContado,
-      diferencia,
       totalTarjeta,
       totalYape,
       totalConsumo,
@@ -355,7 +353,7 @@ router.post('/api/caja/cierre', requierePermiso('Caja'), validar({ body: cierreC
 // POST /api/caja/cierre-forzado → Cierre administrativo por parte del Administrador
 router.post('/api/caja/cierre-forzado', requierePermiso('Caja', 'Dashboard'), validar({ body: cierreForzado }), async (req, res, next) => {
   try {
-    const { adminNombre, adminPin, motivo } = req.body;
+    const { adminPin, motivo } = req.body;
 
     if (!adminPin || typeof adminPin !== 'string' || !adminPin.trim()) {
       return next(new ErrorApp('AUTORIZACION_REQUERIDA', 'El PIN de Administrador es obligatorio.', { campo: 'pin' }));

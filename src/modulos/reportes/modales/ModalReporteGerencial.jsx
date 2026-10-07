@@ -1,4 +1,3 @@
-import React from 'react';
 import { Printer, X } from 'lucide-react';
 import { montosVenta, construirCreditosPlanilla } from '../../../utils/exportarReporteExcel';
 
@@ -116,7 +115,7 @@ export default function ModalReporteGerencial({
   return (
     <div
       id="modal-reporte-gerencial-container"
-      className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[250] flex items-end sm:items-center justify-center sm:p-4 animate-fade-in"
+      className="impresion-hoja fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[250] flex items-end sm:items-center justify-center sm:p-4 animate-fade-in"
     >
       <div className="bg-white w-full max-w-4xl h-[96dvh] sm:h-auto sm:max-h-[94dvh] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
         {/* Cabecera */}

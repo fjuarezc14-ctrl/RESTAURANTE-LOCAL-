@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Ban, X, AlertTriangle } from 'lucide-react';
 import { api } from '../../../api';
 

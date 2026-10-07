@@ -1,4 +1,3 @@
-import React from 'react';
 import { History, X, FileText, Printer } from 'lucide-react';
 
 /**

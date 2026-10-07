@@ -4,6 +4,20 @@
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// Si el backend dice que la sesión ya no vale (expiró, fue revocada o el equipo se desactivó),
+// App vuelve a la pantalla de PIN o de activación. Las rutas /api/auth/* manejan esos códigos solas.
+const CODIGOS_SIN_SESION = ['NO_AUTENTICADO', 'SESION_EXPIRADA', 'DISPOSITIVO_NO_ACTIVADO'];
+let alPerderSesion = null;
+
+export const esErrorDeSesion = (err) => CODIGOS_SIN_SESION.includes(err?.codigo);
+
+export function onSesionPerdida(fn) {
+  alPerderSesion = fn;
+  return () => {
+    if (alPerderSesion === fn) alPerderSesion = null;
+  };
+}
+
 /**
  * Cliente HTTP seguro con validación de cabeceras, manejo de errores de proxy (502/504)
  * y protección contra parseo inválido de HTML.
@@ -58,6 +72,7 @@ async function apiRequest(endpoint, options = {}) {
         err.campo = campo;
         err.datos = datos;
         err.status = response.status;
+        if (esErrorDeSesion(err) && !endpoint.startsWith('/api/auth/')) alPerderSesion?.(err);
         throw err;
       } else {
         if (response.status === 502) {

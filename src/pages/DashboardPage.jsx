@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Users, Flame, CheckCircle, Banknote, LayoutGrid, ChefHat, Calculator, Lock, Unlock, AlertTriangle, ShieldAlert, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
@@ -12,7 +12,6 @@ export default function DashboardPage() {
   const [modalForzarCierre, setModalForzarCierre] = useState(false);
   const [adminPin, setAdminPin] = useState('');
   const [adminMotivo, setAdminMotivo] = useState('');
-  const [adminNombre, setAdminNombre] = useState('Administrador');
   const [cargandoForzar, setCargandoForzar] = useState(false);
   const [errorForzar, setErrorForzar] = useState('');
 
@@ -85,7 +84,6 @@ export default function DashboardPage() {
     setCargandoForzar(true);
     try {
       const res = await api.cerrarCajaForzado({
-        adminNombre: adminNombre.trim() || 'Administrador',
         adminPin: adminPin.trim(),
         motivo: adminMotivo.trim() || 'Cierre forzado desde el panel de control',
       });

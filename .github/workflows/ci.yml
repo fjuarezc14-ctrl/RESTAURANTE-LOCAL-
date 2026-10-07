@@ -38,3 +38,18 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npx prisma generate
       - run: npm test
+
+  frontend:
+    name: Lint, pruebas y build del frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # El lint revisa también backend/ (sin dependencias propias: solo usa las reglas de la raíz)
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build

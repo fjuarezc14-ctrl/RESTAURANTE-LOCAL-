@@ -1,67 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Download, TrendingUp, TrendingDown, DollarSign, XCircle, Users, Truck, Calendar, Search, Receipt, Printer, X, Wallet, Briefcase, Award, Flame, UtensilsCrossed, PieChart, Layers, History, AlertTriangle, Filter, Banknote, CreditCard, Smartphone, Gift, Ban, MessageCircle, Scale } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Download, TrendingUp, TrendingDown, DollarSign, XCircle, Users, Truck, Calendar, Search, Receipt, Printer, X, Wallet, Briefcase, Award, Flame, UtensilsCrossed, PieChart, Layers, History, AlertTriangle, Banknote, CreditCard, Smartphone, Gift, Ban, MessageCircle, Scale } from 'lucide-react';
 
 import { api } from '../api';
 import { useCompany } from '../context/CompanyContext';
-import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
-import logoUrl from '../assets/logo.png';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
-import { exportarReporteExcel, construirCreditosPlanilla, montosVenta } from '../utils/exportarReporteExcel';
+import { numeroALetras } from '../utils/numeroALetras';
+import { exportarReporteExcel } from '../utils/exportarReporteExcel';
 import { useAviso, usePedirDato } from '../components/ui';
+import ModalReimpresionCierre from '../modulos/caja/modales/ModalReimpresionCierre';
 import ModalComprobanteSunat from '../modulos/caja/modales/ModalComprobanteSunat';
 import { ModalReporteGerencial } from '../modulos/reportes/modales';
+import { parseDeliveryInfo, parsearCreditoSplit } from '../utils/ventas';
 
 // Igual que en Caja: el sistema solo emite tickets de venta
 const FACTURACION_ELECTRONICA = false;
 
-const BARRA_CATEGORIAS = (COMPANY_CONFIG.barraCategorias && Array.isArray(COMPANY_CONFIG.barraCategorias))
-  ? COMPANY_CONFIG.barraCategorias
-  : DEFAULT_BARRA_CATEGORIAS;
-
-
-const parseDeliveryInfo = (code) => {
-  if (!code || !code.startsWith('DELIVERY -')) return null;
-  const parts = code.split(' | ');
-  const namePart = parts[0] ? parts[0].replace('DELIVERY - ', '') : '';
-  const telPart = parts[1] ? parts[1].replace('TEL: ', '') : '';
-  const dirPart = parts[2] ? parts[2].replace('DIR: ', '') : '';
-  const pagaPart = parts[3] ? parts[3].replace('PAGA: ', '') : '';
-  const vueltoPart = parts[4] ? parts[4].replace('VUELTO: ', '') : '';
-  
-  return {
-    nombre: namePart,
-    telefono: telPart,
-    direccion: dirPart,
-    conCuanto: pagaPart,
-    vuelto: vueltoPart,
-  };
-};
-
-const parsearCreditoSplit = (ofertaDescripcion, defaultClienteId, defaultMonto) => {
-  if (ofertaDescripcion && typeof ofertaDescripcion === 'string') {
-    const match = ofertaDescripcion.match(/\[CREDITO_SPLIT:(\[.*?\])\]/) || ofertaDescripcion.match(/\[CREDITO_SPLIT:(.*?)\]/);
-    if (match && match[1]) {
-      try {
-        const parsed = JSON.parse(match[1]);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(item => ({
-            clienteId: parseInt(item.clienteId || item.id),
-            nombre: item.nombre || '',
-            monto: parseFloat(item.monto || 0)
-          })).filter(item => !isNaN(item.clienteId) && item.monto > 0);
-        }
-      } catch (e) {
-        console.error('Error parseando CREDITO_SPLIT:', e);
-      }
-    }
-  }
-  const defId = parseInt(defaultClienteId);
-  const defM = parseFloat(defaultMonto || 0);
-  if (!isNaN(defId) && defId > 0 && defM > 0) {
-    return [{ clienteId: defId, monto: defM, nombre: '' }];
-  }
-  return [];
-};
 
 export default function ReportesPage() {
   const { empresa: COMPANY_CONFIG } = useCompany();
@@ -143,52 +96,13 @@ export default function ReportesPage() {
   }, []);
 
 
-  const numeroALetras = (num) => {
-    const unidades = ["", "UN", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE"];
-    const decenas = ["", "DIEZ", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"];
-    const especiales = ["DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISEIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"];
-    const centenas = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"];
-
-    let entero = Math.floor(num);
-    let decimales = Math.round((num - entero) * 100);
-    let decimalStr = decimales < 10 ? "0" + decimales : decimales;
-
-    if (entero === 0) return "CERO CON " + decimalStr + "/100 SOLES";
-    if (entero === 100) return "CIEN CON " + decimalStr + "/100 SOLES";
-
-    let letras = "";
-
-    if (entero >= 100) {
-      let c = Math.floor(entero / 100);
-      letras += centenas[c] + " ";
-      entero %= 100;
-    }
-
-    if (entero >= 10 && entero <= 19) {
-      letras += especiales[entero - 10] + " ";
-    } else if (entero >= 20 || entero > 0) {
-      let d = Math.floor(entero / 10);
-      let u = entero % 10;
-      if (d > 0) {
-        letras += decenas[d];
-        if (u > 0) letras += " Y ";
-      }
-      if (u > 0) {
-        letras += unidades[u];
-      }
-      letras += " ";
-    }
-
-    return letras.trim() + " CON " + decimalStr + "/100 SOLES";
-  };
-
   const reimprimirComprobante = (v) => {
     if (!v) return;
     const serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
     const correlativoStr = String(v.numero || v.id).padStart(4, '0');
     const igvSafe = Number(v.igv || 0).toFixed(2);
     const totalSafe = Number(v.total || 0).toFixed(2);
-    const qrData = `${rucEmpresa}|03|${serie}|${correlativoStr}|${igvSafe}|${totalSafe}|${v.fecha || new Date(v.createdAt).toLocaleDateString('es-PE')}|${v.tipoComprobante === 'Factura'?'6':'1'}|${v.numDocumento || '00000000'}`;
+    const qrData = `${COMPANY_CONFIG.ruc}|${v.tipoComprobante === 'Factura' ? '01' : '03'}|${serie}|${correlativoStr}|${igvSafe}|${totalSafe}|${v.fecha || new Date(v.createdAt).toLocaleDateString('es-PE')}|${v.tipoComprobante === 'Factura'?'6':'1'}|${v.numDocumento || '00000000'}`;
     const qrImageUrl = generateOfflineQrUrl(qrData);
 
     // Reconstruir items si vienen del backend o parsear de itemsResumen
@@ -235,7 +149,7 @@ export default function ReportesPage() {
       total: v.total,
       descuentoAplicado: v.descuentoAplicado || 0,
       ofertaDescripcion: v.ofertaDescripcion || null,
-      totalLetras,
+      totalLetras: numeroALetras(v.total),
       hashResumen: "gSbTDa" + Math.random().toString(36).substring(2, 8).toUpperCase() + "iIZDyirfA6TBPKJnEI=",
       metodoPago: v.metodoPago,
       montoEfectivo: v.montoEfectivo || 0,
@@ -269,7 +183,6 @@ export default function ReportesPage() {
       return;
     }
     
-    const serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
     const totalSafe = Number(v.total || 0).toFixed(2);
     const mensaje = `Hola *${v.nombreCliente || 'Estimado cliente'}*, el total de su consumo en *${COMPANY_CONFIG.name}* fue de *S/ ${totalSafe}* (ticket de venta N° ${v.id}).\n\n¡Gracias por su preferencia!`;
     
@@ -1408,121 +1321,12 @@ export default function ReportesPage() {
         );
       })()}
 
-      {/* MODAL REIMPRESIÓN TICKET DE CIERRE (REPORTES) */}
-      {cierreAImprimir && (
-        <div id="modal-cierre-reporte" className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar animate-slide-up relative">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-2 text-purple-700">
-                <Printer className="w-5 h-5 shrink-0" />
-                <h3 className="font-black text-slate-900 text-base uppercase tracking-tight leading-none">Ticket de Cierre #{cierreAImprimir.id}</h3>
-              </div>
-              <button onClick={() => setCierreAImprimir(null)} className="text-slate-400 hover:text-slate-900 p-1 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Vista del ticket térmico */}
-            <div id="cierre-imprimible-reporte" className="bg-amber-50/70 border-2 border-dashed border-amber-200 rounded-2xl p-5 font-mono text-slate-800 text-xs shadow-sm mb-5 flex flex-col">
-              <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-4 flex flex-col items-center">
-                <img src={logoUrl} alt="Logo" className="w-12 h-12 object-contain mb-1 filter grayscale" />
-                <h4 className="font-black text-sm text-slate-900 uppercase tracking-wide">{COMPANY_CONFIG.legalName}</h4>
-                <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">{COMPANY_CONFIG.address} · RUC: {COMPANY_CONFIG.ruc}</p>
-                <p className="text-[10px] text-purple-700 font-black mt-1 uppercase">COPIA DE CIERRE DE TURNO · #{cierreAImprimir.id}</p>
-              </div>
-
-              <div className="space-y-1.5 border-b border-dashed border-slate-300 pb-3 mb-4 text-slate-600 font-bold">
-                <div className="flex justify-between"><span>FECHA APERTURA:</span><span>{new Date(cierreAImprimir.fechaApertura).toLocaleString('es-PE')}</span></div>
-                <div className="flex justify-between"><span>FECHA CIERRE:</span><span>{new Date(cierreAImprimir.fechaCierre).toLocaleString('es-PE')}</span></div>
-                <div className="flex justify-between"><span>CAJERO:</span><span className="uppercase">{cierreAImprimir.cajeroNombre}</span></div>
-                <div className="flex justify-between"><span>ESTADO:</span><span className="text-emerald-700 font-black">CERRADO</span></div>
-              </div>
-
-              <div className="space-y-2.5 mb-4 border-b border-dashed border-slate-300 pb-3">
-                <div className="flex justify-between font-bold text-slate-700">
-                  <span>💵 EFECTIVO VENTAS:</span>
-                  <span className="font-black text-slate-900">S/ {Number(cierreAImprimir.efectivoVentas || 0).toFixed(2)}</span>
-                </div>
-                {Number(cierreAImprimir.egresosEfectivo || 0) > 0 && (
-                  <div className="flex justify-between font-bold text-rose-600">
-                    <span>🔻 GASTOS EFECTIVO:</span>
-                    <span className="font-black">- S/ {Number(cierreAImprimir.egresosEfectivo || 0).toFixed(2)}</span>
-                  </div>
-                )}
-                {Number(cierreAImprimir.abonosEfectivo || 0) > 0 && (
-                  <div className="flex justify-between font-bold text-emerald-600">
-                    <span>➕ ABONOS EFECTIVO:</span>
-                    <span className="font-black">+ S/ {Number(cierreAImprimir.abonosEfectivo || 0).toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-black text-slate-900 bg-amber-100/60 p-2 rounded-lg">
-                  <span>EFECTIVO ESPERADO:</span>
-                  <span>S/ {Number(cierreAImprimir.efectivoEsperado || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-slate-700">
-                  <span>EFECTIVO CONTADO:</span>
-                  <span className="font-black text-slate-900">S/ {Number(cierreAImprimir.efectivoContado || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-black">
-                  <span>DIFERENCIA:</span>
-                  <span className={Number(cierreAImprimir.diferencia || 0) < 0 ? 'text-rose-600' : 'text-emerald-700'}>
-                    S/ {Number(cierreAImprimir.diferencia || 0).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-1.5 mb-3 border-b border-dashed border-slate-300 pb-3 text-[11px]">
-                <div className="flex justify-between font-bold text-slate-600">
-                  <span>💳 TARJETA:</span>
-                  <span>S/ {Number(cierreAImprimir.totalTarjeta || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-slate-600">
-                  <span>📱 YAPE / PLIN:</span>
-                  <span>S/ {Number(cierreAImprimir.totalYape || 0).toFixed(2)}</span>
-                </div>
-                {Number(cierreAImprimir.totalPedidosYa || 0) > 0 && (
-                  <div className="flex justify-between font-bold text-rose-500">
-                    <span>🛵 PEDIDOS YA:</span>
-                    <span>S/ {Number(cierreAImprimir.totalPedidosYa || 0).toFixed(2)}</span>
-                  </div>
-                )}
-                {Number(cierreAImprimir.totalConsumo || 0) > 0 && (
-                  <div className="flex justify-between font-bold text-purple-600">
-                    <span>🍽️ CONSUMO / CRÉDITO:</span>
-                    <span>S/ {Number(cierreAImprimir.totalConsumo || 0).toFixed(2)}</span>
-                  </div>
-                )}
-              </div>
-
-              {cierreAImprimir.nota && (
-                <div className="text-[10px] text-slate-500 italic mb-3">
-                  <strong>Nota:</strong> {cierreAImprimir.nota}
-                </div>
-              )}
-
-              <div className="text-center text-[10px] text-slate-400 font-bold">
-                *** Reimpresión de Arqueo de Turno ***
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setCierreAImprimir(null)}
-                className="py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs uppercase tracking-wider transition-colors"
-              >
-                Cerrar
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-1.5"
-              >
-                <Printer className="w-4 h-4" />
-                Imprimir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* REIMPRESIÓN DEL TICKET DE CIERRE (el mismo modal que usa Caja) */}
+      <ModalReimpresionCierre
+        cierre={cierreAImprimir}
+        onCerrar={() => setCierreAImprimir(null)}
+        empresa={COMPANY_CONFIG}
+      />
 
       {/* SUNAT Comprobante Modal Modular */}
       <ModalComprobanteSunat
@@ -1572,164 +1376,6 @@ export default function ReportesPage() {
         setIncluirCierres={setIncluirCierres}
       />
 
-      <style>{`
-        @page {
-          size: auto;
-          margin: 15mm 20mm !important;
-        }
-        @media print {
-          /* Ocultar elementos de navegación y fondos */
-          aside, header, #sidebar-menu, #sidebar-backdrop, button, nav, .no-print {
-            display: none !important;
-          }
-          /* Ocultar el resto del contenido de la página excepto el modal a imprimir */
-          main > *:not(section),
-          section > *:not(#modal-comprobante-sunat-print-container):not(#modal-reporte-gerencial-container):not(#modal-cierre):not(#modal-cierre-reporte) {
-            display: none !important;
-          }
-           /* Garantizar que el body y todos los contenedores padre fluyan libremente sin alturas fijas */
-          html, body, #root, #root > div, #root > div > main, #root > div > main > section {
-            background: white !important;
-            color: black !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-            height: auto !important;
-            max-height: none !important;
-            width: auto !important;
-            display: block !important;
-            position: static !important;
-          }
-          /* Formatear el contenedor del ticket en 74mm en la esquina superior izquierda */
-          #modal-comprobante-sunat-print-container {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 74mm !important;
-            height: auto !important;
-            display: block !important;
-            background: white !important;
-            z-index: 99999 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          #modal-comprobante-sunat-print-container > div {
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            max-width: 74mm !important;
-            width: 74mm !important;
-            height: auto !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          #modal-comprobante-sunat-print-container div.bg-slate-950, 
-          #modal-comprobante-sunat-print-container div.shrink-0 {
-            display: none !important;
-          }
-          #comprobante-sunat-ticket-print {
-            width: 74mm !important;
-            padding: 6px !important;
-            margin: 0 !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
-            font-size: 11px !important;
-            line-height: 1.3 !important;
-            color: #000000 !important;
-            font-weight: 850 !important;
-          }
-          #comprobante-sunat-ticket-print * {
-            color: #000000 !important;
-            font-weight: 850 !important;
-          }
-          #comprobante-sunat-ticket-print div,
-          #comprobante-sunat-ticket-print blockquote {
-            page-break-inside: avoid !important;
-          }
-          #modal-cierre-reporte {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 74mm !important;
-            height: auto !important;
-            display: block !important;
-            background: white !important;
-            z-index: 99999 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          #modal-cierre-reporte > div {
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            max-width: 74mm !important;
-            width: 74mm !important;
-            height: auto !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          #modal-cierre-reporte button {
-            display: none !important;
-          }
-          #cierre-imprimible-reporte {
-            width: 74mm !important;
-            padding: 6px !important;
-            margin: 0 !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
-            font-size: 11px !important;
-            line-height: 1.3 !important;
-            color: #000000 !important;
-            font-weight: 850 !important;
-          }
-          #cierre-imprimible-reporte * {
-            color: #000000 !important;
-            font-weight: 850 !important;
-          }
-          #cierre-imprimible-reporte div {
-            page-break-inside: avoid !important;
-          }
-          #modal-reporte-gerencial-container {
-            position: relative !important;
-            width: 100% !important;
-            height: auto !important;
-            display: block !important;
-            background: white !important;
-            z-index: 99999 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            overflow: visible !important;
-          }
-          #modal-reporte-gerencial-container > div {
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            max-width: 100% !important;
-            width: 100% !important;
-            height: auto !important;
-            max-height: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            overflow: visible !important;
-            display: block !important;
-            position: static !important;
-          }
-          #modal-reporte-gerencial-container .overflow-y-auto {
-            overflow: visible !important;
-            display: block !important;
-            height: auto !important;
-            max-height: none !important;
-            padding: 0 !important;
-          }
-          .break-inside-avoid {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-          .break-inside-avoid-page {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-          tr {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-        }
-      `}</style>
     </section>
   );
 }

@@ -1,10 +1,9 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { UtensilsCrossed, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Tags, Building2, Share2, Copy, Check as CheckIcon, Wifi, Maximize, Minimize, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Tags, Building2, Share2, Copy, Check as CheckIcon, Wifi, Maximize, Minimize, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import logoUrl from './assets/logo.png';
-import { COMPANY_CONFIG } from './config/company';
 import { useCompany } from './context/CompanyContext';
-import { api } from './api';
+import { api, esErrorDeSesion, onSesionPerdida } from './api';
 import { generateOfflineQrUrl } from './utils/qrOffline';
 
 // Carga bajo demanda (code-splitting) de páginas
@@ -925,6 +924,12 @@ function App() {
           }
         } catch (e) {
           console.error('Error inicializando sesión:', e);
+          // Sin sesión en el servidor no se restaura la guardada: onSesionPerdida ya lleva al PIN
+          if (esErrorDeSesion(e)) {
+            borrarSesion();
+            setLoading(false);
+            return;
+          }
           try {
             setCurrentUser(JSON.parse(saved));
           } catch (err) {
@@ -956,6 +961,15 @@ function App() {
     setSegundosParaCierre(null);
     borrarSesion();
   };
+
+  // El backend rechazó la sesión (expiró, la revocaron o se desactivó el equipo): volver al PIN o a la activación
+  useEffect(() => onSesionPerdida((err) => {
+    setCurrentUser(null);
+    setSegundosParaCierre(null);
+    borrarSesion();
+    setNecesitaActivacion(err.codigo === 'DISPOSITIVO_NO_ACTIVADO');
+    setAvisoLogin(err.message);
+  }), []);
 
   // Cierre de sesión por inactividad. Se compara contra la hora de la última actividad
   // (no contra un temporizador) porque al bloquear el celular los timers se congelan.

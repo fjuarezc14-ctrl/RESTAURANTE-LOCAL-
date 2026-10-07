@@ -46,7 +46,8 @@ export const correccionMetodoPago = z.looseObject({
 export const correccionTipoEntrega = z.looseObject({
   tipoEntrega: textoOpcional(30),
   pin: pinOpcional,
-  codigoPedidosYa: textoOpcional(60),
+  // Delivery propio guarda aquí "DELIVERY - nombre | TEL | DIR | PAGA | VUELTO" (ver parseDeliveryInfo)
+  codigoPedidosYa: textoOpcional(LARGO.nota),
   direccion: textoOpcional(LARGO.nota),
   nombreCliente: textoOpcional(150),
   telefono: textoOpcional(20),

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Lock, Check } from 'lucide-react';
 
 /**

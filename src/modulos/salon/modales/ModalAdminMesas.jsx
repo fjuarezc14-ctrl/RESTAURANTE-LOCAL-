@@ -1,4 +1,3 @@
-import React from 'react';
 import { Settings, X, PlusCircle, Plus, ChefHat, Utensils, Save, Trash2 } from 'lucide-react';
 
 /**

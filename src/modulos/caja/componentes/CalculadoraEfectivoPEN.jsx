@@ -2,7 +2,6 @@
 // CALCULADORA DE EFECTIVO PEN (BILLETES Y MONEDAS)
 // VT VALETEC — Componente reutilizable para arqueo y apertura de caja
 // ================================================================
-import React from 'react';
 import { Banknote, Coins, RotateCcw } from 'lucide-react';
 
 export const DENOMINACIONES_PEN = [

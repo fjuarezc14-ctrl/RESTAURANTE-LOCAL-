@@ -449,7 +449,7 @@ router.get('/api/clientes/ventas/credito', requierePermiso('Creditos'), async (r
 // ============================================================
 // CONSULTA RUC/DNI SEGURA (APIsNetPe / Decolecta)
 // ============================================================
-router.get('/api/clientes/consulta/:doc', requierePermiso('Creditos'), async (req, res, next) => {
+router.get('/api/clientes/consulta/:doc', requierePermiso('Creditos'), async (req, res) => {
   const { doc } = req.params;
   const cleaned = doc.trim();
 
