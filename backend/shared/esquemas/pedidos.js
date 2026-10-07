@@ -45,7 +45,8 @@ export const pedidoLlevar = z.looseObject({
   numDocumento: textoOpcional(20),
   clienteDireccion: textoOpcional(LARGO.nota),
   telefono: textoOpcional(20),
-  codigoPedidosYa: textoOpcional(60),
+  // Delivery propio guarda aquí "DELIVERY - nombre | TEL | DIR | PAGA | VUELTO" (ver parseDeliveryInfo)
+  codigoPedidosYa: textoOpcional(LARGO.nota),
   codigoPago: textoOpcional(60),
   cajero: textoOpcional(LARGO.nombre),
   motivoCortesia: textoOpcional(LARGO.nota),
