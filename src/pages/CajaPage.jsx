@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Receipt, X, Banknote, Search, CheckCircle, Clock, CreditCard, Wallet, Truck, PackageCheck, Plus, Calculator, Printer, Gift, Percent, Check, Users, Layers, Ban, AlertTriangle, Trash2, Lock, Flame, FileText, History, ExternalLink, ChevronDown, ChevronRight, ShoppingCart, Coins, RotateCcw, Pencil, ShoppingBag, UtensilsCrossed, Phone, MapPin, Smartphone, Eye, EyeOff, Bike, Unlock, ArrowUpRight, ArrowDownLeft, ArrowLeftRight } from 'lucide-react';
+import { Receipt, X, Banknote, Search, Clock, CreditCard, Wallet, Truck, PackageCheck, Gift, Users, Layers, Ban, Lock, History, ChevronDown, ChevronRight, ShoppingCart, ShoppingBag, UtensilsCrossed, Smartphone, Eye, EyeOff, Bike, Unlock, ArrowUpRight, ArrowLeftRight } from 'lucide-react';
 
 import { api } from '../api';
-import { parsePasosOpciones, resolverSeleccion, pasoComplementos, resolverComplementos, tieneComplementos } from '../utils/combos';
+import { parsePasosOpciones, pasoComplementos, tieneComplementos } from '../utils/combos';
 
 import { useCompany } from '../context/CompanyContext';
-import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS, ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
-import { matchProductSemantic, relevanciaBusqueda, ordenarCategorias } from '../utils/busquedaProductos';
+import { ORDEN_PRIORIDADES_CATEGORIAS } from '../config/company';
+import { ordenarCategorias } from '../utils/busquedaProductos';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
+import { numeroALetras } from '../utils/numeroALetras';
 import { useAviso, useConfirmar, usePedirDato } from '../components/ui';
 import {
   ModalAperturaCaja,
@@ -29,11 +30,7 @@ import {
   ModalCobroMesa,
   ModalNuevoPedidoDelivery,
 } from '../modulos/caja/modales';
-import { CalculadoraEfectivoPEN, DENOMINACIONES_PEN } from '../modulos/caja/componentes/CalculadoraEfectivoPEN';
-import { useTurnoCaja, useVentasTurno, useCobroMesa } from '../modulos/caja/hooks';
-
-// Desactivado por defecto (se emite en portal SUNAT SOL o ticket de control interno)
-const FACTURACION_ELECTRONICA = false;
+import { useTurnoCaja, useVentasTurno } from '../modulos/caja/hooks';
 
 // Helper para parsear la distribución de crédito en ventas con múltiples clientes
 const parsearCreditoSplit = (ofertaDescripcion, defaultClienteId, defaultMonto) => {
@@ -116,10 +113,6 @@ const getComboConfig = (nombre) => {
   return key ? { config: PRODUCT_OPTIONS_CONFIG[key], key } : null;
 };
 
-const BARRA_CATEGORIAS = (COMPANY_CONFIG.barraCategorias && Array.isArray(COMPANY_CONFIG.barraCategorias))
-  ? COMPANY_CONFIG.barraCategorias
-  : DEFAULT_BARRA_CATEGORIAS;
-
 const parseDeliveryInfo = (code) => {
   if (!code || typeof code !== 'string' || !code.startsWith('DELIVERY -')) return null;
   const parts = code.split(' | ');
@@ -138,33 +131,6 @@ const parseDeliveryInfo = (code) => {
   };
 };
 
-const agruparProductos = (items) => {
-  const list = [];
-  const esTallarin = (p) => p.categoria === 'Tallarines Verdes' || (p.nombre && /tallar[ií]n(es)?\s+verde(s)?/i.test(p.nombre));
-  const tallarines = items.filter(esTallarin);
-  const otros = items.filter(p => !esTallarin(p));
-  
-  if (tallarines.length > 1) {
-    const ordenados = [...tallarines].sort((a, b) => a.precio - b.precio);
-    list.push({
-      id: 'group_tallarines_verdes',
-      nombre: 'Tallarines Verdes (Variantes)',
-      categoria: ordenados[0].categoria || 'Platos Criollos y Fondos',
-      precioMin: ordenados[0].precio,
-      precioMax: ordenados[ordenados.length - 1].precio,
-      esAgrupado: true,
-      variantes: tallarines,
-      tipoStock: 'ilimitado',
-      stock: 0,
-      activo: true
-    });
-  } else if (tallarines.length === 1) {
-    list.push(tallarines[0]);
-  }
-  
-  return [...list, ...otros];
-};
-
 export default function CajaPage({ currentUser }) {
   const { empresa: COMPANY_CONFIG } = useCompany();
   const FACTURACION_ELECTRONICA = COMPANY_CONFIG?.facturacionElectronica ?? true;
@@ -173,7 +139,6 @@ export default function CajaPage({ currentUser }) {
   const pedirDato = usePedirDato();
   const [mesas, setMesas] = useState([]);
   const [pedidosLlevar, setPedidosLlevar] = useState([]);
-  const [stats, setStats] = useState({ atendidas: 0, ingresos: 0 });
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [mesaSeleccionada, setMesaSeleccionada] = useState(null);
@@ -225,7 +190,6 @@ export default function CajaPage({ currentUser }) {
     modalSalidaCajaOpen,
     setModalSalidaCajaOpen,
     tipoMovimientoCaja,
-    setTipoMovimientoCaja,
     historialCierresModalOpen,
     setHistorialCierresModalOpen,
     historialCierres,
@@ -245,15 +209,12 @@ export default function CajaPage({ currentUser }) {
     anularVentaModal,
     setAnularVentaModal,
     ventaAAnular,
-    setVentaAAnular,
     cambioMetodoModal,
     setCambioMetodoModal,
     ventaACambiar,
-    setVentaACambiar,
     cambioTipoEntregaModal,
     setCambioTipoEntregaModal,
     ventaATipoCambiar,
-    setVentaATipoCambiar,
     abrirAnulacionVenta,
     abrirCambioMetodo,
     abrirCambioTipoEntrega,
@@ -261,7 +222,6 @@ export default function CajaPage({ currentUser }) {
 
   const [consumoPin, setConsumoPin] = useState('');
   const [consumoPinError, setConsumoPinError] = useState('');
-  const [comprasTurno, setComprasTurno] = useState([]);
 
   // Créditos y Clientes
   const [clientes, setClientes] = useState([]);
@@ -269,14 +229,11 @@ export default function CajaPage({ currentUser }) {
   const [clienteCreditoSeleccionado, setClienteCreditoSeleccionado] = useState(null);
   const [clientesCreditoMixto, setClientesCreditoMixto] = useState([{ clienteId: '', monto: '', nombre: '' }]);
   const [incluirCreditoMixto, setIncluirCreditoMixto] = useState(false);
-  const [montoCreditoMixto, setMontoCreditoMixto] = useState('');
   const [deliveryMontoCredito, setDeliveryMontoCredito] = useState('');
   const [deliveryClienteCreditoSeleccionado, setDeliveryClienteCreditoSeleccionado] = useState(null);
   const [deliveryDescuentoValor, setDeliveryDescuentoValor] = useState('');
   const [deliveryDescuentoTipo, setDeliveryDescuentoTipo] = useState('porcentaje'); // 'porcentaje' | 'monto'
   const [deliveryVistaMovil, setDeliveryVistaMovil] = useState('productos'); // 'productos' | 'pedido'
-  // Búsqueda de clientes en selectores de crédito
-  const [busquedaClienteCredito, setBusquedaClienteCredito] = useState('');
   const [pagaConEfectivoMesa, setPagaConEfectivoMesa] = useState('');
 
   // Mostrar solo las ventas del turno activo por defecto (false = Turno, true = Día)
@@ -309,8 +266,6 @@ export default function CajaPage({ currentUser }) {
   // Modal de autorización de cancelación para Llevar/Delivery
   const [cancelLlevarModalOpen, setCancelLlevarModalOpen] = useState(false);
   const [pedidoACancelarLlevar, setPedidoACancelarLlevar] = useState(null);
-  const [pinCancelLlevar, setPinCancelLlevar] = useState('');
-  const [errorCancelLlevar, setErrorCancelLlevar] = useState('');
 
   // Modal PedidosYa y Para Llevar
   const [deliveryModal, setDeliveryModal] = useState(false);
@@ -320,7 +275,6 @@ export default function CajaPage({ currentUser }) {
   const [cajeroNombre, setCajeroNombre] = useState(currentUser?.nombre || 'María');
   const usuarioOperador = currentUser?.nombre || cajeroNombre || 'Cajero';
   const [usuariosSistema, setUsuariosSistema] = useState([]);
-  const [modoOtroCajero, setModoOtroCajero] = useState(false);
 
   const cajerosDisponibles = React.useMemo(() => {
     if (!usuariosSistema || usuariosSistema.length === 0) return [];
@@ -338,14 +292,14 @@ export default function CajaPage({ currentUser }) {
   }, [currentUser]);
 
   useEffect(() => {
-    if (!cajaEstado.abierto && cajerosDisponibles.length > 0 && !modoOtroCajero) {
+    if (!cajaEstado.abierto && cajerosDisponibles.length > 0) {
       const match = cajerosDisponibles.find(u => u.nombre.toLowerCase() === (cajeroNombre || '').toLowerCase());
       if (!match) {
         const defaultUser = cajerosDisponibles.find(u => u.rol === 'Cajero') || cajerosDisponibles[0];
         if (defaultUser) setCajeroNombre(defaultUser.nombre);
       }
     }
-  }, [cajerosDisponibles, cajaEstado.abierto, modoOtroCajero]);
+  }, [cajerosDisponibles, cajaEstado.abierto]);
 
   const [deliverySearchQuery, setDeliverySearchQuery] = useState('');
   const [deliveryCategoriaFiltro, setDeliveryCategoriaFiltro] = useState('🔥 Más Pedidos');
@@ -353,9 +307,6 @@ export default function CajaPage({ currentUser }) {
   const deliverySearchInputRef = useRef(null);
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [selections, setSelections] = useState({});
-  const [currentStepIdx, setCurrentStepIdx] = useState(0);
-  const [additionalNotes, setAdditionalNotes] = useState('');
 
   const [productosMenu, setProductosMenu] = useState([]);
   const [itemsDelivery, setItemsDelivery] = useState([]);
@@ -405,28 +356,24 @@ export default function CajaPage({ currentUser }) {
 
     try {
       if (options?.full) {
-        const [mesasData, resumenData, llevarData, ventasData, prods, clientsList, abonosList, comprasList, ultimoCierreRes, estadoCajaRes, usuariosList] = await Promise.all([
+        const [mesasData, llevarData, ventasData, prods, clientsList, abonosList, ultimoCierreRes, estadoCajaRes, usuariosList] = await Promise.all([
           api.getMesas().catch(() => null),
-          api.getResumenVentas().catch(() => ({ atendidas: 0, ingresos: 0 })),
           api.getPedidosLlevar().catch(() => null),
           api.getHistorialVentas().catch(() => null),
           api.getProductos().catch(() => null),
           api.getClientes().catch(() => []),
           api.getAbonos().catch(() => []),
-          api.getCompras().catch(() => []),
           api.getUltimoCierre().catch(() => null),
           api.getEstadoCaja().catch(() => null),
           api.getUsuarios().catch(() => []),
         ]);
         if (mesasData) setMesas(mesasData);
         if (llevarData) setPedidosLlevar(llevarData);
-        if (resumenData) setStats({ atendidas: resumenData.atendidas || 0, ingresos: resumenData.ingresos || 0 });
         if (ventasData) setVentas(ventasData);
         if (prods) setProductosMenu(prods);
         if (usuariosList && Array.isArray(usuariosList)) setUsuariosSistema(usuariosList);
         setClientes(clientsList || []);
         setAbonos(abonosList || []);
-        setComprasTurno(comprasList || []);
 
         if (estadoCajaRes && typeof estadoCajaRes.abierto === 'boolean') {
           setCajaEstado(estadoCajaRes);
@@ -447,15 +394,13 @@ export default function CajaPage({ currentUser }) {
         }
       } else {
         // Sondeo ligero de alta frecuencia: solo mesas, delivery activo y estado de caja
-        const [mesasData, resumenData, llevarData, estadoCajaRes] = await Promise.all([
+        const [mesasData, llevarData, estadoCajaRes] = await Promise.all([
           api.getMesas().catch(() => null),
-          api.getResumenVentas().catch(() => null),
           api.getPedidosLlevar().catch(() => null),
           api.getEstadoCaja().catch(() => null),
         ]);
         if (mesasData) setMesas(mesasData);
         if (llevarData) setPedidosLlevar(llevarData);
-        if (resumenData) setStats({ atendidas: resumenData.atendidas || 0, ingresos: resumenData.ingresos || 0 });
         if (estadoCajaRes && typeof estadoCajaRes.abierto === 'boolean') {
           setCajaEstado(estadoCajaRes);
         }
@@ -510,45 +455,6 @@ export default function CajaPage({ currentUser }) {
 
   const mesasPendientes = mesas.filter(m => m.estado !== 'Libre' && m.pedidoData);
 
-  const numeroALetras = (num) => {
-    const unidades = ["", "UN", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE"];
-    const decenas = ["", "DIEZ", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"];
-    const especiales = ["DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISEIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"];
-    const centenas = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"];
-
-    let entero = Math.floor(num);
-    let decimales = Math.round((num - entero) * 100);
-    let decimalStr = decimales < 10 ? "0" + decimales : decimales;
-
-    if (entero === 0) return "CERO CON " + decimalStr + "/100 SOLES";
-    if (entero === 100) return "CIEN CON " + decimalStr + "/100 SOLES";
-
-    let letras = "";
-
-    if (entero >= 100) {
-      let c = Math.floor(entero / 100);
-      letras += centenas[c] + " ";
-      entero %= 100;
-    }
-
-    if (entero >= 10 && entero <= 19) {
-      letras += especiales[entero - 10] + " ";
-    } else if (entero >= 20 || entero > 0) {
-      let d = Math.floor(entero / 10);
-      let u = entero % 10;
-      if (d > 0) {
-        letras += decenas[d];
-        if (u > 0) letras += " Y ";
-      }
-      if (u > 0) {
-        letras += unidades[u];
-      }
-      letras += " ";
-    }
-
-    return letras.trim() + " CON " + decimalStr + "/100 SOLES";
-  };
-
   const handleDocumentoChange = (val) => {
     setNumDocumento(val);
     const cleaned = val.trim();
@@ -560,49 +466,6 @@ export default function CajaPage({ currentUser }) {
       setClienteNombre('JUAN PEREZ SOTO');
       setClienteDireccion('CALLE SAN MARTÍN 109');
       setTipoComprobante('Boleta');
-    }
-  };
-
-  const buscarCliente = async () => {
-    if (!numDocumento) return;
-    setIsBuscando(true);
-    const doc = numDocumento.trim();
-    
-    // Fallbacks locales rápidos de prueba en desarrollo
-    if (doc === '20613857321') {
-      setClienteNombre('FIRST FISH S.A.C.');
-      setClienteDireccion('LT. 05 DPTO. LIMA MZ. J COOP. CAJABAMBA - LIMA LIMA LOS OLIVOS');
-      setTipoComprobante('Factura');
-      setIsBuscando(false);
-      return;
-    } else if (doc === '10404040404') {
-      setClienteNombre('JUAN PEREZ SOTO');
-      setClienteDireccion('CALLE SAN MARTÍN 109');
-      setTipoComprobante('Boleta');
-      setIsBuscando(false);
-      return;
-    }
-
-    try {
-      const data = await api.consultarCliente(doc);
-      const isRUC = doc.length === 11;
-      if (isRUC) {
-        setClienteNombre(data.razonSocial || '');
-        setClienteDireccion(data.direccion || '');
-        setTipoComprobante('Factura');
-      } else {
-        setClienteNombre(data.nombre || '');
-        setClienteDireccion(data.direccion || '');
-        setTipoComprobante('Boleta');
-      }
-    } catch (err) {
-      console.error("Error consultando API de DNI/RUC:", err);
-      // Mantener campos vacíos en caso de error para permitir escritura manual limpia
-      setClienteNombre('');
-      setClienteDireccion('');
-    }
- finally {
-      setIsBuscando(false);
     }
   };
 
@@ -644,7 +507,7 @@ export default function CajaPage({ currentUser }) {
 
   const reimprimirComprobante = (v) => {
     if (!v) return;
-    const rucEmpresa = `R.U.C. N° ${COMPANY_CONFIG.ruc}`;
+    const rucEmpresa = COMPANY_CONFIG.ruc; // el QR de SUNAT lleva solo el número
     
     let serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : (v.tipoComprobante === 'Ticket' ? 'T001' : 'B001'));
     let correlativoStr = String(v.numero || v.id).padStart(4, '0');
@@ -738,9 +601,6 @@ export default function CajaPage({ currentUser }) {
     if (!telefono) return;
     const cleanedPhone = telefono.replace(/\D/g, '');
     
-    let serie = v.serie || (v.tipoComprobante === 'Factura' ? 'F001' : 'B001');
-    let correlativoStr = String(v.numero || v.id).padStart(4, '0');
-    
     const detalle = (v.itemsResumen || '').trim();
     const totalSafe = Number(v.total || 0).toFixed(2);
     const mensaje = `Hola *${v.nombreCliente || 'Estimado cliente'}*, le enviamos el detalle de su consumo en *${COMPANY_CONFIG.name}*:\n\n${detalle ? detalle + '\n\n' : ''}Total: *S/ ${totalSafe}*\nTicket de venta N° ${v.id}\n\n¡Gracias por su preferencia!`;
@@ -753,13 +613,6 @@ export default function CajaPage({ currentUser }) {
 
 
 
-
-  const handleComprobanteChange = (val) => {
-    setTipoComprobante(val);
-    setNumDocumento('');
-    setClienteNombre('');
-    setClienteDireccion('');
-  };
 
   const procesarCobroYFacturar = async () => {
     if (cobrando) return;
@@ -950,7 +803,6 @@ export default function CajaPage({ currentUser }) {
       setMixtoEfectivo('');
       setMixtoTarjeta('');
       setMixtoYape('');
-      setMontoCreditoMixto('');
       setClienteCreditoSeleccionado(null);
       setClientesCreditoMixto([{ clienteId: '', monto: '', nombre: '' }]);
       setIncluirCreditoMixto(false);
@@ -1325,9 +1177,6 @@ export default function CajaPage({ currentUser }) {
       const steps = getProductSteps(prod, {});
       if (steps && steps.length > 0) {
         setSelectedProduct(prod);
-        setSelections({});
-        setCurrentStepIdx(0);
-        setAdditionalNotes('');
         setOptionsModalOpen(true);
         return;
       }
@@ -1403,35 +1252,6 @@ export default function CajaPage({ currentUser }) {
     setItemsDelivery(nuevo);
   };
 
-  const handleExecuteCancelLlevar = async () => {
-    if (!pinCancelLlevar.trim()) {
-      setErrorCancelLlevar('El PIN es obligatorio.');
-      return;
-    }
-    try {
-      const auth = await api.validateAuth(pinCancelLlevar.trim());
-      if (!auth || !auth.ok) {
-        setErrorCancelLlevar('PIN incorrecto. Autorización denegada.');
-        return;
-      }
-      const res = await api.cancelarPedido(pedidoACancelarLlevar.pedidoId, {
-        canceladoPor: usuarioOperador,
-        motivo: 'Cancelado por cajero (error en pedido)',
-        force: true,
-      });
-      if (res.ok) {
-        addToast('Pedido cancelado. Cocina ha sido notificada.', 'success');
-        setCancelLlevarModalOpen(false);
-        setPedidoACancelarLlevar(null);
-        fetchCajaData();
-      } else {
-        setErrorCancelLlevar(res.error || 'No se pudo cancelar el pedido.');
-      }
-    } catch (err) {
-      setErrorCancelLlevar('Error de conexión con el servidor.');
-    }
-  };
-
   const abrirTicketImpresionDirecto = (total, response, tipoComprobante, numDocumento, clienteNombre, clienteDireccion, items, mesaNum = 'Delivery', deliveryInfo = null, descuentoAplicado = 0, ofertaDescripcion = null) => {
     if (!response) response = {};
     const fecha = new Date().toLocaleDateString('es-PE');
@@ -1444,7 +1264,7 @@ export default function CajaPage({ currentUser }) {
     let igv = total - subtotal;
     let totalLetras = numeroALetras(total);
     let hashResumen = "gSbTDa" + Math.random().toString(36).substring(2, 8).toUpperCase() + "iIZDyirfA6TBPKJnEI=";
-    const rucEmpresa = `R.U.C. N° ${COMPANY_CONFIG.ruc}`;
+    const rucEmpresa = COMPANY_CONFIG.ruc; // el QR de SUNAT lleva solo el número
     const igvSafe = Number(igv || 0).toFixed(2);
     const totalSafe = Number(total || 0).toFixed(2);
     let qrData = `${rucEmpresa}|${tipoComprobante === 'Factura' ? '01' : '03'}|${serie}|${correlativoStr}|${igvSafe}|${totalSafe}|${fecha}|${tipoComprobante === 'Factura' ? '6' : (numDocumento?.length === 8 ? '1' : '0')}|${numDocumento || '00000000'}`;
@@ -1797,7 +1617,6 @@ export default function CajaPage({ currentUser }) {
     setClienteCreditoSeleccionado(null);
     setClientesCreditoMixto([{ clienteId: '', monto: '', nombre: '' }]);
     setIncluirCreditoMixto(false);
-    setMontoCreditoMixto('');
     setMixtoEfectivo('');
     setMixtoTarjeta('');
     setMixtoYape('');
@@ -1869,40 +1688,6 @@ export default function CajaPage({ currentUser }) {
       <span className={`w-1.5 h-1.5 rounded-full ${listo ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
       {listo ? textoListo : textoPendiente}
     </span>
-  );
-
-  const iconoEditar = (onClick, title) => (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
-    >
-      <Pencil className="w-3.5 h-3.5" />
-    </button>
-  );
-
-  const modalDetalle = (onClose, header, body, footer) => (
-    <div
-      className="fixed inset-0 z-[105] bg-slate-900/50 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 animate-fade-in"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white w-full sm:max-w-lg max-h-[92dvh] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-slate-100">
-          <div className="min-w-0">{header}</div>
-          <button type="button" onClick={onClose} className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-5">{body}</div>
-        {footer && <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/70">{footer}</div>}
-      </div>
-    </div>
   );
 
   // Campo del Nº de operación (Yape/Plin) o voucher (tarjeta), para verificar el pago después
@@ -2497,8 +2282,6 @@ export default function CajaPage({ currentUser }) {
         onCancelar={(p) => {
           setPedidoDetalleId(null);
           setPedidoACancelarLlevar(p);
-          setPinCancelLlevar('');
-          setErrorCancelLlevar('');
           setCancelLlevarModalOpen(true);
         }}
         onModificar={(p) => {
