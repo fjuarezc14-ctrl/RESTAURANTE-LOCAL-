@@ -30,6 +30,15 @@ export default defineConfig([
       ...reglas,
       // Avisos propios en lugar de los del navegador (useAviso, useConfirmar, usePedirDato)
       'no-alert': 'error',
+      // Usar un valor antes de declararlo en el mismo componente (ej. en la lista de dependencias de un
+      // useEffect) rompe la página al renderizar; dentro de funciones que se llaman después no hay problema
+      // Íconos de lucide que se llaman igual que objetos del navegador: sin el import, <History /> no da
+      // error de lint sino que rompe la página al renderizar ("Illegal constructor")
+      'no-restricted-globals': ['error', ...['Bluetooth', 'Clipboard', 'Fence', 'File', 'Gamepad', 'History', 'Image',
+        'Keyboard', 'Lock', 'Navigation', 'Option', 'Presentation', 'Text'].map(name => ({
+        name, message: `Importa el ícono ${name} de lucide-react (sin import se usa el objeto del navegador).`,
+      }))],
+      'no-use-before-define': ['error', { functions: false, classes: false, variables: false }],
       // Páginas grandes: avisar para seguir partiéndolas en src/modulos/
       'max-lines': ['warn', { max: 600, skipBlankLines: true, skipComments: true }],
       // Reglas del compilador de React: quedan como aviso hasta revisar cada caso con pruebas

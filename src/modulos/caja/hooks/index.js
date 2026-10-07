@@ -4,3 +4,4 @@
 export { useTurnoCaja } from './useTurnoCaja';
 export { useVentasTurno } from './useVentasTurno';
 export { useCobroMesa } from './useCobroMesa';
+export { usePedidoDelivery } from './usePedidoDelivery';
