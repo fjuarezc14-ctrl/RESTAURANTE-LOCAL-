@@ -1,4 +1,5 @@
 // Respaldo descargable de la base (tarea 20), con un pg_dump simulado (test/falsos/pg_dump.sh)
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import request from 'supertest';
@@ -7,6 +8,8 @@ import { PIN_ADMIN, PIN_CAJERO, api, app, crearBase, esperarError, limpiarBD, pr
 
 const PG_DUMP_FALSO = path.join(path.dirname(fileURLToPath(import.meta.url)), 'falsos', 'pg_dump.sh');
 const CONTRASENA = 'clave-segura-1';
+// Por si el sistema de archivos o git no guardó el permiso de ejecución
+fs.chmodSync(PG_DUMP_FALSO, 0o755);
 
 async function sesion(pin) {
   const nav = request.agent(app);
