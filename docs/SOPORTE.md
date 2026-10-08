@@ -82,3 +82,25 @@ docker compose -f docker-compose.prod.yml --env-file .env.<cliente> up -d --buil
 - En el `.env.<cliente>` del servidor, además de lo de la sección 4: `DB_PASSWORD` propio **antes del primer arranque** (después ya no cambia la clave de la base).
 - `MODO_INSTALACION=web` solo si el sitio va detrás de HTTPS. En ese modo las cookies de sesión son `Secure` y por HTTP simple el navegador no las envía: nadie podría entrar.
 - Actualizar: `git pull` y el mismo comando con `--build`.
+- Con dominio propio: agregar `-f docker-compose.https.yml` (Caddy saca el certificado HTTPS solo). Plantilla completa: `.env.la-carreta-web.example`.
+
+## 6. Actualizar el local (Windows) y mudarlo a la web
+
+### Actualizar la PC del local
+1. Compilar: `./installer/build.sh <cliente>`. Deja en `installer/dist/` el `.exe` y `CREDENCIALES-<cliente>.txt`.
+2. Ejecutar el `.exe` en la PC del local **fuera de horario**. Instala encima: conserva la base, los PIN y el `.env`.
+3. Antes de tocar la base, el instalador saca un respaldo en `C:\ValetecPOS\respaldos\antes-de-actualizar-<fecha>.dump`. Si el respaldo falla, se detiene sin cambiar nada.
+4. Desde la 1.1.0 cada equipo se activa una vez con usuario `admin` y la contraseña de `CREDENCIALES-<cliente>.txt`. Si el administrador ya tenía contraseña, sigue valiendo esa.
+5. Si algo falla: `C:\ValetecPOS\logs\instalacion.log`.
+
+### Pasar la base a la versión web
+1. En el local: menú Inicio → Valetec POS → **Sacar respaldo**. Deja un `.dump` en `C:\ValetecPOS\respaldos`.
+   (En una versión 1.0.0, que no tiene ese acceso directo, desde una consola de administrador:
+   `C:\ValetecPOS\pgsql\bin\pg_dump.exe -h localhost -p 5446 -U postgres -d restaurante_local -Fc --no-owner -f C:\respaldo.dump`,
+   con la contraseña que está en `DATABASE_URL` de `C:\ValetecPOS\app\backend\.env`.)
+2. Copiar de `C:\ValetecPOS\app\backend\.env` el valor de **`PIN_SECRET`**. Sin el mismo secreto, ningún PIN funciona en la web.
+3. En el servidor: `cp .env.la-carreta-web.example .env.la-carreta-web` y completar `DOMINIO`, `DB_PASSWORD`, `PIN_SECRET` e `INITIAL_ADMIN_PASSWORD`.
+4. Subir el `.dump` al servidor y ejecutar `./scripts/importar-respaldo.sh .env.la-carreta-web respaldo.dump`.
+   El script se niega si la base web ya tiene ventas; con `--reemplazar` respalda la actual en `respaldos/` y la pisa.
+5. Entrar a `https://<dominio>` y activar cada equipo de nuevo (usuario `admin`). Los PIN son los mismos del local.
+6. Mientras la web no esté confirmada, no vender en las dos a la vez: lo que se venda en el local después del respaldo no pasa a la web.

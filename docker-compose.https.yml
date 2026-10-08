@@ -1,0 +1,25 @@
+# ================================================================
+# HTTPS con Caddy delante de docker-compose.prod.yml (certificado automático de Let's Encrypt).
+#   docker compose -f docker-compose.prod.yml -f docker-compose.https.yml --env-file .env.<cliente> up -d --build
+# Requisitos: DOMINIO en el .env apuntando a este servidor y los puertos 80 y 443 abiertos.
+# ================================================================
+services:
+  https:
+    image: caddy:2-alpine
+    command: caddy reverse-proxy --from ${DOMINIO:?Falta DOMINIO en el .env} --to web:80
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  # Caddy y nginx delante: el backend toma la IP real del cliente del X-Forwarded-For (límite de intentos)
+  backend:
+    environment:
+      - PROXIES_DELANTE=2
+
+volumes:
+  caddy_data:

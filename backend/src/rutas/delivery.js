@@ -343,12 +343,18 @@ router.put('/api/pedidos/llevar/:id', requierePermiso('Caja'), validar({ body: p
         }))
       });
 
-      // Descontar stock de lo nuevo (incluye los componentes de un combo)
+      // Descontar stock de lo nuevo (incluye los componentes de un combo), con la misma guardia que al crear
       for (const item of expandedItems) {
-        await tx.producto.updateMany({
-          where: { id: item.productoId, tipoStock: 'limitado' },
+        const updateResult = await tx.producto.updateMany({
+          where: { id: item.productoId, tipoStock: 'limitado', stock: { gte: item.cantidad } },
           data: { stock: { decrement: item.cantidad } }
         });
+        if (updateResult.count === 0) {
+          const prodCheck = await tx.producto.findUnique({ where: { id: item.productoId } });
+          if (prodCheck && prodCheck.tipoStock === 'limitado' && prodCheck.stock < item.cantidad) {
+            throw new ErrorApp('STOCK_INSUFICIENTE', `Stock insuficiente para "${prodCheck.nombre}". Stock disponible: ${prodCheck.stock}, solicitado: ${item.cantidad}`, { datos: { disponible: prodCheck.stock } });
+          }
+        }
       }
 
       // Actualizar pedido
