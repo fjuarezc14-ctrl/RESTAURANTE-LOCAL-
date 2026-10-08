@@ -188,6 +188,8 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), idempotente, validar
         },
       });
 
+      // Delivery se cobra al tomarlo: esa es su fecha de cobro para los reportes
+      await tx.pedido.update({ where: { id: pedidoCreado.id }, data: { cobradoEn: ventaCreada.createdAt } });
       return { pedido: pedidoCreado, venta: ventaCreada };
     });
 
