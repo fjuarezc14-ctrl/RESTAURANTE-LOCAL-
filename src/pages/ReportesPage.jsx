@@ -510,6 +510,7 @@ export default function ReportesPage() {
             </div>
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
               <div><dt className="text-xs text-slate-400">Responsable</dt><dd className="text-slate-800">{c.canceladoPor || 'No registrado'}</dd></div>
+              <div><dt className="text-xs text-slate-400">Autorizó (PIN)</dt><dd className="text-slate-800">{c.autorizadoPor || 'No hizo falta'}</dd></div>
               <div className="sm:col-span-2"><dt className="text-xs text-slate-400">Motivo</dt><dd className="text-slate-800 italic">“{c.motivoCancela || 'Sin motivo especificado'}”</dd></div>
             </dl>
             <div>
