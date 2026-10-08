@@ -2,13 +2,19 @@
 // MODAL DE MOVIMIENTO DE CAJA (INGRESO / RETIRO DE EFECTIVO)
 // VT VALETEC — Módulo Caja
 // ================================================================
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ArrowUpRight, ArrowDownLeft, AlertTriangle } from 'lucide-react';
 import { Dialog, DialogHeader, DialogFooter, Button } from '../../../components/ui';
 import { api } from '../../../api';
 import { movimientoCaja } from '@shared/esquemas/caja.js';
 
-export function ModalRetiroCaja({
+// El contenido se monta de nuevo cada vez que se abre: los campos empiezan limpios (sin efecto que los reinicie)
+export function ModalRetiroCaja(props) {
+  if (!(props.abierto)) return null;
+  return <ModalRetiroCajaContenido {...props} />;
+}
+
+function ModalRetiroCajaContenido({
   abierto,
   onCerrar,
   onMovimientoExitoso,
@@ -20,16 +26,6 @@ export function ModalRetiroCaja({
   const [motivo, setMotivo] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (abierto) {
-      setTipo(tipoInicial);
-      setMonto('');
-      setMotivo('');
-      setError('');
-      setGuardando(false);
-    }
-  }, [abierto, tipoInicial]);
 
   const esIngreso = tipo === 'INGRESO';
   const acento = esIngreso

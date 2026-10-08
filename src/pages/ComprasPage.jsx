@@ -9,6 +9,7 @@ import { COMPANY_CONFIG } from '../config/company';
 import { ModalDetalleGasto, ModalFormGasto, ModalEliminarGasto } from '../modulos/compras/modales';
 import { compraNueva, compraEdicion } from '@shared/esquemas/compras.js';
 import { getFechaPeru, parsearGastoMetodos } from '../modulos/compras/utils';
+import { useCargar } from '../hooks/useCargar';
 
 const CATEGORIAS = [
   'Insumos y Alimentos',
@@ -154,9 +155,7 @@ export default function ComprasPage() {
     };
   }, [rangoActivo, fechaDesde, fechaHasta]);
 
-  useEffect(() => {
-    fetchTodo();
-  }, [fetchTodo]);
+  useCargar(fetchTodo);
 
   useEffect(() => {
     const onKey = (e) => {

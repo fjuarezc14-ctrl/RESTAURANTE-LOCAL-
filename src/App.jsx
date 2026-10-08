@@ -347,8 +347,10 @@ const LoginGate = ({ onLoginSuccess, onActivarClick, aviso }) => {
   const handleKeyPress = (num) => {
     if (bloqueadoSegundos > 0) return;
     if (pin.length < 4) {
-      setPin(prev => prev + num);
+      const nuevo = pin + num;
+      setPin(nuevo);
       setError('');
+      if (nuevo.length === 4) handleSubmit(nuevo); // al cuarto dígito entra solo
     }
   };
 
@@ -357,15 +359,15 @@ const LoginGate = ({ onLoginSuccess, onActivarClick, aviso }) => {
     setPin(prev => prev.slice(0, -1));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (pinIngresado = pin) => {
     if (bloqueadoSegundos > 0) return;
-    if (pin.length !== 4) {
+    if (pinIngresado.length !== 4) {
       setError('El PIN debe tener 4 dígitos');
       return;
     }
     setCargando(true);
     try {
-      const res = await api.login(pin);
+      const res = await api.login(pinIngresado);
       if (res.error) {
         throw new Error(res.error);
       }
@@ -389,12 +391,6 @@ const LoginGate = ({ onLoginSuccess, onActivarClick, aviso }) => {
       setCargando(false);
     }
   };
-
-  useEffect(() => {
-    if (pin.length === 4) {
-      handleSubmit();
-    }
-  }, [pin]);
 
   return (
     <div className="fixed inset-0 bg-slate-950 flex items-center justify-center p-3 sm:p-4 z-[9999] overflow-y-auto">
@@ -505,10 +501,12 @@ const LoginGate = ({ onLoginSuccess, onActivarClick, aviso }) => {
 const AuthGate = ({ onLoginSuccess, aviso, inicialModo = 'pin' }) => {
   const [modo, setModo] = useState(inicialModo);
   const [mensajeModo, setMensajeModo] = useState(aviso);
-
-  useEffect(() => {
-    if (aviso) setMensajeModo(aviso);
-  }, [aviso]);
+  // Llega un aviso nuevo (ej. "tu sesión expiró"): se muestra (ajuste durante el render, sin efecto)
+  const [avisoVisto, setAvisoVisto] = useState(aviso);
+  if (aviso && aviso !== avisoVisto) {
+    setAvisoVisto(aviso);
+    setMensajeModo(aviso);
+  }
 
   if (modo === 'activar') {
     return (
@@ -950,7 +948,7 @@ function App() {
     };
 
     initSession();
-  }, []);
+  }, [aviso]); // aviso es estable: solo corre al iniciar
 
   const handleLoginSuccess = (user) => {
     sessionStorage.setItem(ACTIVIDAD_KEY, String(Date.now()));
@@ -982,8 +980,9 @@ function App() {
 
   // Cierre de sesión por inactividad. Se compara contra la hora de la última actividad
   // (no contra un temporizador) porque al bloquear el celular los timers se congelan.
+  const aplicaCierrePorInactividad = aplicaInactividad(currentUser);
   useEffect(() => {
-    if (!aplicaInactividad(currentUser)) return;
+    if (!aplicaCierrePorInactividad) return;
 
     const registrarActividad = (e) => {
       // El botón "Cerrar sesión" del aviso no debe contar como actividad
@@ -1024,7 +1023,7 @@ function App() {
       window.removeEventListener('focus', revisar);
       clearInterval(interval);
     };
-  }, [currentUser?.id, currentUser?.rol]);
+  }, [currentUser?.id, aplicaCierrePorInactividad]);
 
   // Detectar si el usuario fue eliminado, desactivado o si cambió su PIN/rol: al recibir el aviso en vivo
   // de que cambiaron los usuarios (SSE), y cada 60 s como respaldo

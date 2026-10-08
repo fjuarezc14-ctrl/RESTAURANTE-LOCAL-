@@ -1,8 +1,9 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 import { api } from '../api';
 import { COMPANY_CONFIG as DEFAULT_CONFIG } from '../config/company';
 
 import { safeJsonParse } from '../utils/safeJson';
+import { useCargar } from '../hooks/useCargar';
 
 const CompanyContext = createContext({
   empresa: DEFAULT_CONFIG,
@@ -54,9 +55,7 @@ export const CompanyProvider = ({ children }) => {
     }
   }, []);
 
-  useEffect(() => {
-    reloadEmpresa();
-  }, [reloadEmpresa]);
+  useCargar(reloadEmpresa);
 
   return (
     <CompanyContext.Provider value={{ empresa, loading, reloadEmpresa }}>

@@ -2,7 +2,7 @@
 // SISTEMA CENTRAL DE NOTIFICACIONES, CONFIRMACIONES Y PROMPTS
 // VT VALETEC — Reemplazo profesional de alert, confirm y prompt
 // ================================================================
-import { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   CheckCircle2,
   AlertCircle,
@@ -14,18 +14,7 @@ import {
 } from 'lucide-react';
 import { Dialog, DialogHeader, DialogFooter, Button, Input } from './index';
 
-const AvisoContext = createContext(null);
-
-// Listener global para llamadas fuera del ciclo de React (ej. en api.js)
-let globalAvisoHandler = null;
-
-export function mostrarAvisoGlobal(tipo, mensaje, duracion) {
-  if (globalAvisoHandler) {
-    globalAvisoHandler(tipo, mensaje, duracion);
-  } else {
-    console.warn(`[Aviso ${tipo}]:`, mensaje);
-  }
-}
+import { AvisoContext, registrarAvisoGlobal } from './avisos';
 
 export function AvisoProvider({ children }) {
   // --- Estado de Toasts (Avisos) ---
@@ -64,7 +53,7 @@ export function AvisoProvider({ children }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const aviso = useCallback((options) => {
+  const avisar = useCallback((options) => {
     const {
       tipo = 'info', // 'exito' | 'error' | 'advertencia' | 'info'
       mensaje = '',
@@ -83,15 +72,17 @@ export function AvisoProvider({ children }) {
     }
   }, [cerrarAviso]);
 
-  // Accesos rápidos: aviso.exito(...), aviso.error(...), etc.
-  aviso.exito = useCallback((mensaje, titulo = '') => aviso({ tipo: 'exito', mensaje, titulo }), [aviso]);
-  aviso.error = useCallback((mensaje, titulo = '') => aviso({ tipo: 'error', mensaje, titulo }), [aviso]);
-  aviso.advertencia = useCallback((mensaje, titulo = '') => aviso({ tipo: 'advertencia', mensaje, titulo }), [aviso]);
-  aviso.info = useCallback((mensaje, titulo = '') => aviso({ tipo: 'info', mensaje, titulo }), [aviso]);
+  // aviso(...) y sus accesos rápidos aviso.exito(...), aviso.error(...), etc. Un objeto estable
+  // (no cambia entre renders), así se puede usar en las dependencias de los efectos.
+  const aviso = useMemo(() => Object.assign((options) => avisar(options), {
+    exito: (mensaje, titulo = '') => avisar({ tipo: 'exito', mensaje, titulo }),
+    error: (mensaje, titulo = '') => avisar({ tipo: 'error', mensaje, titulo }),
+    advertencia: (mensaje, titulo = '') => avisar({ tipo: 'advertencia', mensaje, titulo }),
+    info: (mensaje, titulo = '') => avisar({ tipo: 'info', mensaje, titulo }),
+  }), [avisar]);
 
-  // Conectar listener global para llamadas en api.js
-  useRef(null);
-  globalAvisoHandler = (tipo, mensaje, duracion) => aviso({ tipo, mensaje, duracion });
+  // Avisos desde fuera de React (ej. api.js)
+  useEffect(() => registrarAvisoGlobal((tipo, mensaje, duracion) => avisar({ tipo, mensaje, duracion })), [avisar]);
 
   // -------------------------------------------------------------
   // 2. CONFIRMAR (MODAL PROMISE)
@@ -339,29 +330,4 @@ export function AvisoProvider({ children }) {
       </Dialog>
     </AvisoContext.Provider>
   );
-}
-
-// Hooks exportados para uso en cualquier componente
-export function useAviso() {
-  const ctx = useContext(AvisoContext);
-  if (!ctx) throw new Error('useAviso debe usarse dentro de un AvisoProvider');
-  return ctx.aviso;
-}
-
-export function useConfirmar() {
-  const ctx = useContext(AvisoContext);
-  if (!ctx) throw new Error('useConfirmar debe usarse dentro de un AvisoProvider');
-  return ctx.confirmar;
-}
-
-export function usePedirDato() {
-  const ctx = useContext(AvisoContext);
-  if (!ctx) throw new Error('usePedirDato debe usarse dentro de un AvisoProvider');
-  return ctx.pedirDato;
-}
-
-export function useNotificaciones() {
-  const ctx = useContext(AvisoContext);
-  if (!ctx) throw new Error('useNotificaciones debe usarse dentro de un AvisoProvider');
-  return ctx;
 }

@@ -21,6 +21,7 @@ import { playChimeNotification } from '../modulos/salon/utils/sonido';
 import { avisosDePlatosListos } from '../modulos/salon/utils/avisosListos';
 import { usePedidoMesa } from '../modulos/salon/hooks/usePedidoMesa';
 import { useCompany } from '../context/CompanyContext';
+import { useCargar } from '../hooks/useCargar';
 
 const BARRA_CATEGORIAS = (COMPANY_CONFIG.barraCategorias && Array.isArray(COMPANY_CONFIG.barraCategorias))
   ? COMPANY_CONFIG.barraCategorias
@@ -216,19 +217,16 @@ export default function SalonPage({ currentUser }) {
     setToasts,
   });
 
-  // Mantener meseroGlobal sincronizado con currentUser si este se carga después
-  useEffect(() => {
-    if (currentUser?.nombre) {
-      setMeseroGlobal(currentUser.nombre);
-    }
-  }, [currentUser]);
+  // Mantener meseroGlobal sincronizado con currentUser si este cambia (ajuste durante el render, sin efecto)
+  const [usuarioVisto, setUsuarioVisto] = useState(currentUser?.nombre);
+  if (currentUser?.nombre && currentUser.nombre !== usuarioVisto) {
+    setUsuarioVisto(currentUser.nombre);
+    setMeseroGlobal(currentUser.nombre);
+  }
 
   // Carga inicial al montar salón
-  useEffect(() => {
-    fetchMesas();
-    fetchProductos();
-    fetchUsuarios();
-  }, [fetchMesas, fetchProductos, fetchUsuarios]);
+  const cargarSalon = useCallback(() => { fetchMesas(); fetchProductos(); fetchUsuarios(); }, [fetchMesas, fetchProductos, fetchUsuarios]);
+  useCargar(cargarSalon);
 
   // Mesas al instante (SSE): pedidos de otros mozos, cobros en caja, platos listos
   useEventos(['mesas', 'pedidos'], fetchMesas);

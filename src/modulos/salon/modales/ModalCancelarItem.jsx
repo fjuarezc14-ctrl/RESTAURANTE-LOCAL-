@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Trash2, Plus, Minus, X } from 'lucide-react';
 import { Dialog } from '../../../components/ui';
 
@@ -13,22 +13,21 @@ const MOTIVOS_FRECUENTES = [
 /**
  * Modal táctil ergonómico para anular o reducir unidades de un ítem ya enviado a cocina
  */
-export default function ModalCancelarItem({
+// El contenido se monta de nuevo cada vez que se abre: los campos empiezan limpios (sin efecto que los reinicie)
+export default function ModalCancelarItem(props) {
+  if (!(props.abierto && props.item)) return null;
+  return <ModalCancelarItemContenido {...props} />;
+}
+
+function ModalCancelarItemContenido({
   abierto,
   item,
   onCerrar,
   onConfirmar,
   cancelando = false,
 }) {
-  const [cantidad, setCantidad] = useState(1);
+  const [cantidad, setCantidad] = useState(item.cant || 1);
   const [motivo, setMotivo] = useState(MOTIVOS_FRECUENTES[0]);
-
-  useEffect(() => {
-    if (abierto && item) {
-      setCantidad(item.cant || 1);
-      setMotivo(MOTIVOS_FRECUENTES[0]);
-    }
-  }, [abierto, item]);
 
   if (!abierto || !item) return null;
 

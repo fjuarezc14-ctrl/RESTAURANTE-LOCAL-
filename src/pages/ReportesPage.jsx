@@ -21,6 +21,7 @@ import PestanaConsumo from '../modulos/reportes/componentes/PestanaConsumo';
 import PestanaPedidosYa from '../modulos/reportes/componentes/PestanaPedidosYa';
 import PestanaRotacion from '../modulos/reportes/componentes/PestanaRotacion';
 import PestanaResumen from '../modulos/reportes/componentes/PestanaResumen';
+import { useCargar } from '../hooks/useCargar';
 
 // Igual que en Caja: el sistema solo emite tickets de venta
 const FACTURACION_ELECTRONICA = false;
@@ -228,9 +229,9 @@ export default function ReportesPage() {
   }, []);
 
 
-  useEffect(() => {
-    fetchReportes(fechaDesde, fechaHasta);
-  }, []);
+  // Solo al entrar con las fechas iniciales; después, con el botón de filtrar
+  const [cargaInicial] = useState(() => () => fetchReportes(fechaDesde, fechaHasta));
+  useCargar(cargaInicial);
 
   const handleFiltrar = () => {
     if (!fechaDesde || !fechaHasta) {

@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 
 import { api } from '../api';
 import { useEventos } from '../hooks/useEventos';
+import { hashResumenSimulado } from '../modulos/caja/utils/ticket';
 
 import { useCompany } from '../context/CompanyContext';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
@@ -40,6 +41,7 @@ import PanelPedidosLlevar from '../modulos/caja/componentes/PanelPedidosLlevar';
 import PanelMesasPorCobrar from '../modulos/caja/componentes/PanelMesasPorCobrar';
 import ResumenTurnoCaja from '../modulos/caja/componentes/ResumenTurnoCaja';
 import EncabezadoCaja from '../modulos/caja/componentes/EncabezadoCaja';
+import { useCargar } from '../hooks/useCargar';
 
 export default function CajaPage({ currentUser }) {
   const { empresa: COMPANY_CONFIG } = useCompany();
@@ -150,21 +152,24 @@ export default function CajaPage({ currentUser }) {
     });
   }, [usuariosSistema]);
 
-  useEffect(() => {
-    if (currentUser?.nombre) {
-      setCajeroNombre(currentUser.nombre);
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
+  // Ajustes durante el render (sin efecto, como recomienda React):
+  // - si cambia el usuario con sesión, el cajero pasa a ser él;
+  // - al cargar la lista de cajeros con la caja cerrada, si el nombre no está en la lista se elige uno.
+  const [usuarioVisto, setUsuarioVisto] = useState(currentUser?.nombre);
+  if (currentUser?.nombre && currentUser.nombre !== usuarioVisto) {
+    setUsuarioVisto(currentUser.nombre);
+    setCajeroNombre(currentUser.nombre);
+  }
+  const claveCajeros = `${cajaEstado.abierto}|${cajerosDisponibles.map(u => u.nombre).join(',')}`;
+  const [claveCajerosVista, setClaveCajerosVista] = useState(null);
+  if (claveCajeros !== claveCajerosVista) {
+    setClaveCajerosVista(claveCajeros);
     if (!cajaEstado.abierto && cajerosDisponibles.length > 0) {
       const match = cajerosDisponibles.find(u => u.nombre.toLowerCase() === (cajeroNombre || '').toLowerCase());
-      if (!match) {
-        const defaultUser = cajerosDisponibles.find(u => u.rol === 'Cajero') || cajerosDisponibles[0];
-        if (defaultUser) setCajeroNombre(defaultUser.nombre);
-      }
+      const defaultUser = cajerosDisponibles.find(u => u.rol === 'Cajero') || cajerosDisponibles[0];
+      if (!match && defaultUser) setCajeroNombre(defaultUser.nombre);
     }
-  }, [cajerosDisponibles, cajaEstado.abierto]);
+  }
 
 
   const [productosMenu, setProductosMenu] = useState([]);
@@ -266,7 +271,7 @@ export default function CajaPage({ currentUser }) {
       isFetchingCajaRef.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [setCajaEstado, setUltimoCierre, setVentas]);
 
   const abrirTicketImpresionDirecto = (total, response, tipoComprobante, numDocumento, clienteNombre, clienteDireccion, items, mesaNum = 'Delivery', deliveryInfo = null, descuentoAplicado = 0, ofertaDescripcion = null) => {
     if (!response) response = {};
@@ -279,7 +284,7 @@ export default function CajaPage({ currentUser }) {
     let subtotal = total / 1.105;
     let igv = total - subtotal;
     let totalLetras = numeroALetras(total);
-    let hashResumen = "gSbTDa" + Math.random().toString(36).substring(2, 8).toUpperCase() + "iIZDyirfA6TBPKJnEI=";
+    let hashResumen = hashResumenSimulado();
     const rucEmpresa = COMPANY_CONFIG.ruc; // el QR de SUNAT lleva solo el número
     const igvSafe = Number(igv || 0).toFixed(2);
     const totalSafe = Number(total || 0).toFixed(2);
@@ -383,9 +388,8 @@ export default function CajaPage({ currentUser }) {
 
 
   // Carga inicial completa de todo el turno
-  useEffect(() => {
-    fetchCajaData({ full: true });
-  }, [fetchCajaData]);
+  const cargarTurnoCompleto = useCallback(() => fetchCajaData({ full: true }), [fetchCajaData]);
+  useCargar(cargarTurnoCompleto);
 
   // Avisos en vivo (SSE); en pausa mientras hay un modal de cobro o cierre abierto.
   // Mesas y delivery: recarga liviana. Cobros, caja y créditos (p. ej. de otro cajero): el turno completo.
