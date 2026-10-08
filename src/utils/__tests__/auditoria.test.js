@@ -8,7 +8,9 @@ describe('resumenCambio', () => {
 
   it('campos solo en "después" o solo en "antes"; listas y vacíos legibles', () => {
     expect(resumenCambio(null, { permisos: ['Caja', 'Salon'], correo: null })).toBe('permisos: Caja, Salon\ncorreo: —');
-    expect(resumenCambio({ item: 'Inca Kola' }, {})).toBe('item: Inca Kola (antes)');
+    expect(resumenCambio({ item: 'Inca Kola', cantidad: 1 }, { cantidad: 0 })).toBe('item: Inca Kola (antes)\ncantidad: 1 → 0');
+    // Solo "antes" (equipo revocado): sin "(antes)" ni campos vacíos
+    expect(resumenCambio({ nombre: 'Tablet', revocadoEn: null }, null)).toBe('nombre: Tablet');
   });
 
   it('sin datos devuelve texto vacío', () => {
