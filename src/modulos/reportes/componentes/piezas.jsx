@@ -1,5 +1,6 @@
 // Piezas de dibujo de Reportes: panel con título, tarjeta de KPI, contador, estado vacío, botón de ticket y hoja de detalle
 import { Printer, X } from 'lucide-react';
+import { Dialog } from '../../../components/ui';
 
 export const panel = ({ titulo, subtitulo, Icon, color, derecha, children, sinPadding }) => (
   <section className="bg-white rounded-2xl border border-slate-200/70 min-w-0">
@@ -46,16 +47,14 @@ export const botonTicket = (onClick, label = 'Ticket') => (
 );
 
 export const modalDetalle = (onClose, header, body, footer) => (
-  <div className="fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 animate-fade-in" onClick={onClose}>
-    <div className="bg-white w-full sm:max-w-lg max-h-[92dvh] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-      <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-slate-100">
-        <div className="min-w-0">{header}</div>
-        <button type="button" onClick={onClose} className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-5">{body}</div>
-      {footer && <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/70">{footer}</div>}
+  <Dialog open onClose={onClose} capa="z-[200]" className="bg-white w-full sm:max-w-lg max-h-[92dvh] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
+    <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-slate-100">
+      <div className="min-w-0">{header}</div>
+      <button type="button" onClick={onClose} className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
+        <X className="w-5 h-5" />
+      </button>
     </div>
-  </div>
+    <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-5">{body}</div>
+    {footer && <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/70">{footer}</div>}
+  </Dialog>
 );

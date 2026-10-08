@@ -1,5 +1,6 @@
 // @ts-check
 // Direcciones IP del servidor para conectar celulares y tablets
+const fs = require('fs');
 const os = require('os');
 
 // ── Detección de la IP del servidor en la red local ──
@@ -35,4 +36,7 @@ const puntajeIp = ({ ip, virtual }, ipRuta) => {
   return 40;
 };
 
-module.exports = { INTERFAZ_VIRTUAL, interfacesIPv4, ipRutaPorDefecto, puntajeIp };
+// Dentro de Docker el backend solo ve la red interna del contenedor (no la IP de la PC en el WiFi)
+const enContenedor = () => process.env.EN_CONTENEDOR === 'true' || fs.existsSync('/.dockerenv');
+
+module.exports = { INTERFAZ_VIRTUAL, interfacesIPv4, ipRutaPorDefecto, puntajeIp, enContenedor };
