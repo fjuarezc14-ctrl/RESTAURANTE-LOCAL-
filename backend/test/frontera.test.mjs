@@ -1,7 +1,7 @@
 // Casos frontera (tarea 12): carreras entre dispositivos, doble clic y turnos que cruzan la medianoche
 import { createRequire } from 'node:module';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { abrirCaja, api, cobrar, crearBase, item, limpiarBD, mesaListaParaCobrar, prisma } from './helpers.mjs';
+import { abrirCaja, api, cobrar, crearBase, esperarError, item, limpiarBD, mesaListaParaCobrar, prisma } from './helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const { obtenerSiguienteSerieYNumero } = require('../src/servicios/correlativos.js');
@@ -147,5 +147,23 @@ describe('reportes de ventas por fecha de cobro', () => {
     expect(rot.map((r) => [r.nombre, r.cantidad]).sort()).toEqual([['Inca Kola', 1], ['Lomo Saltado', 2]]);
     const ayer = (await api().get('/api/reportes/rotacion?desde=2026-10-05&hasta=2026-10-05')).body;
     expect(ayer).toEqual([]);
+  });
+});
+
+describe('editar un delivery', () => {
+  it('si el stock no alcanza → STOCK_INSUFICIENTE y el stock queda como estaba (antes podía quedar negativo)', async () => {
+    await abrirCaja();
+    const llevar = (datos) => ({ tipoDelivery: 'ParaLlevar', cajero: 'Carla', metodoPago: 'Efectivo', ...datos });
+    const creado = await api().post('/api/pedidos/llevar').send(llevar({ items: [item(carta.postre, 2)] }));
+    expect(creado.status).toBe(200);
+    const pedido = await prisma.pedido.findFirst({ orderBy: { id: 'desc' } });
+    const stock = async () => (await prisma.producto.findUnique({ where: { id: carta.postre.id } })).stock;
+    expect(await stock()).toBe(3);
+
+    const editar = (cantidad) => api().put(`/api/pedidos/llevar/${pedido.id}`).send(llevar({ items: [item(carta.postre, cantidad)] }));
+    esperarError(await editar(7), 409, 'STOCK_INSUFICIENTE');
+    expect(await stock()).toBe(3);
+    expect((await editar(4)).status).toBe(200);
+    expect(await stock()).toBe(1);
   });
 });

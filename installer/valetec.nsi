@@ -94,6 +94,7 @@ Section "Instalar"
   CreateDirectory "$SMPROGRAMS\${APPNAME}"
   CopyFiles /SILENT "$DESKTOP\${APPNAME}.url" "$SMPROGRAMS\${APPNAME}\${APPNAME}.url"
   CreateShortcut "$SMPROGRAMS\${APPNAME}\Direcciones de acceso.lnk" "$INSTDIR\ACCESO.txt"
+  CreateShortcut "$SMPROGRAMS\${APPNAME}\Sacar respaldo.lnk" "$INSTDIR\node\node.exe" '"$INSTDIR\setup\respaldo.js"' "$INSTDIR\setup\icon.ico"
   CreateShortcut "$SMPROGRAMS\${APPNAME}\Desinstalar.lnk" "$INSTDIR\Desinstalar.exe"
 
   ; Registro en "Agregar o quitar programas"

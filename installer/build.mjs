@@ -92,10 +92,19 @@ function prepararUsuarios() {
     u.pin = pins[u.nombre];
   }
   fs.writeFileSync(pinsFile, JSON.stringify(pins, null, 2));
+  // Contraseña para activar equipos (usuario "admin"), también fija entre builds
+  const accesoFile = path.join(CLIENTE_DIR, 'acceso.local.json');
+  const acceso = fs.existsSync(accesoFile) ? JSON.parse(fs.readFileSync(accesoFile, 'utf8')) : { contrasena: crypto.randomBytes(6).toString('hex') };
+  fs.writeFileSync(accesoFile, JSON.stringify(acceso, null, 2));
+  cliente.adminContrasena = acceso.contrasena;
   fs.writeFileSync(path.join(STAGE, 'setup', 'cliente.json'), JSON.stringify(cliente, null, 2));
   const filas = cliente.usuarios.map((u) => `  ${u.nombre.padEnd(16)} ${u.rol.padEnd(14)} PIN: ${u.pin}`);
   fs.writeFileSync(path.join(OUT, `CREDENCIALES${SUFIJO}.txt`), [
-    `CREDENCIALES INICIALES - ${cliente.empresa.name}`, '', ...filas, '',
+    `CREDENCIALES INICIALES - ${cliente.empresa.name}`, '',
+    'ACTIVAR CADA EQUIPO (una sola vez por PC, tablet o celular):',
+    `  Usuario: admin     Contraseña: ${acceso.contrasena}`,
+    '  (Si ya tenía una contraseña de administrador, sigue valiendo esa.)', '',
+    'PINs (solo en una instalación nueva; al actualizar se conservan los que ya usan):', ...filas, '',
     'Cambia los PINs y los nombres en el menú Usuarios después de instalar.', '',
   ].join('\r\n'));
   return cliente;
@@ -166,7 +175,7 @@ async function main() {
   }
 
   // 5. Scripts de configuración, servicio, runtime de Visual C++ e icono
-  for (const f of ['setup.js', 'uninstall.js']) fs.copyFileSync(path.join(INST, 'setup', f), path.join(STAGE, 'setup', f));
+  for (const f of ['setup.js', 'respaldo.js', 'uninstall.js']) fs.copyFileSync(path.join(INST, 'setup', f), path.join(STAGE, 'setup', f));
   fs.copyFileSync(path.join(CACHE, 'winsw.exe'), path.join(STAGE, 'setup', 'ValetecPOS-App.exe'));
   fs.copyFileSync(path.join(CACHE, 'vc_redist.x64.exe'), path.join(STAGE, 'setup', 'vc_redist.x64.exe'));
   const iconCliente = path.join(CLIENTE_DIR, 'icon.ico');
