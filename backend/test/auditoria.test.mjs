@@ -115,6 +115,24 @@ describe('caja', () => {
   });
 });
 
+describe('carta', () => {
+  it('cambio de precio con antes y después; otros cambios no se registran', async () => {
+    const lomo = await prisma.producto.findFirst({ where: { nombre: 'Lomo Saltado' } });
+    await nav.put(`/api/productos/${lomo.id}`).send({ precio: 28 });
+    await nav.put(`/api/productos/${lomo.id}`).send({ nombre: 'Lomo saltado clásico' });
+    await nav.put(`/api/productos/${lomo.id}`).send({ precio: 28 }); // mismo precio: nada
+    const r = await registros({ accion: 'PRECIO_CAMBIADO' });
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ antes: { nombre: 'Lomo Saltado', precio: 25.5 }, despues: { precio: 28 } });
+  });
+
+  it('eliminar un producto', async () => {
+    const postre = await prisma.producto.findFirst({ where: { nombre: 'Tres Leches' } });
+    await nav.delete(`/api/productos/${postre.id}`);
+    expect((await registros({ accion: 'PRODUCTO_ELIMINADO' }))[0]).toMatchObject({ entidadId: String(postre.id), antes: { nombre: 'Tres Leches' } });
+  });
+});
+
 describe('consulta GET /api/auditoria', () => {
   it('solo el administrador con sesión', async () => {
     esperarError(await api().get('/api/auditoria'), 401, 'NO_AUTENTICADO');

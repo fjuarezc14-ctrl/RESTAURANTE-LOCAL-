@@ -4,6 +4,7 @@ const { prisma } = require('../db');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { productoEdicion, productoNuevo } = require('../../shared/esquemas/carta.js');
 const { requierePermiso } = require('../middlewares/permisos');
+const { registrarAuditoria } = require('../servicios/auditoria');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -72,9 +73,17 @@ router.put('/api/productos/:id', requierePermiso('Carta'), validar({ body: produ
     if (req.body.stock !== undefined) data.stock = parseInt(req.body.stock);
     if (req.body.activo !== undefined) data.activo = Boolean(req.body.activo);
 
-    const prod = await prisma.producto.update({
-      where: { id: parseInt(req.params.id) },
-      data,
+    const id = parseInt(req.params.id);
+    const prod = await prisma.$transaction(async (tx) => {
+      const antes = await tx.producto.findUnique({ where: { id }, select: { nombre: true, precio: true } });
+      const actualizado = await tx.producto.update({ where: { id }, data });
+      if (antes && data.precio !== undefined && Number(antes.precio) !== Number(actualizado.precio)) {
+        await registrarAuditoria(tx, req, {
+          accion: 'PRECIO_CAMBIADO', entidad: 'Producto', entidadId: id,
+          antes: { nombre: antes.nombre, precio: antes.precio }, despues: { nombre: actualizado.nombre, precio: actualizado.precio },
+        });
+      }
+      return actualizado;
     });
     res.json(prod);
   } catch (err) {
@@ -84,9 +93,12 @@ router.put('/api/productos/:id', requierePermiso('Carta'), validar({ body: produ
 
 router.delete('/api/productos/:id', requierePermiso('Carta'), async (req, res, next) => {
   try {
-    await prisma.producto.update({
-      where: { id: parseInt(req.params.id) },
-      data: { activo: false },
+    const id = parseInt(req.params.id);
+    await prisma.$transaction(async (tx) => {
+      const prod = await tx.producto.update({ where: { id }, data: { activo: false } });
+      await registrarAuditoria(tx, req, {
+        accion: 'PRODUCTO_ELIMINADO', entidad: 'Producto', entidadId: id, antes: { nombre: prod.nombre, precio: prod.precio, activo: true },
+      });
     });
     res.json({ ok: true });
   } catch (err) {
