@@ -133,11 +133,5 @@ export function DialogFooter({ className, ...props }) {
   return <div className={cn('flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-4', className)} {...props} />;
 }
 
-export {
-  AvisoProvider,
-  useAviso,
-  useConfirmar,
-  usePedirDato,
-  useNotificaciones,
-  mostrarAvisoGlobal,
-} from './AvisoContext';
+export { AvisoProvider } from './AvisoContext';
+export { useAviso, useConfirmar, usePedirDato, useNotificaciones, mostrarAvisoGlobal } from './avisos';
