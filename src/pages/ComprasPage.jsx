@@ -8,6 +8,7 @@ import { api } from '../api';
 import { COMPANY_CONFIG } from '../config/company';
 import { ModalDetalleGasto, ModalFormGasto, ModalEliminarGasto } from '../modulos/compras/modales';
 import { compraNueva, compraEdicion } from '@shared/esquemas/compras.js';
+import { getFechaPeru, parsearGastoMetodos } from '../modulos/compras/utils';
 
 const CATEGORIAS = [
   'Insumos y Alimentos',
@@ -57,44 +58,6 @@ const estiloMetodo = (metodoPago) => {
 const TIPOS_DOCUMENTO = ['Recibo Interno', 'Boleta', 'Factura', 'Ticket'];
 
 const soles = (n) => `S/ ${Number(n || 0).toFixed(2)}`;
-
-// Helper para obtener fecha local de Perú en formato YYYY-MM-DD (America/Lima)
-export const getFechaPeru = (dateObj = new Date()) => {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Lima',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(dateObj);
-};
-
-// Helper para parsear métodos de pago (incluyendo desglose mixto)
-export function parsearGastoMetodos(metodoPagoStr, totalMonto = 0) {
-  if (!metodoPagoStr) return { efec: totalMonto, yape: 0, tarj: 0, esMixto: false };
-  const str = String(metodoPagoStr).trim();
-
-  if (str === 'Efectivo') return { efec: totalMonto, yape: 0, tarj: 0, esMixto: false };
-  if (str === 'Yape') return { efec: 0, yape: totalMonto, tarj: 0, esMixto: false };
-  if (str === 'Tarjeta') return { efec: 0, yape: 0, tarj: totalMonto, esMixto: false };
-
-  if (str.startsWith('Mixto')) {
-    let efec = 0, yape = 0, tarj = 0;
-    const efecMatch = str.match(/Efec:\s*(?:S\/\s*)?([0-9.]+)/i);
-    const yapeMatch = str.match(/Yape:\s*(?:S\/\s*)?([0-9.]+)/i);
-    const tarjMatch = str.match(/Tarj:\s*(?:S\/\s*)?([0-9.]+)/i);
-
-    if (efecMatch) efec = parseFloat(efecMatch[1]) || 0;
-    if (yapeMatch) yape = parseFloat(yapeMatch[1]) || 0;
-    if (tarjMatch) tarj = parseFloat(tarjMatch[1]) || 0;
-
-    if (efec === 0 && yape === 0 && tarj === 0) {
-      efec = totalMonto;
-    }
-    return { efec, yape, tarj, esMixto: true };
-  }
-
-  return { efec: totalMonto, yape: 0, tarj: 0, esMixto: false };
-}
 
 // Día del gasto en formato YYYY-MM-DD. fechaEmision es un día de calendario: se guarda a las
 // 12:00 de Lima (y los registros antiguos a las 00:00 UTC), así que su día UTC es el correcto.
