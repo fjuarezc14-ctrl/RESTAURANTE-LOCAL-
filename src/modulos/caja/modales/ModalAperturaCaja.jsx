@@ -2,40 +2,33 @@
 // MODAL DE APERTURA DE CAJA / INICIO DE TURNO
 // VT VALETEC — Módulo Caja
 // ================================================================
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Banknote, AlertTriangle, ChevronDown } from 'lucide-react';
 import { Dialog, DialogHeader, DialogFooter, Button } from '../../../components/ui';
 import { CalculadoraEfectivoPEN } from '../componentes/CalculadoraEfectivoPEN';
 import { api } from '../../../api';
 import { aperturaCaja } from '@shared/esquemas/caja.js';
 
-export function ModalAperturaCaja({
+// El contenido se monta de nuevo cada vez que se abre: los campos empiezan limpios (sin efecto que los reinicie)
+export function ModalAperturaCaja(props) {
+  if (!(props.abierto)) return null;
+  return <ModalAperturaCajaContenido {...props} />;
+}
+
+function ModalAperturaCajaContenido({
   abierto,
   onCerrar,
   onAperturaExitosa,
   cajerosDisponibles = [],
   cajeroNombrePorDefecto = '',
 }) {
-  const [cajeroNombre, setCajeroNombre] = useState(cajeroNombrePorDefecto);
+  const [cajeroNombre, setCajeroNombre] = useState(cajeroNombrePorDefecto || (cajerosDisponibles[0]?.nombre || ''));
   const [modoOtroCajero, setModoOtroCajero] = useState(false);
   const [montoInicialInput, setMontoInicialInput] = useState('');
   const [conteoApertura, setConteoApertura] = useState({});
   const [notaAperturaInput, setNotaAperturaInput] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
-
-  // Sincronizar cajero inicial al abrir
-  useEffect(() => {
-    if (abierto) {
-      setCajeroNombre(cajeroNombrePorDefecto || (cajerosDisponibles[0]?.nombre || ''));
-      setModoOtroCajero(false);
-      setMontoInicialInput('');
-      setConteoApertura({});
-      setNotaAperturaInput('');
-      setError('');
-      setGuardando(false);
-    }
-  }, [abierto, cajeroNombrePorDefecto, cajerosDisponibles]);
 
   const cambiarCantidadApertura = (valor, cantidad) => {
     const cant = Math.max(0, parseInt(cantidad) || 0);

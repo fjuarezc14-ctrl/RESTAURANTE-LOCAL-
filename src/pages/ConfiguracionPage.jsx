@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Tags, Building2, Save, RotateCcw, CheckCircle2, AlertCircle, Phone, MapPin, Mail, FileText, Receipt, ShieldCheck, UtensilsCrossed } from 'lucide-react';
 import { api } from '../api';
@@ -26,10 +26,11 @@ export default function ConfiguracionPage({ currentUser }) {
   const [mensajeExito, setMensajeExito] = useState('');
   const [mensajeError, setMensajeError] = useState('');
 
-  // Sincronizar estado local con la configuración de empresa
-  useEffect(() => {
-    if (empresa) {
-      setFormData({
+  // Sincronizar el formulario cuando llega o cambia la configuración de empresa (ajuste durante el render)
+  const [empresaVista, setEmpresaVista] = useState(null);
+  if (empresa && empresa !== empresaVista) {
+    setEmpresaVista(empresa);
+    setFormData({
         name: empresa.name || '',
         brandShort: empresa.brandShort || '',
         tagline: empresa.tagline || '',
@@ -40,9 +41,8 @@ export default function ConfiguracionPage({ currentUser }) {
         email: empresa.email || '',
         ticketFooter: empresa.ticketFooter || '',
         tipoNegocio: empresa.tipoNegocio || 'polleria',
-      });
-    }
-  }, [empresa]);
+    });
+  }
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -53,7 +53,7 @@ export default function ConfiguracionPage({ currentUser }) {
 
   const handleReset = () => {
     if (empresa) {
-      setFormData({
+    setFormData({
         name: empresa.name || '',
         brandShort: empresa.brandShort || '',
         tagline: empresa.tagline || '',

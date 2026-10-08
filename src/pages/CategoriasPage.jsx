@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Flame, GlassWater, Tags, Check, Search, X, ArrowRight } from 'lucide-react';
 import { api } from '../api';
 import { useCompany } from '../context/CompanyContext';
 import { Button, Input, Label, Card, Badge, Dialog, DialogHeader, DialogFooter } from '../components/ui';
 import { cn } from '../utils/cn';
 import { COLORES_CATEGORIA, colorCategoria, ordenarCategorias } from '../utils/categorias';
+import { useCargar } from '../hooks/useCargar';
 
 const DESTINOS = {
   cocina: { label: 'Cocina', Icon: Flame, activo: 'border-amber-500 bg-amber-50 text-amber-900', icono: 'bg-amber-500 text-white', header: 'text-amber-700', chip: 'bg-amber-100 text-amber-800' },
@@ -40,7 +41,7 @@ export default function CategoriasPage() {
     }
   }, []);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  useCargar(cargar);
 
   const abrirForm = (cat = null) => {
     setForm(cat ? { id: cat.id, nombre: cat.nombre, destino: cat.destino, color: cat.color } : FORM_VACIO);

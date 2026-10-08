@@ -2,7 +2,7 @@
 // MODAL DE CIERRE DE CAJA / ARQUEO DE TURNO
 // VT VALETEC — Módulo Caja
 // ================================================================
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Calculator,
   Lock,
@@ -17,7 +17,20 @@ import { api } from '../../../api';
 import { useAviso, useConfirmar } from '../../../components/ui';
 import logoUrl from '../../../assets/logo.png';
 
-export function ModalCierreCaja({
+// El cierre va 1 s después de la última venta del turno (o ahora, si no hubo ventas)
+function momentoDeCierre(ventas) {
+  const ultima = ventas.length > 0 ? Math.max(...ventas.map((v) => new Date(v.createdAt).getTime())) : Date.now();
+  return new Date(ultima + 1000).toISOString();
+}
+const haceHoras = (horas) => new Date(Date.now() - horas * 3600 * 1000).toISOString();
+
+// El contenido se monta de nuevo cada vez que se abre: los campos empiezan limpios (sin efecto que los reinicie)
+export function ModalCierreCaja(props) {
+  if (!(props.abierto)) return null;
+  return <ModalCierreCajaContenido {...props} />;
+}
+
+function ModalCierreCajaContenido({
   abierto,
   onCerrar,
   onCierreExitoso,
@@ -37,14 +50,6 @@ export function ModalCierreCaja({
   const [efectivoFisicoContado, setEfectivoFisicoContado] = useState('');
   const [conteoBilletes, setConteoBilletes] = useState({});
   const [guardandoCierre, setGuardandoCierre] = useState(false);
-
-  useEffect(() => {
-    if (abierto) {
-      setEfectivoFisicoContado('');
-      setConteoBilletes({});
-      setGuardandoCierre(false);
-    }
-  }, [abierto]);
 
   if (!abierto) return null;
 
@@ -256,11 +261,7 @@ export function ModalCierreCaja({
     });
     if (!seguro) return;
 
-    const maxSaleTime =
-      ventasFiltradas.length > 0
-        ? Math.max(...ventasFiltradas.map((v) => new Date(v.createdAt).getTime()))
-        : Date.now();
-    const newCierreISO = new Date(maxSaleTime + 1000).toISOString();
+    const newCierreISO = momentoDeCierre(ventasFiltradas);
 
     const textoConteo =
       detalleConteo.length > 0
@@ -277,7 +278,7 @@ export function ModalCierreCaja({
       const esperadoFinal = Math.max(0, totalEfectivoEsperado);
 
       await api.registrarCierre({
-        fechaApertura: ultimoCierre || new Date(Date.now() - 8 * 3600 * 1000).toISOString(),
+        fechaApertura: ultimoCierre || haceHoras(8),
         fechaCierre: newCierreISO,
         cajeroNombre: cajeroNombre || 'Cajero',
         montoInicial: Math.max(0, fondoInicialTurno),

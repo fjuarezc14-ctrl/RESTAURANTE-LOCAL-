@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { PlusCircle, Utensils, CupSoda, Wine, Trash2, Save, X, Edit2, ChevronDown, Search, Flame, GlassWater, Package, Plus, Minus, Boxes, MessageCircleQuestion, Infinity as InfinityIcon } from 'lucide-react';
 import { api } from '../api';
@@ -8,6 +8,7 @@ import { Button, Input, Label, Badge, Dialog, DialogHeader, DialogFooter, useAvi
 import { cn } from '../utils/cn';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
 import { nombre as nombreEsquema, monto as montoEsquema } from '@shared/esquemas/comunes.js';
+import { useCargar } from '../hooks/useCargar';
 
 // --- SISTEMA DE BÚSQUEDA INTELIGENTE Y FONÉTICA ---
 const SINONIMOS = {
@@ -195,10 +196,8 @@ export default function CartaPage({ currentUser }) {
     }
   }, []);
 
-  useEffect(() => {
-    fetchProductos();
-    fetchCategorias();
-  }, [fetchProductos, fetchCategorias]);
+  const cargarCarta = useCallback(() => { fetchProductos(); fetchCategorias(); }, [fetchProductos, fetchCategorias]);
+  useCargar(cargarCarta);
 
   const puedeVerCategoria = (cat) => Boolean(cat) && (cat !== 'PedidosYa / Ofertas' || hasCajaAccess);
 
