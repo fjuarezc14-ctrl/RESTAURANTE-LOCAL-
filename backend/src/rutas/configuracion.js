@@ -3,7 +3,7 @@ const express = require('express');
 const os = require('os');
 const { prisma } = require('../db');
 const { DEFAULT_BARRA_CATEGORIAS, getEmpresaConfig, guardarConfigEnCache } = require('../servicios/empresa');
-const { interfacesIPv4, ipRutaPorDefecto, puntajeIp } = require('../servicios/red');
+const { interfacesIPv4, ipRutaPorDefecto, puntajeIp, enContenedor } = require('../servicios/red');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { datosEmpresa } = require('../../shared/esquemas/empresa.js');
@@ -87,8 +87,11 @@ router.get('/api/red/direcciones', async (req, res, next) => {
   try {
     const puerto = process.env.PORT || 3003;
     const ipFija = (process.env.IP_SERVIDOR || '').trim();
-    const ipRuta = await ipRutaPorDefecto();
-    const lista = interfacesIPv4();
+    const docker = enContenedor();
+    const ipRuta = docker ? null : await ipRutaPorDefecto();
+    // En Docker las IPs que se ven son internas del contenedor: a los celulares no les sirven.
+    // Ahí solo vale IP_SERVIDOR (en el .env) o la dirección con la que se abrió el navegador.
+    const lista = docker ? [] : interfacesIPv4();
 
     if (ipFija && !lista.some(i => i.ip === ipFija)) {
       lista.push({ ip: ipFija, interfaz: 'IP_SERVIDOR', virtual: false });
@@ -101,6 +104,7 @@ router.get('/api/red/direcciones', async (req, res, next) => {
 
     res.json({
       puerto,
+      enContenedor: docker,
       hostname: os.hostname(),
       ips: ordenadas.map(({ puntaje, ...i }) => i),
       urls: ordenadas.map(i => `http://${i.ip}:${puerto}`),

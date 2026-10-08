@@ -3,6 +3,7 @@ import { X, Copy, Check as CheckIcon, Wifi } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '../../api';
 import { generateOfflineQrUrl } from '../../utils/qrOffline';
+import { Dialog } from '../ui';
 
 // Muestra las direcciones con las que los mozos entran desde su celular (se consultan al abrir,
 // así siempre reflejan la IP actual de la PC aunque el router se la haya cambiado).
@@ -52,8 +53,7 @@ export const ModalCompartirDireccion = ({ onClose }) => {
     .filter(i => i.url !== principal);
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+    <Dialog open onClose={onClose} capa="z-[60]" className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-slate-800">
           <h3 className="text-white font-black text-sm uppercase tracking-wide flex items-center gap-2">
             <Wifi className="w-4 h-4 text-cyan-400" /> Dirección para los mozos
@@ -90,7 +90,13 @@ export const ModalCompartirDireccion = ({ onClose }) => {
                     </button>
                   </div>
                 )}
-                {!principal && (
+                {!principal && datos.enContenedor && (
+                  <p className="text-xs text-amber-400 font-bold leading-relaxed">
+                    El sistema corre en Docker y desde ahí no se ve la IP de esta PC. Abre el sistema con la IP de la PC
+                    en vez de localhost (ej. http://192.168.1.20:{puerto}) o define IP_SERVIDOR en el archivo .env.
+                  </p>
+                )}
+                {!principal && !datos.enContenedor && (
                   <p className="text-xs text-amber-400 font-bold">Esta PC no está conectada a ninguna red WiFi o cable.</p>
                 )}
                 {otras.length > 0 && (
@@ -125,7 +131,6 @@ export const ModalCompartirDireccion = ({ onClose }) => {
             </>
           )}
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 };

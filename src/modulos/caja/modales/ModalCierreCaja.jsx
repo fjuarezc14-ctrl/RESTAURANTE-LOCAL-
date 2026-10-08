@@ -321,142 +321,144 @@ function ModalCierreCajaContenido({
   };
 
   return (
-    <div
+    <Dialog
+      open
+      onClose={guardandoCierre ? undefined : onCerrar}
+      closeOnBackdrop={false}
       id="modal-cierre"
-      className="impresion-ventana fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[200] flex items-end md:items-center justify-center md:p-6 animate-fade-in"
+      capa="impresion-ventana z-[200]"
+      className="bg-white w-full max-w-5xl h-[96dvh] md:h-auto md:max-h-[92dvh] rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up"
     >
-      <div className="bg-white w-full max-w-5xl h-[96dvh] md:h-auto md:max-h-[92dvh] rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
-        {/* Header */}
-        <div className="cierre-no-print flex items-center justify-between gap-3 px-5 md:px-6 py-4 border-b border-slate-100 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 grid place-items-center shrink-0">
-              <Calculator className="w-5 h-5" />
-            </span>
-            <div className="min-w-0">
-              <h3 className="text-lg font-semibold text-slate-900 leading-tight">
-                Arqueo y cierre de turno
-              </h3>
-              <p className="text-sm text-slate-500 truncate">
-                {cajaEstado.turno?.cajeroNombre || cajeroNombre} · cuenta el efectivo y cierra la caja
-              </p>
-            </div>
+      {/* Header */}
+      <div className="cierre-no-print flex items-center justify-between gap-3 px-5 md:px-6 py-4 border-b border-slate-100 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 grid place-items-center shrink-0">
+            <Calculator className="w-5 h-5" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold text-slate-900 leading-tight">
+              Arqueo y cierre de turno
+            </h3>
+            <p className="text-sm text-slate-500 truncate">
+              {cajaEstado.turno?.cajeroNombre || cajeroNombre} · cuenta el efectivo y cierra la caja
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={onCerrar}
-            className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 cursor-pointer"
-            aria-label="Cerrar"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
-
-        {/* Body: Calculadora + Ticket */}
-        <div className="cierre-grid flex-1 min-h-0 overflow-y-auto md:overflow-hidden flex flex-col md:grid md:grid-cols-2">
-          {/* Calculadora (Columna izquierda) */}
-          <div className="cierre-no-print order-1 md:overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4">
-            <CalculadoraEfectivoPEN
-              conteo={conteoBilletes}
-              onChangeCantidad={cambiarCantidad}
-              onLimpiar={() => {
-                setConteoBilletes({});
-                setEfectivoFisicoContado('');
-              }}
-              titulo="Conteo físico de efectivo (Billetes y Monedas)"
-            />
-
-            {/* Resultado del cuadre */}
-            <div className="rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="grid grid-cols-2 divide-x divide-slate-200 text-center">
-                <div className="p-3">
-                  <p className="text-[11px] text-slate-500">Esperado en caja</p>
-                  <p className="font-mono font-semibold tabular-nums text-slate-900">
-                    S/ {totalEfectivoEsperado.toFixed(2)}
-                  </p>
-                </div>
-                <div className="p-3">
-                  <p className="text-[11px] text-slate-500">Contado</p>
-                  <p className="font-mono font-semibold tabular-nums text-slate-900">
-                    S/ {(hayConteoDenominaciones ? totalConteo : montoFisicoNum).toFixed(2)}
-                  </p>
-                </div>
-              </div>
-              <div
-                className={`px-3 py-2.5 text-center text-sm font-semibold ${
-                  !tieneConteoFisico
-                    ? 'bg-slate-50 text-slate-400'
-                    : cuadra
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : diferenciaEfectivo > 0
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'bg-rose-50 text-rose-700'
-                }`}
-              >
-                {!tieneConteoFisico
-                  ? 'Marca los billetes y monedas que hay en caja'
-                  : cuadra
-                  ? '✓ Cuadre exacto'
-                  : diferenciaEfectivo > 0
-                  ? `Sobran S/ ${diferenciaEfectivo.toFixed(2)}`
-                  : `Faltan S/ ${Math.abs(diferenciaEfectivo).toFixed(2)}`}
-              </div>
-            </div>
-
-            {/* Monto directo opcional */}
-            <details
-              className="group"
-              open={!hayConteoDenominaciones && tieneConteoFisico ? true : undefined}
-            >
-              <summary className="cursor-pointer list-none text-xs text-slate-400 hover:text-slate-700 select-none">
-                ▸ Prefiero escribir el monto total
-              </summary>
-              <div className="relative mt-2">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">
-                  S/
-                </span>
-                <input
-                  type="number"
-                  step="any"
-                  min="0"
-                  placeholder="0.00"
-                  value={efectivoFisicoContado}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val !== '' && parseFloat(val) < 0) return;
-                    setConteoBilletes({});
-                    setEfectivoFisicoContado(val);
-                  }}
-                  className="w-full h-11 bg-white border border-slate-200 rounded-xl pl-9 pr-3 font-mono text-base font-semibold text-slate-900 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5"
-                />
-              </div>
-            </details>
-          </div>
-
-          {/* Vista previa del ticket térmico (Columna derecha) */}
-          <TicketCierrePrevio abonosFiltrados={abonosFiltrados} cajaEstado={cajaEstado} cajeroNombre={cajeroNombre} cuadra={cuadra} detalleConteo={detalleConteo} diferenciaEfectivo={diferenciaEfectivo} egresosEfectivo={egresosEfectivo} empresa={empresa} fondoInicialTurno={fondoInicialTurno} ingresosCaja={ingresosCaja} montoFisicoNum={montoFisicoNum} tieneConteoFisico={tieneConteoFisico} totalCalculado={totalCalculado} totalConsumoClientes={totalConsumoClientes} totalConsumoPlanilla={totalConsumoPlanilla} totalCortesias={totalCortesias} totalEfectivo={totalEfectivo} totalEfectivoEsperado={totalEfectivoEsperado} totalPedidosYa={totalPedidosYa} totalTarjeta={totalTarjeta} totalYape={totalYape} />
-        </div>
-
-        {/* Acciones */}
-        <div className="cierre-no-print px-5 md:px-6 py-4 border-t border-slate-100 bg-white shrink-0 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="h-12 px-5 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
-          >
-            <Printer className="w-4 h-4" /> Imprimir ticket
-          </button>
-          <button
-            type="button"
-            disabled={guardandoCierre}
-            onClick={handleCerrarTurno}
-            className="h-12 px-6 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 shadow-sm shadow-red-600/25 transition-colors active:scale-[0.98] disabled:opacity-50 cursor-pointer"
-          >
-            <Lock className="w-4 h-4" />
-            {guardandoCierre ? 'Cerrando…' : 'Cerrar turno'}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onCerrar}
+          className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 cursor-pointer"
+          aria-label="Cerrar"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
-    </div>
+
+      {/* Body: Calculadora + Ticket */}
+      <div className="cierre-grid flex-1 min-h-0 overflow-y-auto md:overflow-hidden flex flex-col md:grid md:grid-cols-2">
+        {/* Calculadora (Columna izquierda) */}
+        <div className="cierre-no-print order-1 md:overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4">
+          <CalculadoraEfectivoPEN
+            conteo={conteoBilletes}
+            onChangeCantidad={cambiarCantidad}
+            onLimpiar={() => {
+              setConteoBilletes({});
+              setEfectivoFisicoContado('');
+            }}
+            titulo="Conteo físico de efectivo (Billetes y Monedas)"
+          />
+
+          {/* Resultado del cuadre */}
+          <div className="rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="grid grid-cols-2 divide-x divide-slate-200 text-center">
+              <div className="p-3">
+                <p className="text-[11px] text-slate-500">Esperado en caja</p>
+                <p className="font-mono font-semibold tabular-nums text-slate-900">
+                  S/ {totalEfectivoEsperado.toFixed(2)}
+                </p>
+              </div>
+              <div className="p-3">
+                <p className="text-[11px] text-slate-500">Contado</p>
+                <p className="font-mono font-semibold tabular-nums text-slate-900">
+                  S/ {(hayConteoDenominaciones ? totalConteo : montoFisicoNum).toFixed(2)}
+                </p>
+              </div>
+            </div>
+            <div
+              className={`px-3 py-2.5 text-center text-sm font-semibold ${
+                !tieneConteoFisico
+                  ? 'bg-slate-50 text-slate-400'
+                  : cuadra
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : diferenciaEfectivo > 0
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'bg-rose-50 text-rose-700'
+              }`}
+            >
+              {!tieneConteoFisico
+                ? 'Marca los billetes y monedas que hay en caja'
+                : cuadra
+                ? '✓ Cuadre exacto'
+                : diferenciaEfectivo > 0
+                ? `Sobran S/ ${diferenciaEfectivo.toFixed(2)}`
+                : `Faltan S/ ${Math.abs(diferenciaEfectivo).toFixed(2)}`}
+            </div>
+          </div>
+
+          {/* Monto directo opcional */}
+          <details
+            className="group"
+            open={!hayConteoDenominaciones && tieneConteoFisico ? true : undefined}
+          >
+            <summary className="cursor-pointer list-none text-xs text-slate-400 hover:text-slate-700 select-none">
+              ▸ Prefiero escribir el monto total
+            </summary>
+            <div className="relative mt-2">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">
+                S/
+              </span>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                placeholder="0.00"
+                value={efectivoFisicoContado}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val !== '' && parseFloat(val) < 0) return;
+                  setConteoBilletes({});
+                  setEfectivoFisicoContado(val);
+                }}
+                className="w-full h-11 bg-white border border-slate-200 rounded-xl pl-9 pr-3 font-mono text-base font-semibold text-slate-900 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5"
+              />
+            </div>
+          </details>
+        </div>
+
+        {/* Vista previa del ticket térmico (Columna derecha) */}
+        <TicketCierrePrevio abonosFiltrados={abonosFiltrados} cajaEstado={cajaEstado} cajeroNombre={cajeroNombre} cuadra={cuadra} detalleConteo={detalleConteo} diferenciaEfectivo={diferenciaEfectivo} egresosEfectivo={egresosEfectivo} empresa={empresa} fondoInicialTurno={fondoInicialTurno} ingresosCaja={ingresosCaja} montoFisicoNum={montoFisicoNum} tieneConteoFisico={tieneConteoFisico} totalCalculado={totalCalculado} totalConsumoClientes={totalConsumoClientes} totalConsumoPlanilla={totalConsumoPlanilla} totalCortesias={totalCortesias} totalEfectivo={totalEfectivo} totalEfectivoEsperado={totalEfectivoEsperado} totalPedidosYa={totalPedidosYa} totalTarjeta={totalTarjeta} totalYape={totalYape} />
+      </div>
+
+      {/* Acciones */}
+      <div className="cierre-no-print px-5 md:px-6 py-4 border-t border-slate-100 bg-white shrink-0 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="h-12 px-5 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
+        >
+          <Printer className="w-4 h-4" /> Imprimir ticket
+        </button>
+        <button
+          type="button"
+          disabled={guardandoCierre}
+          onClick={handleCerrarTurno}
+          className="h-12 px-6 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 shadow-sm shadow-red-600/25 transition-colors active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+        >
+          <Lock className="w-4 h-4" />
+          {guardandoCierre ? 'Cerrando…' : 'Cerrar turno'}
+        </button>
+      </div>
+    </Dialog>
   );
 }
 

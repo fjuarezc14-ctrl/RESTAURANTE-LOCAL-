@@ -82,6 +82,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.<cliente> up -d --buil
 - En el `.env.<cliente>` del servidor, además de lo de la sección 4: `DB_PASSWORD` propio **antes del primer arranque** (después ya no cambia la clave de la base).
 - `MODO_INSTALACION=web` solo si el sitio va detrás de HTTPS. En ese modo las cookies de sesión son `Secure` y por HTTP simple el navegador no las envía: nadie podría entrar.
 - Actualizar: `git pull` y el mismo comando con `--build`.
+- "Compartir dirección" en Docker: dentro del contenedor no se ve la IP de la PC en el WiFi. Abre el sistema con la IP de la PC (no `localhost`) o pon `IP_SERVIDOR=192.168.x.x` en el `.env`. Con el instalador de Windows se detecta sola.
 - Con dominio propio: agregar `-f docker-compose.https.yml` (Caddy saca el certificado HTTPS solo). Plantilla completa: `.env.la-carreta-web.example`.
 
 ## 6. Actualizar el local (Windows) y mudarlo a la web

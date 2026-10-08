@@ -41,6 +41,8 @@ services:
       - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-}
       - AUTH_OBLIGATORIA=${AUTH_OBLIGATORIA:-true}
       - MODO_INSTALACION=${MODO_INSTALACION:-local}
+      # IP de esta PC en el WiFi, para el QR de "Compartir dirección" (dentro de Docker no se puede detectar)
+      - IP_SERVIDOR=${IP_SERVIDOR:-}
       - CORS_ORIGIN=${CORS_ORIGIN:-}
       - PROXIES_DELANTE=${PROXIES_DELANTE:-1}
     depends_on:
