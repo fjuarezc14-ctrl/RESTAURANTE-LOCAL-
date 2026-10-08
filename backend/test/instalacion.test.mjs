@@ -34,3 +34,25 @@ describe('Modo de instalación y red', () => {
     }
   });
 });
+
+describe('direcciones dentro de Docker', () => {
+  const conEntorno = async (vars, fn) => {
+    const antes = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+    Object.assign(process.env, vars);
+    try { await fn(); } finally {
+      for (const [k, v] of Object.entries(antes)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+  };
+
+  it('no ofrece las IPs internas del contenedor; solo IP_SERVIDOR si está definida', async () => {
+    await conEntorno({ MODO_INSTALACION: 'local', EN_CONTENEDOR: 'true', IP_SERVIDOR: '' }, async () => {
+      const res = await api().get('/api/red/direcciones');
+      expect(res.body).toMatchObject({ enContenedor: true, ips: [] });
+    });
+    await conEntorno({ MODO_INSTALACION: 'local', EN_CONTENEDOR: 'true', IP_SERVIDOR: '192.168.2.102' }, async () => {
+      const res = await api().get('/api/red/direcciones');
+      expect(res.body.ips.map((i) => i.ip)).toEqual(['192.168.2.102']);
+      expect(res.body.ips[0].principal).toBe(true);
+    });
+  });
+});
