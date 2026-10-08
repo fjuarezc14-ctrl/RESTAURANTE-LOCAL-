@@ -48,6 +48,7 @@ app.use(require('./rutas/categorias'));
 app.use(require('./rutas/ofertas'));
 app.use(require('./rutas/usuarios'));
 app.use(require('./rutas/dispositivos'));
+app.use(require('./rutas/auditoria'));
 app.use(require('./rutas/ventas'));
 app.use(require('./rutas/caja'));
 app.use(require('./rutas/compras'));

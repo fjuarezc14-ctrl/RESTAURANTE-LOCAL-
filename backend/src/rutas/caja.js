@@ -7,6 +7,7 @@ const { buscarUsuarioPorPin } = require('../servicios/auth');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { aperturaCaja, cierreCaja, cierreForzado, consultaCierres, consultaMovimientos, movimientoCaja } = require('../../shared/esquemas/caja.js');
 const { requierePermiso } = require('../middlewares/permisos');
+const { registrarAuditoria } = require('../servicios/auditoria');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -156,14 +157,21 @@ router.post('/api/caja/movimientos', requierePermiso('Caja'), validar({ body: mo
       return next(new ErrorApp('CAJA_CERRADA', 'No se pueden registrar salidas de dinero con la caja cerrada.'));
     }
 
-    const mov = await prisma.movimientoCaja.create({
-      data: {
-        turnoId: turnoAbierto.id,
-        tipo: tipo === 'INGRESO' ? 'INGRESO' : 'RETIRO',
-        monto: parsedMonto,
-        motivo: String(motivo).trim(),
-        cajeroNombre: cajeroNombre ? String(cajeroNombre).trim() : turnoAbierto.cajeroNombre,
-      },
+    const mov = await prisma.$transaction(async (tx) => {
+      const creado = await tx.movimientoCaja.create({
+        data: {
+          turnoId: turnoAbierto.id,
+          tipo: tipo === 'INGRESO' ? 'INGRESO' : 'RETIRO',
+          monto: parsedMonto,
+          motivo: String(motivo).trim(),
+          cajeroNombre: cajeroNombre ? String(cajeroNombre).trim() : turnoAbierto.cajeroNombre,
+        },
+      });
+      await registrarAuditoria(tx, req, {
+        accion: 'CAJA_MOVIMIENTO', entidad: 'MovimientoCaja', entidadId: creado.id, nombreDeclarado: creado.cajeroNombre,
+        despues: { turnoId: creado.turnoId, tipo: creado.tipo, monto: creado.monto }, motivo: creado.motivo,
+      });
+      return creado;
     });
 
     console.log(`💸 Movimiento de Caja registrado [${mov.tipo}]: S/ ${mov.monto.toFixed(2)} - "${mov.motivo}" por ${mov.cajeroNombre}`);
@@ -236,7 +244,8 @@ router.post('/api/caja/apertura', requierePermiso('Caja'), validar({ body: apert
 
     const fondo = parseFloat(montoInicial || 0);
 
-    const nuevoTurno = await prisma.cierreCaja.create({
+    const nuevoTurno = await prisma.$transaction(async (tx) => {
+      const turno = await tx.cierreCaja.create({
       data: {
         estado: 'ABIERTO',
         fechaApertura: new Date(),
@@ -249,6 +258,12 @@ router.post('/api/caja/apertura', requierePermiso('Caja'), validar({ body: apert
         efectivoContado: 0,
         diferencia: 0,
       },
+      });
+      await registrarAuditoria(tx, req, {
+        accion: 'CAJA_ABIERTA', entidad: 'CierreCaja', entidadId: turno.id, nombreDeclarado: turno.cajeroNombre,
+        despues: { cajeroNombre: turno.cajeroNombre, montoInicial: turno.montoInicial }, motivo: turno.notaApertura,
+      });
+      return turno;
     });
 
     console.log(`🔓 Turno de Caja ABIERTO por ${cajeroNombre} con Fondo Inicial S/ ${nuevoTurno.montoInicial.toFixed(2)}`);
@@ -322,7 +337,8 @@ router.post('/api/caja/cierre', requierePermiso('Caja'), validar({ body: cierreC
     const abonosEfec = Math.max(0, parseFloat(abonosEfectivo || 0));
     const difCalculada = Math.round((efecContado - efecEsperado) * 100) / 100;
 
-    const cierre = await prisma.cierreCaja.update({
+    const cierre = await prisma.$transaction(async (tx) => {
+      const cerrado = await tx.cierreCaja.update({
       where: { id: turnoAbierto.id },
       data: {
         estado: 'CERRADO',
@@ -341,6 +357,17 @@ router.post('/api/caja/cierre', requierePermiso('Caja'), validar({ body: cierreC
         abonosEfectivo: abonosEfec,
         nota: nota ? String(nota).trim() : null,
       },
+      });
+      await registrarAuditoria(tx, req, {
+        accion: 'CAJA_CERRADA', entidad: 'CierreCaja', entidadId: cerrado.id, nombreDeclarado: cerrado.cajeroNombre,
+        antes: { estado: 'ABIERTO' },
+        despues: {
+          estado: 'CERRADO', efectivoEsperado: cerrado.efectivoEsperado, efectivoContado: cerrado.efectivoContado,
+          diferencia: cerrado.diferencia, totalTarjeta: cerrado.totalTarjeta, totalYape: cerrado.totalYape,
+        },
+        motivo: cerrado.nota,
+      });
+      return cerrado;
     });
 
     console.log(`🔒 Cierre de Caja registrado exitosamente por ${cajeroNombre}: Esperado S/ ${cierre.efectivoEsperado.toFixed(2)}, Contado S/ ${cierre.efectivoContado.toFixed(2)}, Dif: S/ ${cierre.diferencia.toFixed(2)}`);
@@ -376,14 +403,22 @@ router.post('/api/caja/cierre-forzado', requierePermiso('Caja', 'Dashboard'), va
     }
 
     const now = new Date();
-    const cierre = await prisma.cierreCaja.update({
-      where: { id: turnoAbierto.id },
-      data: {
-        estado: 'CERRADO',
-        fechaCierre: now,
-        cerradoPorAdmin: true,
-        nota: `[CIERRE FORZADO POR ADMINISTRADOR: ${admin.nombre}] Motivo: ${motivo || 'Cierre de turno por administración'}`,
-      },
+    const cierre = await prisma.$transaction(async (tx) => {
+      const cerrado = await tx.cierreCaja.update({
+        where: { id: turnoAbierto.id },
+        data: {
+          estado: 'CERRADO',
+          fechaCierre: now,
+          cerradoPorAdmin: true,
+          nota: `[CIERRE FORZADO POR ADMINISTRADOR: ${admin.nombre}] Motivo: ${motivo || 'Cierre de turno por administración'}`,
+        },
+      });
+      await registrarAuditoria(tx, req, {
+        accion: 'CAJA_CIERRE_FORZADO', entidad: 'CierreCaja', entidadId: cerrado.id,
+        antes: { estado: 'ABIERTO', cajeroNombre: turnoAbierto.cajeroNombre }, despues: { estado: 'CERRADO' },
+        motivo: motivo || null, autorizadoPor: admin.nombre,
+      });
+      return cerrado;
     });
 
     console.log(`⚠️ Turno #${turnoAbierto.id} cerrado administrativamente por Admin ${admin.nombre}`);
