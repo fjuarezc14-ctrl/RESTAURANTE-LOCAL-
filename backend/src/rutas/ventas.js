@@ -735,10 +735,10 @@ router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body:
         }
       }
 
-      // Marcar TODOS los pedidos de la mesa como Cobrado
+      // Marcar TODOS los pedidos de la mesa como Cobrado (con la fecha de la venta, también los adicionales)
       await tx.pedido.updateMany({
         where: { id: { in: idsAPagar } },
-        data: { estado: 'Cobrado' },
+        data: { estado: 'Cobrado', cobradoEn: ventaCreada.createdAt },
       });
 
       // Liberar la mesa

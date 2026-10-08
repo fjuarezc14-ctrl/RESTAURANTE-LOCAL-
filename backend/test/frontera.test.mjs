@@ -133,3 +133,19 @@ describe('turno que cruza la medianoche (hora de Lima)', () => {
     expect(dia6).toEqual([v3]);
   });
 });
+
+describe('reportes de ventas por fecha de cobro', () => {
+  it('una mesa abierta ayer y cobrada hoy cuenta hoy en "Carta y platos", también los adicionales', async () => {
+    await abrirCaja();
+    const p1 = await mesaListaParaCobrar(1, [item(carta.lomo, 2)]);
+    const p2 = await mesaListaParaCobrar(1, [item(carta.gaseosa, 1)]); // pedido adicional de la misma mesa
+    await prisma.pedido.updateMany({ where: { id: { in: [p1, p2] } }, data: { createdAt: new Date('2026-10-05T20:00:00-05:00') } });
+    const res = await api().post('/api/ventas').send({ pedidoIds: [p1, p2], metodoPago: 'Efectivo' });
+    expect(res.status).toBe(200);
+    const hoy = new Date(Date.now() - 3 * 3600000).toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+    const rot = (await api().get(`/api/reportes/rotacion?desde=${hoy}&hasta=${hoy}`)).body;
+    expect(rot.map((r) => [r.nombre, r.cantidad]).sort()).toEqual([['Inca Kola', 1], ['Lomo Saltado', 2]]);
+    const ayer = (await api().get('/api/reportes/rotacion?desde=2026-10-05&hasta=2026-10-05')).body;
+    expect(ayer).toEqual([]);
+  });
+});

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Download, TrendingUp, TrendingDown, DollarSign, XCircle, Users, Truck, Calendar, Search, Receipt, Printer, X, Wallet, Briefcase, Award, Flame, UtensilsCrossed, PieChart, Layers, History, AlertTriangle, Banknote, CreditCard, Smartphone, Gift, Ban, MessageCircle, Scale } from 'lucide-react';
+import { Download, TrendingUp, XCircle, Users, Truck, Calendar, Search, Printer, Wallet, UtensilsCrossed, History, MessageCircle } from 'lucide-react';
 
 import { api } from '../api';
 import { useCompany } from '../context/CompanyContext';
@@ -10,6 +10,16 @@ import { useAviso, usePedirDato } from '../components/ui';
 import { ModalComprobanteSunat, ModalReimpresionCierre } from '../components/modales';
 import { ModalReporteGerencial } from '../modulos/reportes/modales';
 import { parseDeliveryInfo, parsearCreditoSplit } from '../utils/ventas';
+import { clienteDeVenta, fechaVenta, metodoReal, origenDeVenta, soles } from '../modulos/reportes/utils';
+import { modalDetalle } from '../modulos/reportes/componentes/piezas';
+import { getEstiloMetodo as estiloMetodo } from '../modulos/caja/constantes/metodosPago';
+import PestanaCierres from '../modulos/reportes/componentes/PestanaCierres';
+import PestanaAnulaciones from '../modulos/reportes/componentes/PestanaAnulaciones';
+import PestanaMozos from '../modulos/reportes/componentes/PestanaMozos';
+import PestanaConsumo from '../modulos/reportes/componentes/PestanaConsumo';
+import PestanaPedidosYa from '../modulos/reportes/componentes/PestanaPedidosYa';
+import PestanaRotacion from '../modulos/reportes/componentes/PestanaRotacion';
+import PestanaResumen from '../modulos/reportes/componentes/PestanaResumen';
 
 // Igual que en Caja: el sistema solo emite tickets de venta
 const FACTURACION_ELECTRONICA = false;
@@ -279,104 +289,6 @@ export default function ReportesPage() {
     }
   };
 
-  // ── Helpers de presentación ──
-  const soles = (n) => `S/ ${Number(n || 0).toFixed(2)}`;
-
-  const METODO_ESTILO = {
-    Efectivo: { Icon: Banknote, chip: 'bg-emerald-50 text-emerald-700' },
-    Tarjeta: { Icon: CreditCard, chip: 'bg-blue-50 text-blue-700' },
-    Yape: { Icon: Smartphone, chip: 'bg-purple-50 text-purple-700' },
-    Mixto: { Icon: Layers, chip: 'bg-amber-50 text-amber-700' },
-    Crédito: { Icon: Wallet, chip: 'bg-teal-50 text-teal-700' },
-    Consumo: { Icon: Users, chip: 'bg-violet-50 text-violet-700' },
-    Cortesía: { Icon: Gift, chip: 'bg-orange-50 text-orange-700' },
-    PedidosYa: { Icon: Truck, chip: 'bg-rose-50 text-rose-600' },
-  };
-  const estiloMetodo = (m) => METODO_ESTILO[m] || { Icon: Receipt, chip: 'bg-slate-100 text-slate-600' };
-
-  // PedidosYa con código de delivery/llevar propio se cobra en efectivo
-  const metodoReal = (v) => {
-    if (v.metodoPago === 'PedidosYa' && (v.codigoPedidosYa?.startsWith('DELIVERY -') || v.codigoPedidosYa?.startsWith('LLEVAR -'))) return 'Efectivo';
-    return v.metodoPago;
-  };
-
-  const clienteDeVenta = (v) => {
-    const info = parseDeliveryInfo(v.codigoPedidosYa) || parseDeliveryInfo(v.nombreCliente);
-    if (info) return info.nombre;
-    if (v.nombreCliente?.startsWith('DELIVERY -')) return v.nombreCliente.replace('DELIVERY - ', '');
-    return v.nombreCliente || 'Consumidor Final';
-  };
-
-  const origenDeVenta = (v) => {
-    if (!v.codigoPedidosYa) return `Mesa ${v.mesaNum || 'S/M'}`;
-    if (v.codigoPedidosYa.startsWith('DELIVERY -')) return 'Delivery';
-    if (v.codigoPedidosYa.startsWith('LLEVAR -')) return 'Para llevar';
-    return `PedidosYa · ${v.codigoPedidosYa}`;
-  };
-
-  const esPedidosYa = (v) => v.metodoPago === 'PedidosYa' && v.codigoPedidosYa && !v.codigoPedidosYa.startsWith('DELIVERY -') && !v.codigoPedidosYa.startsWith('LLEVAR -');
-
-  const fechaVenta = (v) => v.fecha || new Date(v.createdAt).toLocaleDateString('es-PE');
-
-  const panel = ({ titulo, subtitulo, Icon, color, derecha, children, sinPadding }) => (
-    <section className="bg-white rounded-2xl border border-slate-200/70 min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-slate-100">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className={`w-8 h-8 rounded-lg grid place-items-center shrink-0 ${color}`}><Icon className="w-4 h-4" /></span>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-slate-800 truncate">{titulo}</h2>
-            {subtitulo && <p className="text-xs text-slate-400 truncate">{subtitulo}</p>}
-          </div>
-        </div>
-        {derecha}
-      </div>
-      <div className={sinPadding ? '' : 'p-4 sm:p-5'}>{children}</div>
-    </section>
-  );
-
-  const kpi = ({ label, valor, hint, Icon, color, borde, valorClase = 'text-slate-900', extra }) => (
-    <div key={label} className={`rounded-2xl border border-slate-200/70 border-t-4 ${borde} bg-white p-4 min-w-0`}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium text-slate-500 truncate">{label}</p>
-        <span className={`w-8 h-8 rounded-lg grid place-items-center shrink-0 ${color}`}><Icon className="w-4 h-4" /></span>
-      </div>
-      <p className={`mt-1 text-lg sm:text-xl font-semibold font-mono tabular-nums truncate ${valorClase}`}>{valor}</p>
-      {hint && <p className="mt-1 text-[11px] leading-snug text-slate-400">{hint}</p>}
-      {extra}
-    </div>
-  );
-
-  const chipCount = (n, color) => (
-    <span className={`text-xs font-semibold rounded-full px-2.5 py-0.5 shrink-0 ${color}`}>{n}</span>
-  );
-
-  const vacio = (texto) => <p className="px-5 py-10 text-center text-sm text-slate-400">{texto}</p>;
-
-  const botonTicket = (onClick, label = 'Ticket') => (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className="h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 inline-flex items-center gap-1.5 transition-colors shrink-0"
-    >
-      <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">{label}</span>
-    </button>
-  );
-
-  const modalDetalle = (onClose, header, body, footer) => (
-    <div className="fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 animate-fade-in" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-lg max-h-[92dvh] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-slate-100">
-          <div className="min-w-0">{header}</div>
-          <button type="button" onClick={onClose} className="p-2 -m-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0" aria-label="Cerrar">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-5">{body}</div>
-        {footer && <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/70">{footer}</div>}
-      </div>
-    </div>
-  );
-
   const hoyStr = getHoyString();
   const ayerStr = (() => {
     const d = new Date();
@@ -505,703 +417,78 @@ export default function ReportesPage() {
       </nav>
 
       {/* 1. BALANCE Y COMPROBANTES */}
-      {activeTab === 'resumen' && (() => {
-        const margen = resumen.ventasTotal - resumen.comprasTotal;
-        const dc = resumen.desgloseCaja;
-        return (
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {kpi({ label: 'Ventas del periodo', valor: soles(resumen.ventasTotal), hint: `Base ${soles(resumen.ventasBase)} · IGV ${soles(resumen.ventasIGV)}`, Icon: TrendingUp, color: 'bg-sky-50 text-sky-600', borde: 'border-t-sky-500' })}
-              {kpi({ label: 'Retiros de caja', valor: soles(retirosCaja.reduce((s, m) => s + (Number(m.monto) || 0), 0)), valorClase: 'text-rose-600', hint: `${retirosCaja.length} salida${retirosCaja.length !== 1 ? 's' : ''} · sin devoluciones de ventas`, Icon: TrendingDown, color: 'bg-rose-50 text-rose-600', borde: 'border-t-rose-500' })}
-              {kpi({ label: 'Margen operativo', valor: soles(margen), valorClase: margen >= 0 ? 'text-emerald-600' : 'text-rose-600', hint: `Rentabilidad ${resumen.ventasTotal > 0 ? ((margen / resumen.ventasTotal) * 100).toFixed(1) : '0.0'}%`, Icon: DollarSign, color: 'bg-emerald-50 text-emerald-600', borde: 'border-t-emerald-500' })}
-              {kpi({ label: 'Ticket promedio', valor: soles(ventas.length > 0 ? resumen.ventasTotal / ventas.length : 0), hint: `${ventas.length} comandas cobradas`, Icon: Receipt, color: 'bg-amber-50 text-amber-600', borde: 'border-t-amber-500' })}
-            </div>
-
-            {dc && panel({
-              titulo: 'Recaudación por método',
-              subtitulo: 'Periodo seleccionado',
-              Icon: Wallet,
-              color: 'bg-emerald-50 text-emerald-600',
-              children: (
-                <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2.5">
-                  {[
-                    ['Efectivo', dc.efectivo, Banknote, 'bg-emerald-50 text-emerald-700'],
-                    ['Tarjeta / POS', dc.tarjeta, CreditCard, 'bg-blue-50 text-blue-700'],
-                    ['Yape / Plin', dc.yape, Smartphone, 'bg-purple-50 text-purple-700'],
-                    ['PedidosYa', dc.pedidosYa, Truck, 'bg-rose-50 text-rose-600'],
-                    ['Consumo planilla', dc.consumos ?? dc.consumoPlanilla, Users, 'bg-violet-50 text-violet-700'],
-                    ['Crédito comercial', dc.credito ?? dc.consumoClientes, Briefcase, 'bg-teal-50 text-teal-700'],
-                    ['Cortesías', dc.cortesias, Gift, 'bg-orange-50 text-orange-700'],
-                  ].map(([label, monto, Icon, color]) => (
-                    <div key={label} className={`rounded-xl px-3 py-2.5 ${color}`}>
-                      <p className="text-[11px] font-medium flex items-center gap-1.5 opacity-90"><Icon className="w-3.5 h-3.5" /> {label}</p>
-                      <p className="mt-0.5 font-mono font-semibold tabular-nums text-base">{soles(monto)}</p>
-                    </div>
-                  ))}
-                </div>
-              ),
-            })}
-
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 items-start">
-              {/* Comprobantes */}
-              <div className="xl:col-span-3 min-w-0">
-                {panel({
-                  titulo: 'Comprobantes emitidos',
-                  subtitulo: 'Registro de ventas del periodo · toca uno para ver el detalle',
-                  Icon: Receipt,
-                  color: 'bg-indigo-50 text-indigo-600',
-                  derecha: chipCount(comprobantesLista.length, 'bg-indigo-50 text-indigo-700'),
-                  sinPadding: true,
-                  children: (
-                    <>
-                      <div className="px-4 sm:px-5 py-3 flex flex-wrap items-center gap-2 border-b border-slate-100">
-                        <div className="relative flex-1 min-w-[160px]">
-                          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                          <input
-                            type="search"
-                            value={comprobantesBusqueda}
-                            onChange={(e) => { setComprobantesBusqueda(e.target.value); setComprobantesLimite(25); }}
-                            placeholder="Buscar venta, cliente, cajero…"
-                            className="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-100/80 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-slate-900/10"
-                          />
-                        </div>
-                        <select
-                          value={comprobantesMetodo}
-                          onChange={(e) => { setComprobantesMetodo(e.target.value); setComprobantesLimite(25); }}
-                          className="h-9 px-2.5 rounded-lg bg-slate-100/80 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-                        >
-                          <option value="Todos">Todos</option>
-                          {['Efectivo', 'Tarjeta', 'Yape', 'Mixto', 'Crédito', 'Consumo', 'Cortesía', 'PedidosYa'].map(m => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                      </div>
-                      {comprobantesVisibles.length > 0 ? (
-                        <ul className="divide-y divide-slate-100">
-                          {comprobantesVisibles.map(v => {
-                            const metodo = metodoReal(v);
-                            const est = estiloMetodo(metodo);
-                            return (
-                              <li key={v.id}>
-                                <button
-                                  type="button"
-                                  onClick={() => setVentaDetalleId(v.id)}
-                                  className="w-full text-left flex items-center gap-3 px-4 sm:px-5 py-3 hover:bg-slate-50 transition-colors"
-                                >
-                                  <div className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${v.anulado ? 'bg-red-50 text-red-500' : est.chip}`}>
-                                    {v.anulado ? <Ban className="w-4 h-4" /> : <est.Icon className="w-4 h-4" />}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className={`text-sm font-medium truncate ${v.anulado ? 'text-slate-400' : 'text-slate-900'}`}>
-                                      {origenDeVenta(v)} <span className="text-slate-300">·</span> {clienteDeVenta(v)}
-                                    </p>
-                                    <p className="text-xs text-slate-500 truncate">
-                                      <span className="font-mono">#VT-{v.id}</span> · {fechaVenta(v)} {v.hora} · {v.cajeroNombre || 'Cajero principal'}
-                                    </p>
-                                  </div>
-                                  <div className="text-right shrink-0">
-                                    <p className={`font-mono text-sm font-semibold tabular-nums ${v.anulado ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-                                      {soles(v.anulado ? (v.montoOriginal ?? v.total) : v.total)}
-                                    </p>
-                                    <p className={`text-[11px] font-medium ${v.anulado ? 'text-red-600' : est.chip.split(' ')[1]}`}>{v.anulado ? 'Devuelto' : metodo}</p>
-                                  </div>
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : vacio(busquedaCompNorm || comprobantesMetodo !== 'Todos' ? 'Ningún comprobante coincide con el filtro.' : 'No hay comprobantes en este rango de fechas.')}
-                      {comprobantesLista.length > comprobantesVisibles.length && (
-                        <div className="px-4 py-3 border-t border-slate-100">
-                          <button
-                            type="button"
-                            onClick={() => setComprobantesLimite(l => l + 25)}
-                            className="w-full h-9 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                          >
-                            Mostrar más ({comprobantesLista.length - comprobantesVisibles.length})
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  ),
-                })}
-              </div>
-
-              {/* Cajeros */}
-              <div className="xl:col-span-2 min-w-0">
-                {panel({
-                  titulo: 'Ventas por cajero',
-                  subtitulo: 'Recaudación del personal de caja',
-                  Icon: Users,
-                  color: 'bg-purple-50 text-purple-600',
-                  derecha: chipCount(cajeros.length, 'bg-purple-50 text-purple-700'),
-                  sinPadding: true,
-                  children: cajeros.length > 0 ? (
-                    <ul className="divide-y divide-slate-100">
-                      {cajeros.map((c, i) => (
-                        <li key={i} className="px-4 sm:px-5 py-3.5 space-y-2">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-purple-600 text-white grid place-items-center text-sm font-semibold shrink-0">{(c.nombre || 'C')[0].toUpperCase()}</div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-slate-900 truncate">{c.nombre}</p>
-                              <p className="text-xs text-slate-500">{c.cantidadTickets} tickets · prom. {soles(c.ticketPromedio)}</p>
-                            </div>
-                            <p className="font-mono text-sm font-semibold tabular-nums text-slate-900 shrink-0">{soles(c.totalVentas)}</p>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5 pl-12 text-[11px] font-mono">
-                            <span className="rounded-md bg-emerald-50 text-emerald-700 px-2 py-0.5">Efec. {soles(c.efectivo)}</span>
-                            <span className="rounded-md bg-blue-50 text-blue-700 px-2 py-0.5">Tarj. {soles(c.tarjeta)}</span>
-                            <span className="rounded-md bg-purple-50 text-purple-700 px-2 py-0.5">Yape {soles(c.yape)}</span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : vacio('Sin cobros de cajeros en este periodo.'),
-                })}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {activeTab === 'resumen' && (
+        <PestanaResumen
+          busquedaCompNorm={busquedaCompNorm}
+          cajeros={cajeros}
+          comprobantesBusqueda={comprobantesBusqueda}
+          comprobantesLista={comprobantesLista}
+          comprobantesMetodo={comprobantesMetodo}
+          comprobantesVisibles={comprobantesVisibles}
+          resumen={resumen}
+          retirosCaja={retirosCaja}
+          setComprobantesBusqueda={setComprobantesBusqueda}
+          setComprobantesLimite={setComprobantesLimite}
+          setComprobantesMetodo={setComprobantesMetodo}
+          setVentaDetalleId={setVentaDetalleId}
+          ventas={ventas}
+        />
+      )}
 
       {/* 2. RENDIMIENTO DE LA CARTA Y RANKING DE PLATOS */}
-      {activeTab === 'rotacion' && (() => {
-        const totalPlatosVendidos = rotacion.reduce((sum, item) => sum + (item.cantidad || 0), 0);
-        const totalFacturacionCarta = rotacion.reduce((sum, item) => sum + (item.total || 0), 0);
-        const platoEstrella = rotacion.length > 0 ? rotacion[0] : null;
-        const platoMayorIngreso = rotacion.length > 0 ? [...rotacion].sort((a, b) => (b.total || 0) - (a.total || 0))[0] : null;
-
-        // Agrupación por categoría gastronómica
-        const catMap = {};
-        rotacion.forEach(item => {
-          const cat = item.categoria || 'Sin Categoría';
-          if (!catMap[cat]) {
-            catMap[cat] = { categoria: cat, cantidad: 0, total: 0 };
-          }
-          catMap[cat].cantidad += item.cantidad || 0;
-          catMap[cat].total += item.total || 0;
-        });
-        const categoriasRanking = Object.values(catMap).sort((a, b) => b.total - a.total);
-        const categoriasDisponibles = ['Todos', ...categoriasRanking.map(c => c.categoria)];
-
-        const top5 = rotacion.slice(0, 5);
-
-        const rotacionFiltrada = rotacion.filter(item => {
-          const matchCat = rotacionCatFiltro === 'Todos' || item.categoria === rotacionCatFiltro;
-          const matchNom = !rotacionBusqueda.trim() ||
-            item.nombre.toLowerCase().includes(rotacionBusqueda.toLowerCase()) ||
-            (item.categoria && item.categoria.toLowerCase().includes(rotacionBusqueda.toLowerCase()));
-          return matchCat && matchNom;
-        });
-        const maxTotal = Math.max(1, ...rotacionFiltrada.map(r => r.total || 0));
-
-        return (
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="col-span-2 lg:col-span-1 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white p-4 shadow-sm shadow-amber-500/20 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-amber-50/90">Plato más vendido</p>
-                  <span className="w-8 h-8 rounded-lg bg-white/15 grid place-items-center"><Award className="w-4 h-4" /></span>
-                </div>
-                <p className="mt-1 text-base font-semibold truncate" title={platoEstrella?.nombre}>{platoEstrella ? platoEstrella.nombre : 'Sin ventas'}</p>
-                <p className="text-xs text-amber-50/90">{platoEstrella ? `${platoEstrella.cantidad} raciones · ${soles(platoEstrella.total)}` : '—'}</p>
-              </div>
-              {kpi({ label: 'Mayor ingreso', valor: soles(platoMayorIngreso?.total), valorClase: 'text-emerald-600', hint: platoMayorIngreso ? `${platoMayorIngreso.nombre} · ${platoMayorIngreso.cantidad} unid.` : 'Sin ventas', Icon: DollarSign, color: 'bg-emerald-50 text-emerald-600', borde: 'border-t-emerald-500' })}
-              {kpi({ label: 'Raciones vendidas', valor: totalPlatosVendidos, hint: `${rotacion.length} platos distintos`, Icon: UtensilsCrossed, color: 'bg-sky-50 text-sky-600', borde: 'border-t-sky-500' })}
-              {kpi({ label: 'Total recaudado carta', valor: soles(totalFacturacionCarta), hint: `${categoriasRanking.length} categorías activas`, Icon: TrendingUp, color: 'bg-purple-50 text-purple-600', borde: 'border-t-purple-500' })}
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
-              {categoriasRanking.length > 0 && panel({
-                titulo: 'Participación por categoría',
-                subtitulo: `100% = ${soles(totalFacturacionCarta)}`,
-                Icon: PieChart,
-                color: 'bg-amber-50 text-amber-600',
-                children: (
-                  <ul className="space-y-3">
-                    {categoriasRanking.map((catItem, cIdx) => {
-                      const pct = totalFacturacionCarta > 0 ? ((catItem.total / totalFacturacionCarta) * 100) : 0;
-                      return (
-                        <li key={cIdx}>
-                          <div className="flex items-baseline justify-between gap-3 text-sm">
-                            <span className="text-slate-800 truncate">{catItem.categoria}</span>
-                            <span className="font-mono tabular-nums text-slate-900 shrink-0">{soles(catItem.total)} <span className="text-xs text-amber-700 ml-1">{pct.toFixed(1)}%</span></span>
-                          </div>
-                          <div className="mt-1.5 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: `${Math.min(100, Math.max(2, pct))}%` }} />
-                          </div>
-                          <p className="mt-1 text-[11px] text-slate-400">{catItem.cantidad} unidades</p>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ),
-              })}
-
-              {top5.length > 0 && panel({
-                titulo: 'Top 5 más pedidos',
-                Icon: Flame,
-                color: 'bg-orange-50 text-orange-600',
-                sinPadding: true,
-                children: (
-                  <ol className="divide-y divide-slate-100">
-                    {top5.map((item, idx) => {
-                      const pct = totalPlatosVendidos > 0 ? ((item.cantidad / totalPlatosVendidos) * 100) : 0;
-                      const medalla = ['bg-amber-400 text-white', 'bg-slate-300 text-slate-700', 'bg-orange-300 text-orange-900', 'bg-slate-100 text-slate-500', 'bg-slate-100 text-slate-500'][idx];
-                      return (
-                        <li key={idx} className="flex items-center gap-3 px-4 sm:px-5 py-3">
-                          <span className={`w-8 h-8 rounded-full grid place-items-center text-sm font-bold shrink-0 ${medalla}`}>{idx + 1}</span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-slate-900 truncate">{item.nombre}</p>
-                            <p className="text-xs text-slate-500 truncate">{item.categoria} · {item.cantidad} platos · {pct.toFixed(1)}%</p>
-                          </div>
-                          <p className="font-mono text-sm font-semibold tabular-nums text-emerald-600 shrink-0">{soles(item.total)}</p>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                ),
-              })}
-            </div>
-
-            {panel({
-              titulo: 'Rotación de la carta',
-              subtitulo: 'Platos ordenados por volumen de venta',
-              Icon: TrendingUp,
-              color: 'bg-sky-50 text-sky-600',
-              derecha: (
-                <div className="relative w-full sm:w-64">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    type="search"
-                    value={rotacionBusqueda}
-                    onChange={e => setRotacionBusqueda(e.target.value)}
-                    placeholder="Buscar plato o categoría…"
-                    className="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-100/80 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-slate-900/10"
-                  />
-                </div>
-              ),
-              sinPadding: true,
-              children: (
-                <>
-                  <div className="px-4 sm:px-5 py-2.5 border-b border-slate-100 flex gap-1.5 overflow-x-auto custom-scrollbar">
-                    {categoriasDisponibles.map(cat => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setRotacionCatFiltro(cat)}
-                        className={`h-8 px-3 rounded-full text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
-                          rotacionCatFiltro === cat ? 'bg-sky-600 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-700'
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-                  {rotacionFiltrada.length > 0 ? (
-                    <ul className="divide-y divide-slate-100">
-                      {rotacionFiltrada.map((r, i) => {
-                        const pct = totalFacturacionCarta > 0 ? ((r.total / totalFacturacionCarta) * 100) : 0;
-                        const precioProm = r.cantidad > 0 ? (r.total / r.cantidad) : r.precio;
-                        return (
-                          <li key={i} className="flex items-center gap-3 px-4 sm:px-5 py-3">
-                            <span className="w-6 text-right font-mono text-xs text-slate-400 shrink-0">{i + 1}</span>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-baseline justify-between gap-3">
-                                <p className="text-sm font-medium text-slate-900 truncate">{r.nombre}</p>
-                                <p className="font-mono text-sm font-semibold tabular-nums text-emerald-600 shrink-0">{soles(r.total)}</p>
-                              </div>
-                              <div className="mt-1 flex items-center gap-3">
-                                <div className="h-1 flex-1 bg-slate-100 rounded-full overflow-hidden">
-                                  <div className="h-full bg-sky-500 rounded-full" style={{ width: `${Math.max(2, ((r.total || 0) / maxTotal) * 100)}%` }} />
-                                </div>
-                                <p className="text-[11px] text-slate-500 shrink-0 tabular-nums">
-                                  <span className="hidden sm:inline">{r.categoria || 'General'} · </span>{r.cantidad} u · prom. {soles(precioProm)} · {pct.toFixed(1)}%
-                                </p>
-                              </div>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : vacio('No se encontraron platos que coincidan con los filtros.')}
-                </>
-              ),
-            })}
-          </div>
-        );
-      })()}
+      {activeTab === 'rotacion' && (
+        <PestanaRotacion
+          rotacion={rotacion}
+          rotacionBusqueda={rotacionBusqueda}
+          rotacionCatFiltro={rotacionCatFiltro}
+          setRotacionBusqueda={setRotacionBusqueda}
+          setRotacionCatFiltro={setRotacionCatFiltro}
+        />
+      )}
 
       {/* 3. CONTROL PEDIDOSYA */}
-      {activeTab === 'pedidosya' && (() => {
-        const itemsPY = ventas.filter(esPedidosYa);
-        const totalPY = itemsPY.reduce((s, v) => s + v.total, 0);
-        return (
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {kpi({ label: 'Total PedidosYa', valor: soles(totalPY), hint: 'Para conciliar la liquidación semanal', Icon: Truck, color: 'bg-rose-50 text-rose-600', borde: 'border-t-rose-500' })}
-              {kpi({ label: 'Pedidos', valor: itemsPY.length, hint: `Prom. ${soles(itemsPY.length ? totalPY / itemsPY.length : 0)}`, Icon: Receipt, color: 'bg-sky-50 text-sky-600', borde: 'border-t-sky-500' })}
-            </div>
-            {panel({
-              titulo: 'Ventas de PedidosYa',
-              subtitulo: 'Detalle para conciliar con el portal',
-              Icon: Truck,
-              color: 'bg-rose-50 text-rose-600',
-              derecha: chipCount(itemsPY.length, 'bg-rose-50 text-rose-700'),
-              sinPadding: true,
-              children: itemsPY.length > 0 ? (
-                <ul className="divide-y divide-slate-100">
-                  {itemsPY.map(v => (
-                    <li key={v.id}>
-                      <button type="button" onClick={() => setVentaDetalleId(v.id)} className="w-full text-left flex items-center gap-3 px-4 sm:px-5 py-3 hover:bg-slate-50 transition-colors">
-                        <span className="h-7 px-2.5 rounded-lg bg-rose-50 text-rose-700 text-xs font-mono font-semibold grid place-items-center shrink-0">{v.codigoPedidosYa || 'N/A'}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-slate-800 truncate">{v.itemsResumen}</p>
-                          <p className="text-xs text-slate-500"><span className="font-mono">#VT-{v.id}</span> · {fechaVenta(v)} {v.hora}</p>
-                        </div>
-                        <p className="font-mono text-sm font-semibold tabular-nums text-slate-900 shrink-0">{soles(v.total)}</p>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : vacio('No se registraron ventas de PedidosYa en este periodo.'),
-            })}
-          </div>
-        );
-      })()}
+      {activeTab === 'pedidosya' && (
+        <PestanaPedidosYa
+          setVentaDetalleId={setVentaDetalleId}
+          ventas={ventas}
+        />
+      )}
 
       {/* 4. CONSUMO DE PERSONAL (PLANILLA) Y CRÉDITOS */}
-      {activeTab === 'consumo' && (() => {
-        const clienteMap = new Map(clientes.map(c => [c.id, c]));
-
-        const listadoPlanilla = [];
-        const listadoComercial = [];
-
-        ventas.forEach(v => {
-          if (v.anulado || v.estadoPedido === 'Cancelado') return;
-
-          if (v.metodoPago === 'Consumo') {
-            listadoPlanilla.push({
-              id: v.id,
-              fecha: v.fecha,
-              createdAt: v.createdAt,
-              hora: v.hora,
-              nombre: v.nombreCliente || v.mesero || 'Consumo Personal',
-              documento: '',
-              itemsResumen: v.itemsResumen,
-              monto: v.descuentoAplicado || v.total,
-              rawVenta: v
-            });
-          } else {
-            const splits = v.creditoSplit || parsearCreditoSplit(v.ofertaDescripcion, v.clienteCreditoId, (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0)));
-            if (splits.length > 0) {
-              splits.forEach(s => {
-                const cli = clienteMap.get(s.clienteId);
-                const esTrab = cli?.esTrabajador || false;
-                const nombre = cli?.nombre || s.nombre || v.nombreCliente || 'Cliente Crédito';
-                const doc = cli?.numDoc || cli?.documento || '';
-                const item = {
-                  id: v.id,
-                  fecha: v.fecha,
-                  createdAt: v.createdAt,
-                  hora: v.hora,
-                  nombre,
-                  documento: doc,
-                  itemsResumen: v.itemsResumen,
-                  monto: s.monto,
-                  rawVenta: v
-                };
-                if (esTrab) listadoPlanilla.push(item);
-                else listadoComercial.push(item);
-              });
-            } else if (v.metodoPago === 'Crédito') {
-              listadoComercial.push({
-                id: v.id,
-                fecha: v.fecha,
-                createdAt: v.createdAt,
-                hora: v.hora,
-                nombre: v.nombreCliente || 'Cliente Comercial',
-                documento: '',
-                itemsResumen: v.itemsResumen,
-                monto: v.total,
-                rawVenta: v
-              });
-            }
-          }
-        });
-
-        const planillaPorColaborador = {};
-        listadoPlanilla.forEach(item => {
-          planillaPorColaborador[item.nombre] = (planillaPorColaborador[item.nombre] || 0) + item.monto;
-        });
-
-        const clientesPorComercial = {};
-        listadoComercial.forEach(item => {
-          const key = item.documento ? `${item.nombre} (${item.documento})` : item.nombre;
-          clientesPorComercial[key] = (clientesPorComercial[key] || 0) + item.monto;
-        });
-
-        const totalPlanilla = listadoPlanilla.reduce((sum, item) => sum + item.monto, 0);
-        const totalComercial = listadoComercial.reduce((sum, item) => sum + item.monto, 0);
-
-        const acumulado = (entries, color) => entries.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {entries.map(([nombre, total]) => (
-              <span key={nombre} className={`inline-flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${color}`}>
-                <span className="truncate max-w-[12rem]" title={nombre}>{nombre}</span>
-                <span className="font-mono font-semibold">{soles(total)}</span>
-              </span>
-            ))}
-          </div>
-        ) : null;
-
-        const listado = (items, colorMonto, etiqueta, textoVacio) => items.length > 0 ? (
-          <ul className="divide-y divide-slate-100">
-            {items.map((item, idx) => (
-              <li key={`${item.id}-${idx}`} className="flex items-center gap-3 px-4 sm:px-5 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-900 truncate">
-                    {item.nombre}
-                    {item.documento && <span className="ml-2 text-[11px] font-mono font-normal text-slate-400">{item.documento}</span>}
-                    {etiqueta}
-                  </p>
-                  <p className="text-xs text-slate-500 truncate"><span className="font-mono">#VT-{item.id}</span> · {item.fecha || new Date(item.createdAt).toLocaleDateString('es-PE')} {item.hora} · {item.itemsResumen}</p>
-                </div>
-                <p className={`font-mono text-sm font-semibold tabular-nums shrink-0 ${colorMonto}`}>{soles(item.monto)}</p>
-                {botonTicket(() => reimprimirComprobante(item.rawVenta))}
-              </li>
-            ))}
-          </ul>
-        ) : vacio(textoVacio);
-
-        return (
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {kpi({ label: 'Créditos comerciales', valor: soles(totalComercial), hint: `${listadoComercial.length} ventas a crédito`, Icon: Briefcase, color: 'bg-teal-50 text-teal-600', borde: 'border-t-teal-500', valorClase: 'text-teal-700' })}
-              {kpi({ label: 'Consumo de planilla', valor: soles(totalPlanilla), hint: `${listadoPlanilla.length} consumos de personal`, Icon: Users, color: 'bg-violet-50 text-violet-600', borde: 'border-t-violet-500', valorClase: 'text-violet-700' })}
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
-              {panel({
-                titulo: 'Cuentas por cobrar · Clientes',
-                subtitulo: 'Ventas a crédito comercial',
-                Icon: Briefcase,
-                color: 'bg-teal-50 text-teal-600',
-                derecha: chipCount(soles(totalComercial), 'bg-teal-50 text-teal-700 font-mono'),
-                sinPadding: true,
-                children: (
-                  <>
-                    {Object.keys(clientesPorComercial).length > 0 && (
-                      <div className="px-4 sm:px-5 py-3 border-b border-slate-100">
-                        <p className="text-xs font-medium text-slate-400 mb-2">Acumulado por cliente</p>
-                        {acumulado(Object.entries(clientesPorComercial), 'bg-teal-50 text-teal-800')}
-                      </div>
-                    )}
-                    {listado(listadoComercial, 'text-teal-700', null, 'No se registraron ventas a crédito comercial en este periodo.')}
-                  </>
-                ),
-              })}
-
-              {panel({
-                titulo: 'Descuentos de planilla · Personal',
-                subtitulo: 'Consumos de colaboradores internos',
-                Icon: Users,
-                color: 'bg-violet-50 text-violet-600',
-                derecha: chipCount(soles(totalPlanilla), 'bg-violet-50 text-violet-700 font-mono'),
-                sinPadding: true,
-                children: (
-                  <>
-                    {Object.keys(planillaPorColaborador).length > 0 && (
-                      <div className="px-4 sm:px-5 py-3 border-b border-slate-100">
-                        <p className="text-xs font-medium text-slate-400 mb-2">Acumulado por colaborador</p>
-                        {acumulado(Object.entries(planillaPorColaborador), 'bg-violet-50 text-violet-800')}
-                      </div>
-                    )}
-                    {listado(listadoPlanilla, 'text-violet-700', <span className="ml-2 text-[10px] font-medium text-violet-700 bg-violet-50 rounded px-1.5 py-0.5">Planilla</span>, 'No se registraron consumos de personal en este periodo.')}
-                  </>
-                ),
-              })}
-            </div>
-          </div>
-        );
-      })()}
+      {activeTab === 'consumo' && (
+        <PestanaConsumo
+          clientes={clientes}
+          reimprimirComprobante={reimprimirComprobante}
+          ventas={ventas}
+        />
+      )}
 
       {/* 5. RENDIMIENTO MOZOS */}
-      {activeTab === 'mozos' && (() => {
-        const maxAtendidas = Math.max(1, ...mozos.map(m => m.mesasAtendidas || 0));
-        return panel({
-          titulo: 'Rendimiento de mozos',
-          subtitulo: 'Mesas atendidas y activas en el periodo',
-          Icon: Users,
-          color: 'bg-indigo-50 text-indigo-600',
-          derecha: chipCount(`${mozos.length} con comanda`, 'bg-indigo-50 text-indigo-700'),
-          sinPadding: true,
-          children: mozos.length > 0 ? (
-            <ul className="divide-y divide-slate-100">
-              {mozos.map((m, i) => (
-                <li key={i} className="flex items-center gap-3 px-4 sm:px-5 py-3.5">
-                  <div className="w-9 h-9 rounded-xl bg-slate-900 text-amber-400 grid place-items-center text-sm font-bold shrink-0">{m.nombre[0]}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-slate-900 truncate">{m.nombre}</p>
-                      <div className="flex items-center gap-1.5 shrink-0 text-xs font-medium">
-                        <span className={`rounded-full px-2.5 py-0.5 ${m.mesasActivas > 0 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-400'}`}>{m.mesasActivas} activa{m.mesasActivas !== 1 ? 's' : ''}</span>
-                        <span className="rounded-full px-2.5 py-0.5 bg-emerald-50 text-emerald-700">{m.mesasAtendidas} atendida{m.mesasAtendidas !== 1 ? 's' : ''}</span>
-                      </div>
-                    </div>
-                    <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-indigo-400 to-indigo-600 rounded-full" style={{ width: `${Math.max(2, ((m.mesasAtendidas || 0) / maxAtendidas) * 100)}%` }} />
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : vacio('Sin actividad de mozos en este rango de fechas.'),
-        });
-      })()}
+      {activeTab === 'mozos' && (
+        <PestanaMozos
+          mozos={mozos}
+        />
+      )}
 
       {/* 6. AUDITORÍA DE ANULACIONES Y DEVOLUCIONES */}
-      {activeTab === 'anulaciones' && (() => {
-        const cancelacionesFiltradas = cancelaciones.filter(c => {
-          if (filtroTipoAnulacion === 'Todos') return true;
-          return (c.tipo || 'Comanda Cancelada') === filtroTipoAnulacion;
-        });
-
-        const totalPerdida = cancelacionesFiltradas.reduce((s, c) => s + (Number(c.total) || 0), 0);
-        const devolucionesList = cancelaciones.filter(c => c.tipo === 'Devolución en Caja');
-        const montoDevoluciones = devolucionesList.reduce((s, c) => s + (Number(c.total) || 0), 0);
-        const comandasList = cancelaciones.filter(c => c.tipo !== 'Devolución en Caja');
-        const montoComandas = comandasList.reduce((s, c) => s + (Number(c.total) || 0), 0);
-
-        return (
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {kpi({ label: 'Incidencias', valor: cancelacionesFiltradas.length, hint: 'Cancelaciones y devoluciones', Icon: XCircle, color: 'bg-rose-50 text-rose-600', borde: 'border-t-rose-500' })}
-              {kpi({ label: 'Monto impactado', valor: `−${soles(totalPerdida)}`, valorClase: 'text-rose-600', hint: 'Según el filtro actual', Icon: DollarSign, color: 'bg-red-50 text-red-600', borde: 'border-t-red-500' })}
-              {kpi({ label: 'Devoluciones en caja', valor: devolucionesList.length, hint: `Reembolsos ${soles(montoDevoluciones)}`, Icon: Receipt, color: 'bg-purple-50 text-purple-600', borde: 'border-t-purple-500' })}
-              {kpi({ label: 'Comandas de salón', valor: comandasList.length, hint: `Anuladas antes del pago ${soles(montoComandas)}`, Icon: AlertTriangle, color: 'bg-amber-50 text-amber-600', borde: 'border-t-amber-500' })}
-            </div>
-
-            {panel({
-              titulo: 'Registro de anulaciones',
-              subtitulo: 'Toca un registro para ver motivo y detalle',
-              Icon: XCircle,
-              color: 'bg-rose-50 text-rose-600',
-              derecha: (
-                <div className="inline-flex p-1 rounded-xl bg-slate-100 shrink-0 self-start sm:self-auto">
-                  {[
-                    { id: 'Todos', label: 'Todos', count: cancelaciones.length, activo: 'bg-slate-900 text-white' },
-                    { id: 'Devolución en Caja', label: 'Devoluciones', count: devolucionesList.length, activo: 'bg-purple-600 text-white' },
-                    { id: 'Comanda Cancelada', label: 'Comandas', count: comandasList.length, activo: 'bg-amber-500 text-white' },
-                  ].map(f => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => setFiltroTipoAnulacion(f.id)}
-                      className={`h-8 px-3 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 transition-all ${filtroTipoAnulacion === f.id ? `${f.activo} shadow-sm` : 'text-slate-500 hover:text-slate-800'}`}
-                    >
-                      {f.label} <span className="opacity-70">{f.count}</span>
-                    </button>
-                  ))}
-                </div>
-              ),
-              sinPadding: true,
-              children: (
-                <>
-                  {cancelacionesFiltradas.length > 0 ? (
-                    <ul className="divide-y divide-slate-100">
-                      {cancelacionesFiltradas.map((c, i) => {
-                        const isDevolucion = c.tipo === 'Devolución en Caja';
-                        return (
-                          <li key={i}>
-                            <button type="button" onClick={() => setAnulacionDetalle(c)} className="w-full text-left flex items-center gap-3 px-4 sm:px-5 py-3 hover:bg-slate-50 transition-colors">
-                              <div className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${isDevolucion ? 'bg-purple-50 text-purple-600' : 'bg-amber-50 text-amber-600'}`}>
-                                {isDevolucion ? <Receipt className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-slate-900 truncate">
-                                  {c.mesa ? `Mesa ${c.mesa}` : (c.codigoPedidosYa || 'Delivery')} <span className="text-slate-300">·</span> <span className="font-normal italic text-slate-600">“{c.motivoCancela || 'Sin motivo'}”</span>
-                                </p>
-                                <p className="text-xs text-slate-500 truncate">
-                                  {c.tipo || 'Comanda cancelada'} · {c.fecha || 'Hoy'} {c.hora} · {c.canceladoPor || 'No registrado'}
-                                </p>
-                              </div>
-                              <p className="font-mono text-sm font-semibold tabular-nums text-rose-600 shrink-0">−{soles(c.total)}</p>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : vacio(`No hay registros de ${filtroTipoAnulacion.toLowerCase()} en este rango de fechas.`)}
-                  {cancelacionesFiltradas.length > 0 && (
-                    <div className="px-4 sm:px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-3 text-sm">
-                      <span className="text-slate-500">{cancelacionesFiltradas.length} de {cancelaciones.length} eventos</span>
-                      <span className="font-mono font-semibold text-rose-600">−{soles(totalPerdida)}</span>
-                    </div>
-                  )}
-                </>
-              ),
-            })}
-          </div>
-        );
-      })()}
+      {activeTab === 'anulaciones' && (
+        <PestanaAnulaciones
+          cancelaciones={cancelaciones}
+          filtroTipoAnulacion={filtroTipoAnulacion}
+          setAnulacionDetalle={setAnulacionDetalle}
+          setFiltroTipoAnulacion={setFiltroTipoAnulacion}
+        />
+      )}
 
       {/* 7. CIERRES DE CAJA (ARQUEOS) */}
-      {activeTab === 'cierres' && (() => {
-        const cierresFiltrados = cierresHistorial.filter(c => {
-          if (!c.fechaCierre) return true;
-          const fStr = new Date(c.fechaCierre).toISOString().slice(0, 10);
-          return fStr >= fechaDesde && fStr <= fechaHasta;
-        });
-
-        const totalEsperado = cierresFiltrados.reduce((s, c) => s + (Number(c.efectivoEsperado) || 0), 0);
-        const totalDif = cierresFiltrados.reduce((s, c) => s + (Number(c.diferencia) || 0), 0);
-        const totalElec = cierresFiltrados.reduce((s, c) => s + (Number(c.totalTarjeta || 0) + Number(c.totalYape || 0)), 0);
-        const difTexto = (d) => (d > 0.01 ? `+${soles(d)}` : soles(d));
-        const difColor = (d) => (Math.abs(d) < 0.01 ? 'bg-emerald-50 text-emerald-700' : d > 0 ? 'bg-blue-50 text-blue-700' : 'bg-rose-50 text-rose-700');
-
-        return (
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {kpi({ label: 'Turnos cerrados', valor: cierresFiltrados.length, hint: 'Arqueos archivados', Icon: History, color: 'bg-purple-50 text-purple-600', borde: 'border-t-purple-500' })}
-              {kpi({ label: 'Efectivo esperado', valor: soles(totalEsperado), hint: 'Ventas + abonos − egresos', Icon: Banknote, color: 'bg-emerald-50 text-emerald-600', borde: 'border-t-emerald-500' })}
-              {kpi({ label: 'Tarjetas y Yape', valor: soles(totalElec), hint: 'Cobros electrónicos', Icon: CreditCard, color: 'bg-blue-50 text-blue-600', borde: 'border-t-blue-500' })}
-              {kpi({ label: 'Diferencia acumulada', valor: difTexto(totalDif), valorClase: totalDif < -0.01 ? 'text-rose-600' : (totalDif > 0.01 ? 'text-blue-600' : 'text-emerald-600'), hint: 'Físico vs calculado', Icon: Scale, color: 'bg-slate-100 text-slate-600', borde: 'border-t-slate-400' })}
-            </div>
-
-            {panel({
-              titulo: 'Historial de arqueos',
-              subtitulo: 'Cierres de turno por cajero',
-              Icon: History,
-              color: 'bg-purple-50 text-purple-600',
-              derecha: chipCount(cierresFiltrados.length, 'bg-purple-50 text-purple-700'),
-              sinPadding: true,
-              children: cierresFiltrados.length > 0 ? (
-                <ul className="divide-y divide-slate-100">
-                  {cierresFiltrados.map(c => {
-                    const dif = Number(c.diferencia || 0);
-                    return (
-                      <li key={c.id} className="flex items-center gap-3 px-4 sm:px-5 py-3">
-                        <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 grid place-items-center text-xs font-semibold shrink-0">#{c.id}</div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-medium text-slate-900 truncate">{c.cajeroNombre}</p>
-                            <span className={`text-[11px] font-mono font-semibold rounded-md px-1.5 py-0.5 ${difColor(dif)}`}>{difTexto(dif)}</span>
-                          </div>
-                          <p className="text-xs text-slate-500 truncate">
-                            {new Date(c.fechaCierre).toLocaleDateString('es-PE')} {new Date(c.fechaCierre).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
-                            <span className="hidden sm:inline"> · Esperado {soles(c.efectivoEsperado)} · Contado {soles(c.efectivoContado)} · Elec. {soles(Number(c.totalTarjeta || 0) + Number(c.totalYape || 0))} · Egresos {soles(c.egresosEfectivo)}</span>
-                          </p>
-                          <p className="sm:hidden text-xs text-slate-500 font-mono">Contado {soles(c.efectivoContado)} / {soles(c.efectivoEsperado)}</p>
-                        </div>
-                        {botonTicket(() => setCierreAImprimir(c))}
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : vacio('No hay cierres de caja registrados en este rango de fechas.'),
-            })}
-          </div>
-        );
-      })()}
+      {activeTab === 'cierres' && (
+        <PestanaCierres
+          cierresHistorial={cierresHistorial}
+          fechaDesde={fechaDesde}
+          fechaHasta={fechaHasta}
+          setCierreAImprimir={setCierreAImprimir}
+        />
+      )}
 
       </div>
 
