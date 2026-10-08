@@ -1,7 +1,7 @@
 // Registro de auditoría (tarea 11)
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PIN_ADMIN, PIN_CAJERO, api, app, crearBase, esperarError, limpiarBD, prisma } from './helpers.mjs';
+import { PIN_ADMIN, PIN_CAJERO, abrirCaja, api, app, cobrar, crearBase, esperarError, item, limpiarBD, mesaListaParaCobrar, prisma } from './helpers.mjs';
 
 const CONTRASENA = 'clave-segura-1';
 let admin;
@@ -130,6 +130,62 @@ describe('carta', () => {
     const postre = await prisma.producto.findFirst({ where: { nombre: 'Tres Leches' } });
     await nav.delete(`/api/productos/${postre.id}`);
     expect((await registros({ accion: 'PRODUCTO_ELIMINADO' }))[0]).toMatchObject({ entidadId: String(postre.id), antes: { nombre: 'Tres Leches' } });
+  });
+});
+
+describe('ventas', () => {
+  const producto = (nombre) => prisma.producto.findFirst({ where: { nombre } });
+  // datos puede ser una función que recibe los ítems del pedido (para elegir cortesías por id de ítem)
+  async function ventaDeMesa(mesa, datos = {}) {
+    const [lomo, gaseosa] = await Promise.all([producto('Lomo Saltado'), producto('Inca Kola')]);
+    const pedidoId = await mesaListaParaCobrar(mesa, [item(lomo, 2), item(gaseosa, 1)]); // 54.50
+    const items = await prisma.itemPedido.findMany({ where: { pedidoId }, include: { producto: true } });
+    const res = await cobrar(pedidoId, typeof datos === 'function' ? datos(items) : datos);
+    expect(res.status).toBe(200);
+    return res.body.ventaId;
+  }
+
+  beforeEach(async () => {
+    await abrirCaja(100);
+    await prisma.auditoria.deleteMany();
+  });
+
+  it('un cobro sin descuento ni cortesía no deja registro', async () => {
+    await ventaDeMesa(1);
+    expect(await registros()).toHaveLength(0);
+  });
+
+  it('descuento y cortesía de un ítem', async () => {
+    const ventaId = await ventaDeMesa(1, (items) => ({
+      descuentoAplicado: 4.5, ofertaDescripcion: 'Promo martes', motivoCortesia: 'Cliente frecuente',
+      cortesiaItemIds: items.filter((i) => i.producto.nombre === 'Inca Kola').map((i) => i.id),
+    }));
+    const [desc] = await registros({ accion: 'DESCUENTO' });
+    expect(desc).toMatchObject({ entidadId: String(ventaId), motivo: 'Promo martes', despues: { descuento: 4.5 }, usuarioNombre: 'Carla Caja (sin sesión)' });
+    const [cort] = await registros({ accion: 'CORTESIA' });
+    expect(cort).toMatchObject({ motivo: 'Cliente frecuente', despues: { montoRegalado: 3.5, cortesiaTotal: false } });
+  });
+
+  it('cortesía de todo el pedido', async () => {
+    await ventaDeMesa(2, { metodoPago: 'Cortesía', motivoCortesia: 'Cumpleaños del dueño' });
+    const [cort] = await registros({ accion: 'CORTESIA' });
+    expect(cort.despues).toMatchObject({ montoRegalado: 54.5, total: 0, cortesiaTotal: true });
+    expect(await registros({ accion: 'DESCUENTO' })).toHaveLength(0);
+  });
+
+  it('anular una venta guarda el motivo y quién autorizó', async () => {
+    const ventaId = await ventaDeMesa(3);
+    await nav.patch(`/api/ventas/${ventaId}/anular`).send({ pin: PIN_ADMIN, motivo: 'Plato frío' });
+    const [r] = await registros({ accion: 'VENTA_ANULADA' });
+    expect(r).toMatchObject({ entidadId: String(ventaId), autorizadoPor: 'Admin', motivo: 'Plato frío', usuarioNombre: 'Admin', antes: { total: 54.5 }, despues: { anulado: true } });
+  });
+
+  it('corregir el método de pago guarda el antes y el después', async () => {
+    const ventaId = await ventaDeMesa(4);
+    const res = await nav.patch(`/api/ventas/${ventaId}/metodo-pago`).send({ metodoPago: 'Tarjeta', pin: PIN_ADMIN });
+    expect(res.status).toBe(200);
+    const [r] = await registros({ accion: 'METODO_PAGO_CORREGIDO' });
+    expect(r).toMatchObject({ autorizadoPor: 'Admin', antes: { metodoPago: 'Efectivo' }, despues: { metodoPago: 'Tarjeta', montoTarjeta: 54.5 } });
   });
 });
 
