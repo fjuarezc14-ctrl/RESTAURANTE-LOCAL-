@@ -1,5 +1,5 @@
 // Componentes base al estilo shadcn/ui (Tailwind puro, sin dependencias extra)
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
@@ -64,17 +64,33 @@ export function Badge({ className, ...props }) {
 }
 
 // Diálogo modal: cierra con Escape o tocando el fondo (desactivable en formularios largos)
-export function Dialog({ open, onClose, closeOnBackdrop = true, capa = 'z-50', className, children }) {
+// capa: clases extra de la capa (z-index, impresion-ventana...); el resto de props (id, onPointerDown...) va a la capa
+// Con un diálogo encima de otro (confirmar cobro sobre el cobro), Escape cierra solo el de arriba
+const pilaDialogos = [];
+
+export function Dialog({ open, onClose, closeOnBackdrop = true, capa = 'z-50', className, children, ...resto }) {
+  // onClose suele ser una función nueva en cada render: se lee de una referencia para no reordenar la pila
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
+
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    if (!open) return undefined;
+    const propio = {};
+    pilaDialogos.push(propio);
+    const onKey = (e) => {
+      if (e.key === 'Escape' && pilaDialogos[pilaDialogos.length - 1] === propio) onCloseRef.current?.();
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      pilaDialogos.splice(pilaDialogos.indexOf(propio), 1);
+    };
+  }, [open]);
 
   if (!open) return null;
   return (
     <div
+      {...resto}
       className={cn('fixed inset-0 flex items-end sm:items-center justify-center bg-slate-950/60 backdrop-blur-sm p-0 sm:p-4 animate-fade-in', capa)}
       onMouseDown={(e) => { if (closeOnBackdrop && e.target === e.currentTarget) onClose?.(); }}
     >
@@ -117,11 +133,5 @@ export function DialogFooter({ className, ...props }) {
   return <div className={cn('flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-4', className)} {...props} />;
 }
 
-export {
-  AvisoProvider,
-  useAviso,
-  useConfirmar,
-  usePedirDato,
-  useNotificaciones,
-  mostrarAvisoGlobal,
-} from './AvisoContext';
+export { AvisoProvider } from './AvisoContext';
+export { useAviso, useConfirmar, usePedirDato, useNotificaciones, mostrarAvisoGlobal } from './avisos';

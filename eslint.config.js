@@ -46,7 +46,10 @@ export default defineConfig([
       'react-hooks/purity': 'warn',
       'react-hooks/immutability': 'warn',
       'react-hooks/globals': 'warn',
-      'react-refresh/only-export-components': 'warn',
+      // Los contextos exportan su hook junto al proveedor (useCompany) y components/ui reexporta los de avisos
+      'react-refresh/only-export-components': ['warn', {
+        allowExportNames: ['useCompany', 'useAviso', 'useConfirmar', 'usePedirDato', 'useNotificaciones', 'mostrarAvisoGlobal'],
+      }],
     },
   },
 

@@ -3,6 +3,7 @@ import { Clock, CheckCheck, CheckCircle2, User, Truck, XCircle, AlertTriangle, S
 import { useAviso } from './ui';
 import { useEventos } from '../hooks/useEventos';
 import { parseDeliveryInfo } from '../utils/ventas';
+import { useCargar } from '../hooks/useCargar';
 
 // Tipo y título visible del ticket
 const origenPedido = (p) => {
@@ -94,9 +95,11 @@ export default function MonitorPreparacion({
   // Pedidos nuevos, platos listos y cancelaciones llegan al instante (SSE)
   useEventos(['pedidos', 'cancelaciones'], () => { fetchPedidos(); fetchCancelaciones(); });
 
+  // Carga inicial (después del render)
+  const cargarTodo = useCallback(() => { fetchPedidos(); fetchCancelaciones(); }, [fetchPedidos, fetchCancelaciones]);
+  useCargar(cargarTodo);
+
   useEffect(() => {
-    fetchPedidos();
-    fetchCancelaciones();
 
     // Reloj y tiempos de espera (sin consultar al servidor: los pedidos llegan por avisos en vivo)
     const interval = setInterval(() => {

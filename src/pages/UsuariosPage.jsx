@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { UserPlus, X, Trash2, Edit, LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, UsersRound, Save, BookOpen, Wallet, Tags } from 'lucide-react';
 import { api } from '../api';
 import { safeJsonParse } from '../utils/safeJson';
 import { useAviso, useConfirmar } from '../components/ui';
 import { pin as pinEsquema, nombre as nombreEsquema } from '@shared/esquemas/comunes.js';
 import { usuarioNuevo, usuarioEdicion } from '@shared/esquemas/usuarios.js';
+import { useCargar } from '../hooks/useCargar';
 
 // El Administrador siempre tiene acceso a todos los módulos
 const TODOS_LOS_PERMISOS = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
@@ -33,7 +34,8 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
     }
   };
 
-  useEffect(() => { fetchUsuarios(); }, []);
+  const [cargaInicial] = useState(() => () => fetchUsuarios());
+  useCargar(cargaInicial);
 
   const handleRolChange = (rol) => {
     let permisos = [];

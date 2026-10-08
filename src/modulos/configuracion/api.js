@@ -1,5 +1,5 @@
 // API de Empresa y estado del servidor
-import { apiRequest } from '../../apiCliente';
+import { apiRequest, descargarArchivo } from '../../apiCliente';
 
 export const apiConfiguracion = {
   getDireccionesRed: () => apiRequest('/api/red/direcciones'),
@@ -8,4 +8,6 @@ export const apiConfiguracion = {
   updateEmpresa: (body) => apiRequest('/api/empresa', {
     method: 'PUT', body: JSON.stringify(body)
   }),
+  // Respaldo completo de la base (.dump, solo Administrador)
+  descargarRespaldo: () => descargarArchivo('/api/respaldo', 'respaldo.dump'),
 };

@@ -8,6 +8,7 @@ import {
   ModalDetalleCuentaCredito,
 } from '../modulos/creditos/modales';
 import { clienteNuevo, clienteEdicion, abono as abonoEsquema } from '@shared/esquemas/clientes.js';
+import { useCargar } from '../hooks/useCargar';
 
 const METODOS_PAGO = ['Efectivo', 'Tarjeta', 'Yape', 'Mixto'];
 
@@ -74,7 +75,7 @@ export default function CreditosPage({ currentUser }) {
     }
   }, []);
 
-  useEffect(() => { fetchTodo(); }, [fetchTodo]);
+  useCargar(fetchTodo);
 
   useEffect(() => {
     const timer = setTimeout(() => {
