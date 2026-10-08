@@ -10,6 +10,7 @@ import { apiCompras } from './modulos/compras/api';
 import { apiReportes } from './modulos/reportes/api';
 import { apiCreditos } from './modulos/creditos/api';
 import { apiConfiguracion } from './modulos/configuracion/api';
+import { apiAdmin } from './modulos/admin/api';
 
 export const api = {
   ...apiSalon,
@@ -21,4 +22,5 @@ export const api = {
   ...apiReportes,
   ...apiCreditos,
   ...apiConfiguracion,
+  ...apiAdmin,
 };

@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Tags, Building2, Share2, Copy, Check as CheckIcon, Wifi, Maximize, Minimize, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, LayoutGrid, ChefHat, GlassWater, Calculator, PieChart, BookOpen, UsersRound, Menu, X, ChevronRight, LogOut, Lock, Wallet, Tags, Building2, Share2, Copy, Check as CheckIcon, Wifi, Maximize, Minimize, Eye, EyeOff, ShieldCheck, MonitorSmartphone } from 'lucide-react';
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import logoUrl from './assets/logo.png';
 import { useCompany } from './context/CompanyContext';
@@ -19,6 +19,8 @@ const CategoriasPage = lazy(() => import('./pages/CategoriasPage'));
 const UsuariosPage = lazy(() => import('./pages/UsuariosPage'));
 const CreditosPage = lazy(() => import('./pages/CreditosPage'));
 const ConfiguracionPage = lazy(() => import('./pages/ConfiguracionPage'));
+const EquiposPage = lazy(() => import('./pages/EquiposPage'));
+const AuditoriaPage = lazy(() => import('./pages/AuditoriaPage'));
 import { useAviso } from './components/ui';
 
 // === SESIÓN ===
@@ -746,6 +748,12 @@ const Sidebar = ({ isOpen, toggleSidebar, currentUser, onLogout, modoInstalacion
             <Link to="/usuarios" onClick={() => { if(window.innerWidth < 768) toggleSidebar(); }} className={`sidebar-item flex items-center gap-3 p-3 text-sm ${location.pathname === '/usuarios' ? 'sidebar-active' : ''}`}><UsersRound className="w-5 h-5"/> Personal y Accesos</Link>
           )}
           {isAdmin && (
+            <Link to="/equipos" onClick={() => { if(window.innerWidth < 768) toggleSidebar(); }} className={`sidebar-item flex items-center gap-3 p-3 text-sm ${location.pathname === '/equipos' ? 'sidebar-active' : ''}`}><MonitorSmartphone className="w-5 h-5"/> Equipos y Sesiones</Link>
+          )}
+          {isAdmin && (
+            <Link to="/auditoria" onClick={() => { if(window.innerWidth < 768) toggleSidebar(); }} className={`sidebar-item flex items-center gap-3 p-3 text-sm ${location.pathname === '/auditoria' ? 'sidebar-active' : ''}`}><ShieldCheck className="w-5 h-5"/> Auditoría</Link>
+          )}
+          {isAdmin && (
             <Link to="/configuracion" onClick={() => { if(window.innerWidth < 768) toggleSidebar(); }} className={`sidebar-item flex items-center gap-3 p-3 text-sm ${location.pathname === '/configuracion' ? 'sidebar-active' : ''}`}><Building2 className="w-5 h-5"/> Datos de Empresa</Link>
           )}
         </nav>
@@ -1115,6 +1123,8 @@ function App() {
           <Route path="/carta" element={<Layout title="Carta e Inventario" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Carta" currentUser={currentUser}><CartaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
           <Route path="/categorias" element={<Layout title="Categorías de la Carta" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Categorias" currentUser={currentUser}><CategoriasPage /></ProtectedRoute></Layout>} />
           <Route path="/usuarios" element={<Layout title="Personal y Accesos" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Usuarios" currentUser={currentUser}><UsuariosPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
+          <Route path="/equipos" element={<Layout title="Equipos y Sesiones" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="SoloAdmin" currentUser={currentUser}><EquiposPage /></ProtectedRoute></Layout>} />
+          <Route path="/auditoria" element={<Layout title="Auditoría" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="SoloAdmin" currentUser={currentUser}><AuditoriaPage /></ProtectedRoute></Layout>} />
           <Route path="/configuracion" element={<Layout title="Configuración de Empresa" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><ConfiguracionPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
         </Routes>
       </Suspense>

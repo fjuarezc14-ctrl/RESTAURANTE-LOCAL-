@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { api } from '../../api';
+import { apiAdmin } from '../../modulos/admin/api';
 import { apiCaja } from '../../modulos/caja/api';
 import { apiCarta } from '../../modulos/carta/api';
 import { apiCocina } from '../../modulos/cocina/api';
@@ -10,7 +11,7 @@ import { apiReportes } from '../../modulos/reportes/api';
 import { apiSalon } from '../../modulos/salon/api';
 import { apiUsuarios } from '../../modulos/usuarios/api';
 
-const modulos = [apiCaja, apiCarta, apiCocina, apiCompras, apiConfiguracion, apiCreditos, apiReportes, apiSalon, apiUsuarios];
+const modulos = [apiAdmin, apiCaja, apiCarta, apiCocina, apiCompras, apiConfiguracion, apiCreditos, apiReportes, apiSalon, apiUsuarios];
 
 describe('api por módulo', () => {
   it('ninguna función se repite entre módulos (una pisaría a la otra en `api`)', () => {
