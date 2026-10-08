@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X } from 'lucide-react';
 
 import { api } from '../api';
+import { useEventos } from '../hooks/useEventos';
 
 import { useCompany } from '../context/CompanyContext';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
@@ -381,21 +382,16 @@ export default function CajaPage({ currentUser }) {
 
 
 
+  // Carga inicial completa de todo el turno
   useEffect(() => {
-    // Carga inicial completa de todo el turno
     fetchCajaData({ full: true });
+  }, [fetchCajaData]);
 
-    // Sondeo ligero de alta frecuencia (solo mesas y delivery) cada 6 segundos
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
-        return;
-      }
-      if (!modalOpen && !deliveryModal && !cierreModalOpen && !historialCierresModalOpen) {
-        fetchCajaData({ full: false });
-      }
-    }, 6000);
-    return () => clearInterval(interval);
-  }, [fetchCajaData, modalOpen, deliveryModal, cierreModalOpen, historialCierresModalOpen]);
+  // Avisos en vivo (SSE); en pausa mientras hay un modal de cobro o cierre abierto.
+  // Mesas y delivery: recarga liviana. Cobros, caja y créditos (p. ej. de otro cajero): el turno completo.
+  const sinModalAbierto = !modalOpen && !deliveryModal && !cierreModalOpen && !historialCierresModalOpen;
+  useEventos(['mesas', 'pedidos'], () => fetchCajaData({ full: false }), { activo: sinModalAbierto });
+  useEventos(['caja', 'ventas', 'clientes'], () => fetchCajaData({ full: true }), { activo: sinModalAbierto });
 
   // Alerta sonora y visual en tiempo real al estar listos
   useEffect(() => {

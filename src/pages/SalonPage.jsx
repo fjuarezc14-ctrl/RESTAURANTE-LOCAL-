@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Bell, Wifi, WifiOff, Receipt, ChefHat, CheckCircle, Link2 } from 'lucide-react';
 import { api } from '../api';
+import { useEventos } from '../hooks/useEventos';
 import { COMPANY_CONFIG, DEFAULT_BARRA_CATEGORIAS } from '../config/company';
 import { useAviso, useConfirmar } from '../components/ui';
 import {
@@ -229,16 +230,8 @@ export default function SalonPage({ currentUser }) {
     fetchUsuarios();
   }, [fetchMesas, fetchProductos, fetchUsuarios]);
 
-  // Sondeo en tiempo real de mesas (solo cuando la pestaña está activa para ahorrar red y evitar saturación)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
-        return;
-      }
-      fetchMesas();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [fetchMesas]);
+  // Mesas al instante (SSE): pedidos de otros mozos, cobros en caja, platos listos
+  useEventos(['mesas', 'pedidos'], fetchMesas);
 
   const handleUnirMesa = async (numToJoin) => {
     try {

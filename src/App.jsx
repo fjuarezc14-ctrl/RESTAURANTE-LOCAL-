@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import logoUrl from './assets/logo.png';
 import { useCompany } from './context/CompanyContext';
 import { api, esErrorDeSesion, onSesionPerdida } from './api';
+import { useEventos } from './hooks/useEventos';
 import { generateOfflineQrUrl } from './utils/qrOffline';
 
 // Carga bajo demanda (code-splitting) de páginas
@@ -1025,35 +1026,33 @@ function App() {
     };
   }, [currentUser?.id, currentUser?.rol]);
 
-  // Polling de seguridad activo: detectar si el usuario fue eliminado, desactivado o si cambió su PIN/rol
-  useEffect(() => {
+  // Detectar si el usuario fue eliminado, desactivado o si cambió su PIN/rol: al recibir el aviso en vivo
+  // de que cambiaron los usuarios (SSE), y cada 60 s como respaldo
+  useEventos(['usuarios'], async () => {
     if (!currentUser || !currentUser.id) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await api.checkUserStatus(currentUser.id);
-        if (!res || !res.exists || !res.activo) {
-          handleLogout();
-          aviso.advertencia('Tu usuario ha sido eliminado o desactivado. Sesión cerrada.');
-        } else if (currentUser.pinSignature && res.pinSignature && currentUser.pinSignature !== res.pinSignature) {
-          handleLogout();
-          aviso.advertencia('La contraseña/PIN de tu cuenta fue modificada por el administrador. Sesión cerrada.');
-        } else if (res.rol !== currentUser.rol || JSON.stringify(res.permisos) !== JSON.stringify(currentUser.permisos)) {
-          const syncedUser = {
-            ...currentUser,
-            nombre: res.nombre,
-            rol: res.rol,
-            permisos: res.permisos,
-            pinSignature: res.pinSignature,
-          };
-          setCurrentUser(syncedUser);
-          guardarSesion(syncedUser);
-        }
-      } catch (err) {
-        // Ignorar errores de red 502 temporales durante reinicios del servidor
+    try {
+      const res = await api.checkUserStatus(currentUser.id);
+      if (!res || !res.exists || !res.activo) {
+        handleLogout();
+        aviso.advertencia('Tu usuario ha sido eliminado o desactivado. Sesión cerrada.');
+      } else if (currentUser.pinSignature && res.pinSignature && currentUser.pinSignature !== res.pinSignature) {
+        handleLogout();
+        aviso.advertencia('La contraseña/PIN de tu cuenta fue modificada por el administrador. Sesión cerrada.');
+      } else if (res.rol !== currentUser.rol || JSON.stringify(res.permisos) !== JSON.stringify(currentUser.permisos)) {
+        const syncedUser = {
+          ...currentUser,
+          nombre: res.nombre,
+          rol: res.rol,
+          permisos: res.permisos,
+          pinSignature: res.pinSignature,
+        };
+        setCurrentUser(syncedUser);
+        guardarSesion(syncedUser);
       }
-    }, 8000);
-    return () => clearInterval(interval);
-  }, [currentUser]);
+    } catch {
+      // Ignorar errores de red 502 temporales durante reinicios del servidor
+    }
+  }, { activo: Boolean(currentUser?.id) });
 
   if (loading) {
     return (

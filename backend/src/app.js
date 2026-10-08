@@ -2,6 +2,7 @@
 // APP EXPRESS: middlewares y rutas. El servidor se inicia en server.js.
 // ============================================================
 require('dotenv').config();
+const { avisarCambios } = require('./servicios/eventos');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -37,7 +38,11 @@ app.use(express.json({ limit: '100kb' }));
 // Sesión por cookie en todo /api/* (con AUTH_OBLIGATORIA=false no rechaza a nadie)
 app.use(cargarSesion);
 
+// Avisos en vivo: cada cambio exitoso avisa a las pantallas conectadas (servicios/eventos.js)
+app.use(avisarCambios);
+
 // Un router por módulo (ver src/rutas/)
+app.use(require('./rutas/eventos'));
 app.use(require('./rutas/auth'));
 app.use(require('./rutas/configuracion'));
 app.use(require('./rutas/clientes'));
