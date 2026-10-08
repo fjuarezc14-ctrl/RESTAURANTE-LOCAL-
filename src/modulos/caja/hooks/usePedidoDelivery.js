@@ -10,6 +10,7 @@ import { ordenarCategorias } from '../../../utils/busquedaProductos';
 import { getComboConfig, tieneComplementos } from '../../../utils/combos';
 import { parseDeliveryInfo } from '../../../utils/ventas';
 import { pasosProducto } from '../../../utils/pasosProducto';
+import { validarDatosDelivery } from '../utils/validarDelivery';
 import { pedidoLlevar as pedidoLlevarEsquema } from '@shared/esquemas/pedidos.js';
 
 
@@ -316,50 +317,11 @@ export function usePedidoDelivery({
     if (tipoDelivery === 'PedidosYa' && !editingPedidoId) { avisarPedidosYaPrueba(); return; }
 
     // Validar datos según el canal seleccionado
-    if (tipoDelivery === 'PedidosYa') {
-      if (!codigoPY.trim()) {
-        aviso.advertencia('El código de PedidosYa es obligatorio.');
-        return;
-      }
-    } else if (tipoDelivery === 'ParaLlevar') {
-      if (!codigoPY.trim()) {
-        aviso.advertencia('El nombre del cliente o número de ticket es obligatorio.');
-        return;
-      }
-      if (deliveryTipoComprobante === 'Factura') {
-        if (!deliveryNumDocumento || deliveryNumDocumento.length !== 11) {
-          aviso.advertencia('Para emitir Factura, el RUC debe tener 11 dígitos.');
-          return;
-        }
-        if (!deliveryClienteNombre.trim()) {
-          aviso.advertencia('Para emitir Factura, la Razón Social del cliente es obligatoria.');
-          return;
-        }
-        if (!deliveryDireccion.trim()) {
-          aviso.advertencia('Para emitir Factura, la Dirección fiscal del cliente es obligatoria. Por favor, ingrésala.');
-          return;
-        }
-      }
-    } else if (tipoDelivery === 'DeliveryPropio') {
-      if (!deliveryClienteNombre.trim()) {
-        aviso.advertencia('El nombre del cliente es obligatorio.');
-        return;
-      }
-      if (!deliveryDireccion.trim()) {
-        aviso.advertencia('La dirección del cliente es obligatoria.');
-        return;
-      }
-      if (!deliveryTelefono.trim()) {
-        aviso.advertencia('El teléfono del cliente es obligatorio.');
-        return;
-      }
-      if (deliveryTipoComprobante === 'Factura') {
-        if (!deliveryNumDocumento || deliveryNumDocumento.length !== 11) {
-          aviso.advertencia('Para emitir Factura, el RUC debe tener 11 dígitos.');
-          return;
-        }
-      }
-    }
+    const errorDatos = validarDatosDelivery({
+      tipoDelivery, codigoPY, deliveryTipoComprobante, deliveryNumDocumento,
+      deliveryClienteNombre, deliveryDireccion, deliveryTelefono,
+    });
+    if (errorDatos) { aviso.advertencia(errorDatos); return; }
 
     // Validar PIN de administrador si el método de pago es Consumo o Cortesía, o si hay ítems de cortesía
     const tieneCortesias = deliveryMetodoPago === 'Consumo' || deliveryMetodoPago === 'Cortesía' || cortesiaDeliveryIndices.length > 0;

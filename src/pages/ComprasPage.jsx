@@ -1,82 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  X, Download, AlertCircle, CheckCircle, Search, Plus,
-  Banknote, CreditCard, Smartphone, Layers, ArrowUpRight, ChevronDown, Receipt,
-  FileText, PieChart, Tag, Calendar
-} from 'lucide-react';
+import { X, Download, AlertCircle, CheckCircle, Search, Plus, Banknote, ArrowUpRight, ChevronDown, Receipt, FileText, Tag, Calendar } from 'lucide-react';
 import { api } from '../api';
 import { COMPANY_CONFIG } from '../config/company';
 import { ModalDetalleGasto, ModalFormGasto, ModalEliminarGasto } from '../modulos/compras/modales';
 import { compraNueva, compraEdicion } from '@shared/esquemas/compras.js';
 import { getFechaPeru, parsearGastoMetodos } from '../modulos/compras/utils';
 import { useCargar } from '../hooks/useCargar';
-
-const CATEGORIAS = [
-  'Insumos y Alimentos',
-  'Bebidas',
-  'Gas y Carbón',
-  'Limpieza e Higiene',
-  'Personal',
-  'Otros',
-];
-
-const COLORES_CATEGORIA = {
-  'Insumos y Alimentos': { chip: 'bg-amber-50 text-amber-700 border-amber-200', activo: 'bg-amber-500 text-white border-amber-500', bar: 'bg-amber-500' },
-  'Bebidas':             { chip: 'bg-sky-50 text-sky-700 border-sky-200',       activo: 'bg-sky-600 text-white border-sky-600',     bar: 'bg-sky-500' },
-  'Gas y Carbón':        { chip: 'bg-orange-50 text-orange-700 border-orange-200', activo: 'bg-orange-500 text-white border-orange-500', bar: 'bg-orange-500' },
-  'Limpieza e Higiene':  { chip: 'bg-emerald-50 text-emerald-700 border-emerald-200', activo: 'bg-emerald-600 text-white border-emerald-600', bar: 'bg-emerald-500' },
-  'Personal':            { chip: 'bg-violet-50 text-violet-700 border-violet-200', activo: 'bg-violet-600 text-white border-violet-600', bar: 'bg-violet-500' },
-  'Otros':               { chip: 'bg-slate-100 text-slate-600 border-slate-200', activo: 'bg-slate-700 text-white border-slate-700', bar: 'bg-slate-400' },
-  'Sin Categoría':       { chip: 'bg-slate-50 text-slate-400 border-slate-200', activo: 'bg-slate-400 text-white border-slate-400', bar: 'bg-slate-300' },
-};
-const coloresDe = (cat) => COLORES_CATEGORIA[cat] || COLORES_CATEGORIA['Sin Categoría'];
-
-// Conceptos rápidos inspirados en el cuaderno de Control Caja
-const CONCEPTOS_RAPIDOS = [
-  { label: '🐔 Pollo / Carnes', nombre: 'Pollo para caldo', cat: 'Insumos y Alimentos' },
-  { label: '🥔 Verduras / Papa', nombre: 'Papa Amarilla / Verduras', cat: 'Insumos y Alimentos' },
-  { label: '🔥 Gas / Carbón', nombre: 'Carbón / Gas', cat: 'Gas y Carbón' },
-  { label: '🛢️ Aceite', nombre: 'Aceite', cat: 'Insumos y Alimentos' },
-  { label: '🧃 Gaseosa / Bebidas', nombre: 'Gaseosas / Bebidas', cat: 'Bebidas' },
-  { label: '👤 Adelanto de Sueldo', nombre: 'Adelanto de Sueldo', cat: 'Personal' },
-  { label: '👥 Apoyo Personal', nombre: 'Apoyo Personal', cat: 'Personal' },
-  { label: '🧻 Descartables / Bolsas', nombre: 'Descartables / Bolsas', cat: 'Limpieza e Higiene' },
-  { label: '🛍️ Compras Mercado', nombre: 'Mercado General', cat: 'Insumos y Alimentos' },
-  { label: '🛠️ Mantenimiento / Luz', nombre: 'Mantenimiento / Fluorescentes', cat: 'Otros' },
-];
-
-const METODOS_PAGO = [
-  { id: 'Efectivo', label: 'Efectivo', Icon: Banknote, activo: 'bg-emerald-600 border-emerald-600 text-white', icono: 'text-emerald-600', chip: 'bg-emerald-50 text-emerald-600', text: 'text-emerald-700' },
-  { id: 'Yape', label: 'Yape / Plin', Icon: Smartphone, activo: 'bg-violet-600 border-violet-600 text-white', icono: 'text-violet-600', chip: 'bg-violet-50 text-violet-600', text: 'text-violet-700' },
-  { id: 'Tarjeta', label: 'Tarjeta', Icon: CreditCard, activo: 'bg-sky-600 border-sky-600 text-white', icono: 'text-sky-600', chip: 'bg-sky-50 text-sky-600', text: 'text-sky-700' },
-  { id: 'Mixto', label: 'Mixto', Icon: Layers, activo: 'bg-slate-800 border-slate-800 text-white', icono: 'text-slate-600', chip: 'bg-slate-100 text-slate-600', text: 'text-slate-600' },
-];
-const estiloMetodo = (metodoPago) => {
-  const id = String(metodoPago || 'Efectivo').startsWith('Mixto') ? 'Mixto' : metodoPago;
-  return METODOS_PAGO.find(m => m.id === id) || METODOS_PAGO[0];
-};
-
-const TIPOS_DOCUMENTO = ['Recibo Interno', 'Boleta', 'Factura', 'Ticket'];
-
-const soles = (n) => `S/ ${Number(n || 0).toFixed(2)}`;
-
-// Día del gasto en formato YYYY-MM-DD. fechaEmision es un día de calendario: se guarda a las
-// 12:00 de Lima (y los registros antiguos a las 00:00 UTC), así que su día UTC es el correcto.
-// Sin fechaEmision solo queda la hora real de registro, que se lee en hora de Lima.
-const diaDeCompra = (c) => {
-  if (c.fechaEmision) return String(c.fechaEmision).slice(0, 10);
-  const f = c.fecha || c.creadoEn;
-  return f ? getFechaPeru(new Date(f)) : null;
-};
-const formatearDia = (dia, opciones = { day: '2-digit', month: 'short' }) => dia
-  ? new Date(`${dia}T12:00:00.000Z`).toLocaleDateString('es-PE', { timeZone: 'UTC', ...opciones })
-  : '—';
-
-const formVacio = (fecha) => ({
-  proveedor: '', ruc: '', tipoDocumento: 'Recibo Interno', serieNumero: '',
-  total: '', categoria: 'Insumos y Alimentos', fechaEmision: fecha,
-  metodoPago: 'Efectivo', montoEfectivoMixto: '', montoTarjetaMixto: '', montoYapeMixto: '',
-});
+import { CATEGORIAS, coloresDe, CONCEPTOS_RAPIDOS, METODOS_PAGO, estiloMetodo, TIPOS_DOCUMENTO, soles, diaDeCompra, formatearDia, formVacio } from '../modulos/compras/constantes';
+import { PanelDistribucion } from '../modulos/compras/componentes/PanelDistribucion';
 
 export default function ComprasPage() {
   const [compras, setCompras] = useState([]);
@@ -642,73 +573,7 @@ export default function ComprasPage() {
           </section>
 
           {/* PANEL LATERAL: DISTRIBUCIÓN */}
-          <div className="xl:col-span-2 space-y-5 min-w-0">
-            <section className="bg-white rounded-2xl border border-slate-200/70">
-              <div className="flex items-center gap-2 px-4 sm:px-5 py-3.5 border-b border-slate-100">
-                <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 grid place-items-center"><PieChart className="w-4 h-4" /></span>
-                <h2 className="text-sm font-semibold text-slate-800">Por categoría</h2>
-              </div>
-              {gastosDetalle.categorias.length > 0 ? (
-                <ul className="px-4 sm:px-5 py-4 space-y-3">
-                  {gastosDetalle.categorias.map(([cat, monto]) => {
-                    const pct = gastosDetalle.total > 0 ? (monto / gastosDetalle.total) * 100 : 0;
-                    const activa = filtroCategoria === cat;
-                    return (
-                      <li key={cat}>
-                        <button
-                          type="button"
-                          onClick={() => setFiltroCategoria(activa || cat === 'Sin Categoría' ? 'Todas' : cat)}
-                          className="w-full text-left group"
-                          title={activa ? 'Quitar filtro' : 'Ver solo esta categoría'}
-                        >
-                          <div className="flex items-center justify-between gap-2 text-sm">
-                            <span className={`truncate ${activa ? 'font-semibold text-slate-900' : 'text-slate-600 group-hover:text-slate-900'}`}>{cat}</span>
-                            <span className="font-mono tabular-nums text-slate-900 shrink-0">{soles(monto)}</span>
-                          </div>
-                          <div className="mt-1.5 flex items-center gap-2">
-                            <div className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden">
-                              <div className={`h-full rounded-full ${coloresDe(cat).bar}`} style={{ width: `${pct}%` }} />
-                            </div>
-                            <span className="text-[11px] text-slate-400 tabular-nums w-9 text-right">{Math.round(pct)}%</span>
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p className="px-5 py-8 text-center text-sm text-slate-400">Sin gastos para mostrar.</p>
-              )}
-            </section>
-
-            <section className="bg-white rounded-2xl border border-slate-200/70">
-              <div className="flex items-center gap-2 px-4 sm:px-5 py-3.5 border-b border-slate-100">
-                <span className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 grid place-items-center"><Calendar className="w-4 h-4" /></span>
-                <h2 className="text-sm font-semibold text-slate-800">Este mes</h2>
-              </div>
-              <dl className="px-4 sm:px-5 py-4 space-y-2.5 text-sm">
-                <div className="flex justify-between gap-3">
-                  <dt className="text-slate-500">Total gastado</dt>
-                  <dd className="font-mono tabular-nums font-semibold text-slate-900">{soles(stats?.totalGastado)}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-slate-500">Registros</dt>
-                  <dd className="font-mono tabular-nums text-slate-900">{stats?.numFacturas ?? 0}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-slate-500">IGV de compras</dt>
-                  <dd className="font-mono tabular-nums text-slate-900">{soles(stats?.totalIGV)}</dd>
-                </div>
-                <div className="flex justify-between gap-3 pt-2.5 border-t border-slate-100">
-                  <dt className="text-slate-500 shrink-0">Mayor proveedor</dt>
-                  <dd className="text-right min-w-0">
-                    <p className="text-slate-900 truncate">{stats?.topProveedor?.nombre || '—'}</p>
-                    {stats?.topProveedor && <p className="text-xs font-mono text-slate-400">{soles(stats.topProveedor.total)}</p>}
-                  </dd>
-                </div>
-              </dl>
-            </section>
-          </div>
+          <PanelDistribucion filtroCategoria={filtroCategoria} gastosDetalle={gastosDetalle} setFiltroCategoria={setFiltroCategoria} stats={stats} />
         </div>
       </div>
 
