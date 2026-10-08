@@ -7,6 +7,7 @@
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
@@ -116,10 +117,22 @@ async function compilarNsis() {
     sh(`makensis ${args}`);
     return;
   }
-  // Sin NSIS instalado: compilar dentro de Docker montando el repo en /w
-  const rel = (p) => `/w/${path.relative(REPO, p).split(path.sep).join('/')}`;
-  const dockerArgs = `-V2 -DSTAGE=${rel(STAGE)} -DVERSION=${VERSION} -DOUTFILE=${rel(OUTFILE)} ${rel(path.join(INST, 'valetec.nsi'))}`;
-  sh(`docker run --rm -v ${q(`${REPO}:/w`)} -w /w debian:stable-slim sh -c "apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nsis >/dev/null 2>&1 && makensis ${dockerArgs} && chown $(id -u):$(id -g) ${rel(OUTFILE)}"`);
+  // Sin NSIS instalado: compilar dentro de Docker. Se copia todo a una carpeta temporal fuera del repo:
+  // si el repo está en un disco montado por FUSE (NTFS), Docker puede ver un estado viejo de
+  // installer/build (se borra y se vuelve a crear en cada build) y NSIS no encuentra los archivos.
+  // En la carpeta personal: Docker Desktop solo monta carpetas compartidas (el home sí; /tmp no)
+  fs.mkdirSync(path.join(os.homedir(), '.cache'), { recursive: true });
+  const tmp = fs.mkdtempSync(path.join(os.homedir(), '.cache', 'valetec-nsis-'));
+  try {
+    fs.cpSync(STAGE, path.join(tmp, 'stage'), { recursive: true });
+    fs.copyFileSync(path.join(INST, 'valetec.nsi'), path.join(tmp, 'valetec.nsi'));
+    const salida = `/w/${path.basename(OUTFILE)}`;
+    const dockerArgs = `-V2 -DSTAGE=/w/stage -DVERSION=${VERSION} -DOUTFILE=${salida} /w/valetec.nsi`;
+    sh(`docker run --rm -v ${q(`${tmp}:/w`)} -w /w debian:stable-slim sh -c "apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nsis >/dev/null 2>&1 && makensis ${dockerArgs} && chown $(id -u):$(id -g) ${salida}"`);
+    fs.copyFileSync(path.join(tmp, path.basename(OUTFILE)), OUTFILE);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 async function main() {
