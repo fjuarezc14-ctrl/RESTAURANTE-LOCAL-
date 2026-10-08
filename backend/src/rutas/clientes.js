@@ -7,6 +7,7 @@ const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { abono, clienteEdicion, clienteNuevo } = require('../../shared/esquemas/clientes.js');
 const { consultaDesde, consultaDirectorio } = require('../../shared/esquemas/comunes.js');
 const { requierePermiso } = require('../middlewares/permisos');
+const { idempotente } = require('../middlewares/idempotencia');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -302,7 +303,7 @@ router.get('/api/clientes/:id', requierePermiso('Creditos'), async (req, res, ne
 });
 
 // POST /api/clientes/:id/abonar → Registrar un abono al crédito
-router.post('/api/clientes/:id/abonar', requierePermiso('Creditos'), validar({ body: abono }), async (req, res, next) => {
+router.post('/api/clientes/:id/abonar', requierePermiso('Creditos'), idempotente, validar({ body: abono }), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const { monto, metodoPago, montoEfectivo, montoTarjeta, montoYape, registradoPor, nota } = req.body;

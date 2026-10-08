@@ -404,3 +404,21 @@ model Cancelacion {
   @@index([pedidoId])
   @@index([creadoEn])
 }
+
+// ============================================================
+// IDEMPOTENCIA (tarea 12, ACUERDOS §4): header Idempotency-Key en cobros, caja, abonos y anulaciones.
+// Un doble clic o un reintento con la misma clave recibe la misma respuesta en vez de repetir la operación.
+// Se guarda 24 h; si la operación falló, la clave se borra para poder reintentar.
+// ============================================================
+model IdempotenciaClave {
+  id        Int      @id @default(autoincrement())
+  clave     String
+  ruta      String // método + ruta, ej. "POST /api/ventas"
+  estado    String // EN_CURSO | HECHA
+  status    Int?
+  respuesta Json?
+  creadoEn  DateTime @default(now())
+
+  @@unique([clave, ruta])
+  @@index([creadoEn])
+}

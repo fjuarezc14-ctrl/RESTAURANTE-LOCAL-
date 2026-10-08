@@ -10,6 +10,7 @@ const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { cancelacionItem, cancelacionPedido, notasItem, preparacion } = require('../../shared/esquemas/pedidos.js');
 const { requierePermiso } = require('../middlewares/permisos');
+const { idempotente } = require('../middlewares/idempotencia');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -331,7 +332,7 @@ router.patch('/api/pedidos/items/:id/notas', requierePermiso('Salon', 'Caja'), v
 
 // PATCH /api/pedidos/:id/cancelar → cancela el pedido completo (y su venta, si la tiene)
 // Sin autorización solo dentro de los 5 minutos y en cocina; si no, { autorizacion: { pin } } (ver servicios/cancelaciones.js)
-router.patch('/api/pedidos/:id/cancelar', requierePermiso('Salon', 'Caja'), validar({ body: cancelacionPedido }), async (req, res, next) => {
+router.patch('/api/pedidos/:id/cancelar', requierePermiso('Salon', 'Caja'), idempotente, validar({ body: cancelacionPedido }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { canceladoPor, motivo, force } = req.body;
 
@@ -406,7 +407,7 @@ router.delete('/api/barra/cancelaciones/:id', requierePermiso('Barra'), async (r
 });
 
 // PATCH /api/pedidos/:id/cancelar-item → cancela una cantidad de un ítem; si era lo último, el pedido entero
-router.patch('/api/pedidos/:id/cancelar-item', requierePermiso('Salon', 'Caja'), validar({ body: cancelacionItem }), async (req, res, next) => {
+router.patch('/api/pedidos/:id/cancelar-item', requierePermiso('Salon', 'Caja'), idempotente, validar({ body: cancelacionItem }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { productoId, itemId, motivo, canceladoPor, force } = req.body;
 

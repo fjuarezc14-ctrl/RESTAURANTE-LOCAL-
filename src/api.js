@@ -115,6 +115,9 @@ async function apiRequest(endpoint, options = {}) {
   }
 }
 
+// Header Idempotency-Key: un reintento con la misma clave no repite la operación en el backend
+const conClave = (clave) => (clave ? { headers: { 'Idempotency-Key': clave } } : {});
+
 export const api = {
   // Mesas (salón)
   getMesas: () => apiRequest('/api/mesas'),
@@ -167,8 +170,9 @@ export const api = {
   entregarTodoPedido: (pedidoId) => apiRequest(`/api/pedidos/${pedidoId}/entregar-todo`, { method: 'PATCH' }),
 
   // Delivery / PedidosYa
-  crearPedidoLlevar: (body) => apiRequest('/api/pedidos/llevar', {
-    method: 'POST', body: JSON.stringify(body)
+  // claveIdempotencia: la misma en los reintentos del mismo intento (ACUERDOS §4)
+  crearPedidoLlevar: (body, claveIdempotencia) => apiRequest('/api/pedidos/llevar', {
+    method: 'POST', body: JSON.stringify(body), ...conClave(claveIdempotencia)
   }),
   getPedidosLlevar: () => apiRequest('/api/pedidos/llevar'),
   confirmarEntrega: (id) => apiRequest(`/api/pedidos/${id}/entregar`, { method: 'PATCH' }),
@@ -260,8 +264,8 @@ export const api = {
   },
 
   // Ventas (acepta pedidoIds array)
-  cobrar: (body) => apiRequest('/api/ventas', {
-    method: 'POST', body: JSON.stringify(body)
+  cobrar: (body, claveIdempotencia) => apiRequest('/api/ventas', {
+    method: 'POST', body: JSON.stringify(body), ...conClave(claveIdempotencia)
   }),
   getResumenVentas: (desde = null) => {
     const qs = desde ? `?desde=${encodeURIComponent(desde)}` : '';
