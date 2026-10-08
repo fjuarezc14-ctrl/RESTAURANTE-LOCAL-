@@ -4,6 +4,7 @@ import { Tags, Building2, Save, RotateCcw, CheckCircle2, AlertCircle, Phone, Map
 import { api } from '../api';
 import { useCompany } from '../context/CompanyContext';
 import { TIPOS_NEGOCIO } from '../config/company';
+import TarjetaRespaldo from '../modulos/configuracion/TarjetaRespaldo';
 
 export default function ConfiguracionPage({ currentUser }) {
   const { empresa, reloadEmpresa } = useCompany();
@@ -453,6 +454,8 @@ export default function ConfiguracionPage({ currentUser }) {
               </div>
             </div>
           </div>
+
+          {isAdmin && <TarjetaRespaldo />}
         </div>
       </div>
     </div>
