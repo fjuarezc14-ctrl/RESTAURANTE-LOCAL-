@@ -51,8 +51,6 @@ export default function PanelMesasPorCobrar({
                 <div className="flex items-center justify-between gap-2 mt-auto">
                   <div className="flex items-center gap-2 min-w-0 flex-wrap">
                     {estadoChip(listo, 'Listo p/ cobrar', mesaEnPreparacion(m) ? 'En preparación' : 'Por servir')}
-                    {m.pedidoData?.estadoEnsalada === 'Pendiente' && <span className="text-[11px] text-emerald-700 bg-emerald-50 rounded-md px-1.5 py-0.5">🥗 Pendiente</span>}
-                    {m.pedidoData?.estadoEnsalada === 'Listo' && <span className="text-[11px] text-blue-700 bg-blue-50 rounded-md px-1.5 py-0.5">🥗 Lista</span>}
                   </div>
                   {listo ? (
                     <button

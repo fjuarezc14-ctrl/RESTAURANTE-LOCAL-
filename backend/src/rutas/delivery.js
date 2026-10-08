@@ -2,7 +2,7 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { calcularSubtotalEIgv, limpiarCodigoPago, verificarPagoMixto } = require('../servicios/dinero');
-const { evaluarEstadoEnsalada, expandPedidoItemsForDb } = require('../servicios/pedidos');
+const { expandPedidoItemsForDb } = require('../servicios/pedidos');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { pedidoLlevar } = require('../../shared/esquemas/pedidos.js');
@@ -71,7 +71,6 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), idempotente, validar
     }
 
     const expandedItems = await expandPedidoItemsForDb(items);
-    const finalEstadoEnsalada = await evaluarEstadoEnsalada(items);
 
     const { subtotal, igv } = calcularSubtotalEIgv(grandTotal);
 
@@ -119,7 +118,6 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), idempotente, validar
           mesero: String(cajero),
           total: grandTotal,
           estado: 'Cocina', // Todos van a Cocina primero para que la cocina/barra los prepare
-          estadoEnsalada: finalEstadoEnsalada,
           tipoEntrega: isOwnDelivery ? 'delivery' : 'llevar',
           codigoPedidosYa: codigoPedidosYa ? String(codigoPedidosYa) : null,
           items: {
@@ -297,7 +295,6 @@ router.put('/api/pedidos/llevar/:id', requierePermiso('Caja'), validar({ body: p
     const descuentoFinal = finalMetodoPago === 'Cortesía' ? itemsBruto : descuentoMonto;
 
     const expandedItems = await expandPedidoItemsForDb(items);
-    const finalEstadoEnsalada = await evaluarEstadoEnsalada(items);
 
     // 1. Obtener pedido actual
     const pedido = await prisma.pedido.findUnique({
@@ -361,7 +358,6 @@ router.put('/api/pedidos/llevar/:id', requierePermiso('Caja'), validar({ body: p
           mesero: String(cajero),
           total: grandTotal,
           estado: 'Cocina', // Al modificarlo, debe volver a cocina para preparación/validación
-          estadoEnsalada: finalEstadoEnsalada,
           tipoEntrega: isOwnDelivery ? 'delivery' : 'llevar',
           codigoPedidosYa: codigoPedidosYa ? String(codigoPedidosYa) : null
         }

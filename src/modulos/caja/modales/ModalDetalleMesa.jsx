@@ -35,11 +35,6 @@ export default function ModalDetalleMesa({
             }`}>
               {esCobrable ? 'Listo p/ cobrar' : enPreparacion ? 'En preparación' : 'Por servir'}
             </span>
-            {mesa.pedidoData?.estadoEnsalada && (
-              <span className="text-[11px] text-emerald-700 bg-emerald-50 rounded-md px-1.5 py-0.5">
-                🥗 Ensalada {mesa.pedidoData.estadoEnsalada.toLowerCase()}
-              </span>
-            )}
           </div>
         </div>
         <button
