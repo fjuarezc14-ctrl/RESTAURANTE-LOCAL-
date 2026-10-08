@@ -1,0 +1,22 @@
+# Backend de producción: el código va dentro de la imagen (sin carpeta montada ni nodemon).
+# Desarrollo local con recarga: Dockerfile.dev.
+FROM node:22-alpine
+WORKDIR /app
+
+# Prisma necesita openssl
+RUN apk add --no-cache openssl
+
+# Todas las dependencias: prisma (devDependency) aplica las migraciones al arrancar
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+COPY prisma ./prisma
+RUN npx prisma generate
+
+COPY . .
+
+ENV NODE_ENV=production
+EXPOSE 3010
+
+# Al iniciar: migraciones pendientes, primer arranque del cliente (solo con la BD vacía) y servidor
+CMD ["sh", "-c", "npx prisma migrate deploy && node scripts/iniciar-cliente.js && node server.js"]

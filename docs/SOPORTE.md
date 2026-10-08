@@ -68,3 +68,17 @@ Pide al administrador que cambie la contraseña después de entrar.
   Si se perdió, usar el script de rescate.
 
 Las demás variables están explicadas en `backend/.env.example`.
+
+## 5. Instalación en un servidor (versión web)
+
+En el servidor **nunca** se usa `docker-compose.yml`: ese levanta Vite en modo desarrollo, que consume CPU todo el tiempo (fue lo que llevó el servidor de Fogón al 100 %). Se usa `docker-compose.prod.yml`, que compila la web una vez y la sirve con nginx:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.<cliente> up -d --build
+```
+
+- Usa el mismo nombre de proyecto y el mismo volumen que el de desarrollo: los datos se conservan.
+- La base y el backend solo escuchan en `127.0.0.1`; los navegadores entran por nginx (`WEB_PORT`).
+- En el `.env.<cliente>` del servidor, además de lo de la sección 4: `DB_PASSWORD` propio **antes del primer arranque** (después ya no cambia la clave de la base).
+- `MODO_INSTALACION=web` solo si el sitio va detrás de HTTPS. En ese modo las cookies de sesión son `Secure` y por HTTP simple el navegador no las envía: nadie podría entrar.
+- Actualizar: `git pull` y el mismo comando con `--build`.

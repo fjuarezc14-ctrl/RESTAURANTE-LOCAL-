@@ -1,4 +1,8 @@
-node_modules
+**/node_modules
 dist
 .git
 .env
+.env.*
+backend/.env
+installer/build
+scratch
