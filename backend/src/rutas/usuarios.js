@@ -9,6 +9,7 @@ const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { loginPin, usuarioEdicion, usuarioNuevo } = require('../../shared/esquemas/usuarios.js');
 const { soloAdmin } = require('../middlewares/permisos');
+const { registrarAuditoria } = require('../servicios/auditoria');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -36,6 +37,16 @@ async function datosDeAcceso(body) {
   return data;
 }
 
+// Lo que se guarda de un usuario en la auditoría: nunca el PIN ni la contraseña
+const CAMPOS_AUDITADOS = ['nombre', 'rol', 'permisos', 'activo', 'usuario', 'correo', 'inactividadMin'];
+const resumenUsuario = (u) => Object.fromEntries(CAMPOS_AUDITADOS.map((c) => [c, u[c] ?? null]));
+function cambiosDeUsuario(antes, despues) {
+  const a = resumenUsuario(antes);
+  const d = resumenUsuario(despues);
+  const campos = CAMPOS_AUDITADOS.filter((c) => JSON.stringify(a[c]) !== JSON.stringify(d[c]));
+  return { antes: Object.fromEntries(campos.map((c) => [c, a[c]])), despues: Object.fromEntries(campos.map((c) => [c, d[c]])), campos };
+}
+
 // El rol Administrador siempre tiene acceso a todos los módulos
 const PERMISOS_ADMINISTRADOR = ['Dashboard', 'Salon', 'Cocina', 'Barra', 'Caja', 'Creditos', 'Compras', 'Reportes', 'Carta', 'Categorias', 'Usuarios'];
 
@@ -48,14 +59,17 @@ router.post('/api/usuarios', soloAdmin, validar({ body: usuarioNuevo }), async (
     }
 
     const { nombre, rol, pin, permisos } = req.body;
-    const user = await prisma.usuario.create({
-      data: {
-        nombre: String(nombre),
-        rol: String(rol),
-        pinHash: hashPin(pin),
-        permisos: String(rol) === 'Administrador' ? PERMISOS_ADMINISTRADOR : (Array.isArray(permisos) ? permisos.map(String) : []),
-        ...(await datosDeAcceso(req.body)),
-      }
+    const datos = {
+      nombre: String(nombre),
+      rol: String(rol),
+      pinHash: hashPin(pin),
+      permisos: String(rol) === 'Administrador' ? PERMISOS_ADMINISTRADOR : (Array.isArray(permisos) ? permisos.map(String) : []),
+      ...(await datosDeAcceso(req.body)),
+    };
+    const user = await prisma.$transaction(async (tx) => {
+      const creado = await tx.usuario.create({ data: datos });
+      await registrarAuditoria(tx, req, { accion: 'USUARIO_CREADO', entidad: 'Usuario', entidadId: creado.id, despues: resumenUsuario(creado) });
+      return creado;
     });
     res.json(usuarioPublico(user));
   } catch (err) {
@@ -111,6 +125,18 @@ router.put('/api/usuarios/:id', soloAdmin, validar({ body: usuarioEdicion }), as
     const user = await prisma.$transaction(async (tx) => {
       const actualizado = await tx.usuario.update({ where: { id }, data });
       if (motivoCierre) await cerrarSesionesDeUsuario(id, motivoCierre, tx);
+      const base = { entidad: 'Usuario', entidadId: id };
+      const cambios = cambiosDeUsuario(target, actualizado);
+      if (cambios.campos.length || data.contrasenaHash) {
+        await registrarAuditoria(tx, req, {
+          ...base, accion: 'USUARIO_EDITADO', antes: cambios.antes,
+          despues: { ...cambios.despues, ...(data.contrasenaHash ? { contrasena: 'cambiada' } : {}) },
+        });
+      }
+      if (data.pinHash) await registrarAuditoria(tx, req, { ...base, accion: 'PIN_CAMBIADO', despues: { nombre: actualizado.nombre } });
+      if (data.activo === false && target.activo) {
+        await registrarAuditoria(tx, req, { ...base, accion: 'USUARIO_DESACTIVADO', antes: { activo: true }, despues: { activo: false } });
+      }
       return actualizado;
     });
     res.json(usuarioPublico(user));
@@ -200,6 +226,10 @@ router.delete('/api/usuarios/:id', soloAdmin, async (req, res, next) => {
     await prisma.$transaction(async (tx) => {
       await tx.usuario.update({ where: { id }, data: { activo: false } });
       await cerrarSesionesDeUsuario(id, 'USUARIO_DESACTIVADO', tx);
+      await registrarAuditoria(tx, req, {
+        accion: 'USUARIO_DESACTIVADO', entidad: 'Usuario', entidadId: id,
+        antes: { nombre: target.nombre, activo: target.activo }, despues: { activo: false },
+      });
     });
     res.json({ ok: true });
   } catch (err) {

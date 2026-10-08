@@ -7,6 +7,7 @@ const { ErrorApp } = require('../middlewares/errores');
 const { soloAdmin } = require('../middlewares/permisos');
 const { requiereSesion } = require('../middlewares/sesion');
 const { validar } = require('../middlewares/validar');
+const { registrarAuditoria } = require('../servicios/auditoria');
 const { cerrarSesionesDeUsuario, revocarDispositivo } = require('../servicios/sesiones');
 const { id } = require('../../shared/esquemas/comunes.js');
 
@@ -36,7 +37,13 @@ router.delete('/api/dispositivos/:id', admin, conId, async (req, res, next) => {
     const dispositivo = await prisma.dispositivo.findUnique({ where: { id: req.params.id } });
     if (!dispositivo) return next(new ErrorApp('NO_ENCONTRADO', 'El dispositivo no existe.'));
     if (!dispositivo.revocadoEn) {
-      await prisma.$transaction((tx) => revocarDispositivo(dispositivo.id, tx));
+      await prisma.$transaction(async (tx) => {
+        await revocarDispositivo(dispositivo.id, tx);
+        await registrarAuditoria(tx, req, {
+          accion: 'DISPOSITIVO_REVOCADO', entidad: 'Dispositivo', entidadId: dispositivo.id,
+          antes: { nombre: dispositivo.nombre, revocadoEn: null },
+        });
+      });
     }
     res.status(204).end();
   } catch (err) {
@@ -63,9 +70,14 @@ router.get('/api/usuarios/:id/sesiones', admin, conId, async (req, res, next) =>
 // POST /api/usuarios/:id/cerrar-sesiones → "cerrar sesión en todos los equipos" (los equipos siguen activados)
 router.post('/api/usuarios/:id/cerrar-sesiones', admin, conId, async (req, res, next) => {
   try {
-    const usuario = await prisma.usuario.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    const usuario = await prisma.usuario.findUnique({ where: { id: req.params.id }, select: { id: true, nombre: true } });
     if (!usuario) return next(new ErrorApp('NO_ENCONTRADO', 'El usuario no existe.'));
-    await cerrarSesionesDeUsuario(usuario.id, 'REVOCADA');
+    await prisma.$transaction(async (tx) => {
+      const cerradas = await cerrarSesionesDeUsuario(usuario.id, 'REVOCADA', tx);
+      await registrarAuditoria(tx, req, {
+        accion: 'SESIONES_CERRADAS', entidad: 'Usuario', entidadId: usuario.id, despues: { nombre: usuario.nombre, sesionesCerradas: cerradas },
+      });
+    });
     res.status(204).end();
   } catch (err) {
     next(err);
