@@ -5,7 +5,7 @@
 // - Cada aviso lleva temas: mesas, pedidos, cancelaciones, caja, ventas, carta, usuarios, compras, clientes.
 // - Se emite al terminar una petición que cambia datos (después del commit: la respuesta sale al final).
 // ============================================================
-/** @typedef {import('express').Response} Response */
+/** @typedef {import('http').ServerResponse} Response */
 
 const LATIDO_MS = 25 * 1000; // por debajo de los 60 s que cortan los proxies sin tráfico
 
