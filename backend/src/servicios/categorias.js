@@ -1,3 +1,4 @@
+// @ts-check
 // Categorías de la carta: sincronización y destino (cocina o barra)
 const { prisma } = require('../db');
 const { DEFAULT_BARRA_CATEGORIAS, configEnCache, getEmpresaConfig, guardarConfigEnCache, isBarraCategoria } = require('./empresa');

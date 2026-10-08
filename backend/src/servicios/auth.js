@@ -1,3 +1,4 @@
+// @ts-check
 // ============================================================
 // PIN Y DATOS PÚBLICOS DEL USUARIO
 // El PIN se guarda como HMAC-SHA256 con PIN_SECRET (scratch/ACUERDOS.md §2): permite buscar al

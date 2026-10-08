@@ -1,3 +1,4 @@
+// @ts-check
 // Configuración de la empresa (en caché) y categorías que van a la barra
 const { prisma } = require('../db');
 

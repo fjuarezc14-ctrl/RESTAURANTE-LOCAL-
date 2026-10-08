@@ -1,0 +1,16 @@
+{
+  // Chequeo de tipos de JavaScript con TypeScript (tarea 22). Se activa archivo por archivo con
+  // `// @ts-check` en la primera línea; empezamos por src/servicios/. Correr: npm run tipos
+  "compilerOptions": {
+    "checkJs": false,
+    "allowJs": true,
+    "noEmit": true,
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.js", "server.js"]
+}

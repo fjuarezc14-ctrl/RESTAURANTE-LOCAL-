@@ -1,3 +1,4 @@
+// @ts-check
 // ============================================================
 // SESIÓN EN TODO /api/* (scratch/ACUERDOS.md §2)
 // Con AUTH_OBLIGATORIA=false (transición) carga req.usuario si hay cookie, pero no rechaza a nadie:

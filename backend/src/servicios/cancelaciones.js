@@ -1,3 +1,4 @@
+// @ts-check
 // ============================================================
 // CANCELACIONES DE PEDIDOS E ÍTEMS (tarea 24)
 // - Quién puede cancelar sin autorización y cuándo hace falta el PIN de un Administrador o Cajero.

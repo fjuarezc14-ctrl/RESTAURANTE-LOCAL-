@@ -1,3 +1,4 @@
+// @ts-check
 // ============================================================
 // PERMISOS POR ROL EN EL BACKEND (scratch/ACUERDOS.md §2)
 // Cada ruta declara qué permisos pueden usarla (cualquiera de ellos basta). El Administrador siempre pasa

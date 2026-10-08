@@ -1,3 +1,4 @@
+// @ts-check
 // Límite de intentos fallidos (login, activación, autorizaciones): 5 fallos en 1 minuto bloquean 30 s
 const { ErrorApp } = require('./errores');
 
