@@ -1,5 +1,6 @@
 // Rutas de reportes
 const express = require('express');
+const { inicioJornadaActual } = require('../servicios/jornada');
 const { prisma } = require('../db');
 const { obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
@@ -27,11 +28,7 @@ router.get('/api/reportes/cancelaciones', requierePermiso('Reportes'), validar({
         lte: new Date(nextDayStr + 'T02:59:59.999-05:00')
       };
     } else {
-      const ahora = new Date();
-      const hoyPeru = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Lima' }));
-      hoyPeru.setHours(0, 0, 0, 0);
-      const inicioUTC = new Date(hoyPeru.getTime() + 5 * 60 * 60 * 1000);
-      filtroFecha = { gte: inicioUTC };
+      filtroFecha = { gte: inicioJornadaActual() };
     }
 
     const pedidos = await prisma.pedido.findMany({
@@ -56,6 +53,13 @@ router.get('/api/reportes/cancelaciones', requierePermiso('Reportes'), validar({
       orderBy: { id: 'desc' },
     });
 
+    // Quién autorizó cada comanda cancelada (tabla Cancelacion; una fila por estación)
+    const cancelacionesPedido = await prisma.cancelacion.findMany({
+      where: { pedidoId: { in: pedidos.map(p => p.id) }, tipo: 'PEDIDO' },
+      select: { pedidoId: true, autorizadoPor: true },
+    });
+    const autorizoPedido = new Map(cancelacionesPedido.filter(c => c.autorizadoPor).map(c => [c.pedidoId, c.autorizadoPor]));
+
     const formateados = pedidos.map(p => {
       const esDevolucionCaja = !!p.Venta?.anulado || (p.motivoCancela || '').startsWith('[DEVOLUCIÓN CAJA]');
       const fechaIncidencia = p.Venta?.anuladoEn || p.canceladoEn || p.createdAt;
@@ -71,6 +75,8 @@ router.get('/api/reportes/cancelaciones', requierePermiso('Reportes'), validar({
         mesa: p.mesa?.numero || null,
         codigoPedidosYa: p.codigoPedidosYa,
         canceladoPor: p.Venta?.anuladoPor || p.canceladoPor || 'Admin',
+        // En una devolución, quien anuló ya es quien puso su PIN
+        autorizadoPor: esDevolucionCaja ? (p.Venta?.anuladoPor || null) : (autorizoPedido.get(p.id) || null),
         motivoCancela: (p.Venta?.motivoAnulacion || (p.motivoCancela || '').replace('[DEVOLUCIÓN CAJA]: ', '') || 'Sin motivo especificado').trim(),
         total: Number(p.Venta?.montoOriginal || p.total || 0),
         metodoPagoOriginal: p.Venta?.metodoPago || 'No cobrado',
@@ -78,7 +84,42 @@ router.get('/api/reportes/cancelaciones', requierePermiso('Reportes'), validar({
       };
     });
 
-    res.json(formateados);
+    // Platos cancelados sueltos (el pedido sigue): se juntan las filas de cocina y barra del mismo momento
+    const platos = await prisma.cancelacion.findMany({
+      where: { tipo: 'ITEM', creadoEn: filtroFecha },
+      orderBy: { creadoEn: 'desc' },
+    });
+    const pedidosDePlatos = new Map((await prisma.pedido.findMany({
+      where: { id: { in: [...new Set(platos.map(c => c.pedidoId))] } },
+      select: { id: true, mesa: { select: { numero: true } }, codigoPedidosYa: true },
+    })).map(p => [p.id, p]));
+    const porEvento = new Map();
+    for (const c of platos) {
+      const clave = `${c.pedidoId}|${Math.floor(c.creadoEn.getTime() / 1000)}`;
+      const ev = porEvento.get(clave) || { c, items: [] };
+      ev.items.push(...(Array.isArray(c.items) ? c.items : []));
+      porEvento.set(clave, ev);
+    }
+    const platosFormateados = [...porEvento.values()].map(({ c, items }) => ({
+      id: c.pedidoId,
+      ventaId: null,
+      tipo: 'Plato Cancelado',
+      hora: c.creadoEn.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' }),
+      fecha: c.creadoEn.toLocaleDateString('es-PE'),
+      fechaRaw: c.creadoEn,
+      mesa: pedidosDePlatos.get(c.pedidoId)?.mesa?.numero || null,
+      codigoPedidosYa: pedidosDePlatos.get(c.pedidoId)?.codigoPedidosYa || c.codigoPedidosYa || null,
+      canceladoPor: c.canceladoPor,
+      autorizadoPor: c.autorizadoPor || null,
+      motivoCancela: (c.motivo || 'Sin motivo especificado').trim(),
+      total: items.reduce((s, i) => s + Number(i.precio || 0) * Number(i.cantidad || 0), 0),
+      metodoPagoOriginal: 'No cobrado',
+      resumenItems: items.map(i => `${i.cantidad}x ${i.nombre}`).join(', '),
+    }));
+
+    const todos = [...formateados, ...platosFormateados]
+      .sort((a, b) => new Date(b.fechaRaw || 0).getTime() - new Date(a.fechaRaw || 0).getTime());
+    res.json(todos);
   } catch (err) {
     next(err);
   }
@@ -98,11 +139,7 @@ router.get('/api/reportes/mozos', requierePermiso('Reportes'), validar({ query: 
         lte: new Date(nextDayStr + 'T02:59:59.999-05:00')
       };
     } else {
-      const ahora = new Date();
-      const hoyPeru = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Lima' }));
-      hoyPeru.setHours(0, 0, 0, 0);
-      const inicioUTC = new Date(hoyPeru.getTime() + 5 * 60 * 60 * 1000);
-      filtroFecha = { gte: inicioUTC };
+      filtroFecha = { gte: inicioJornadaActual() };
     }
 
     const pedidos = await prisma.pedido.findMany({
@@ -147,11 +184,7 @@ router.get('/api/reportes/cajeros', requierePermiso('Reportes'), validar({ query
         lte: new Date(nextDayStr + 'T02:59:59.999-05:00')
       };
     } else {
-      const ahora = new Date();
-      const hoyPeru = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Lima' }));
-      hoyPeru.setHours(0, 0, 0, 0);
-      const inicioUTC = new Date(hoyPeru.getTime() + 5 * 60 * 60 * 1000);
-      filtroFecha = { gte: inicioUTC };
+      filtroFecha = { gte: inicioJornadaActual() };
     }
 
     const ventas = await prisma.venta.findMany({
@@ -330,13 +363,7 @@ router.get('/api/reportes/pollos', requierePermiso('Reportes'), validar({ query:
       const lteDate = hasta.length === 10 ? new Date(nextDayStr + 'T02:59:59.999-05:00') : new Date(hasta);
       filtroFecha = { gte: gteDate, lte: lteDate };
     } else {
-      const ahora = new Date();
-      const hoyPeru = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Lima' }));
-      if (hoyPeru.getHours() < 3) {
-        hoyPeru.setDate(hoyPeru.getDate() - 1);
-      }
-      hoyPeru.setHours(3, 0, 0, 0);
-      const inicioUTC = new Date(hoyPeru.getTime() + 5 * 60 * 60 * 1000);
+      const inicioUTC = inicioJornadaActual();
       filtroFecha = { gte: inicioUTC };
     }
 
@@ -462,13 +489,7 @@ router.get('/api/reportes/rotacion', requierePermiso('Reportes', 'Dashboard'), v
       const gteDate = desde.length === 10 ? new Date(desde + 'T03:00:00.000-05:00') : new Date(desde);
       filtroFecha = { gte: gteDate };
     } else {
-      const ahora = new Date();
-      const hoyPeru = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Lima' }));
-      if (hoyPeru.getHours() < 3) {
-        hoyPeru.setDate(hoyPeru.getDate() - 1);
-      }
-      hoyPeru.setHours(3, 0, 0, 0);
-      const inicioUTC = new Date(hoyPeru.getTime() + 5 * 60 * 60 * 1000);
+      const inicioUTC = inicioJornadaActual();
       filtroFecha = { gte: inicioUTC };
     }
 

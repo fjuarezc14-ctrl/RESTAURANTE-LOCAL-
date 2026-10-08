@@ -448,6 +448,7 @@ export async function exportarReporteExcel({
       { titulo: 'Hora', ancho: 8 },
       { titulo: 'Origen', ancho: 16 },
       { titulo: 'Responsable', ancho: 18 },
+      { titulo: 'Autorizó', ancho: 18 },
       { titulo: 'Motivo', ancho: 36 },
       { titulo: 'Detalle', ancho: 50 },
       { titulo: 'Importe', tipo: 'soles', ancho: 13, sumar: true },
@@ -458,7 +459,7 @@ export async function exportarReporteExcel({
       return [
         c.tipo || 'Comanda Cancelada', devolucion && c.ventaId ? `VT-${c.ventaId}` : `#${c.id}`, c.fecha || '', c.hora || '',
         c.mesa ? `Mesa ${c.mesa}` : (c.codigoPedidosYa || 'Delivery'), c.canceladoPor || 'No registrado',
-        c.motivoCancela || 'Sin motivo', c.resumenItems || '', num(c.total),
+        c.autorizadoPor || '', c.motivoCancela || 'Sin motivo', c.resumenItems || '', num(c.total),
       ];
     }), { colorCabecera: 'FF991B1B' });
   }

@@ -132,3 +132,21 @@ describe('auditoría', () => {
     expect(it2).toMatchObject({ entidadId: String(p2), motivo: 'Sin stock', antes: { item: 'Inca Kola', cantidad: 1 }, despues: { cantidad: 0 } });
   });
 });
+
+describe('reporte de cancelaciones', () => {
+  it('muestra quién autorizó y los platos cancelados sueltos (sin contar dos veces el último plato)', async () => {
+    const p1 = await enviarPedido(1, [item(carta.lomo, 1)]);
+    await envejecer(p1, 10);
+    await cancelar(p1, { autorizacion: { pin: PIN_CAJERO } });
+    const p2 = await enviarPedido(2, [item(carta.lomo, 1), item(carta.gaseosa, 2)]);
+    const [, gaseosa] = await itemsDe(p2);
+    await cancelarItem(p2, { itemId: gaseosa.id, cantidadACancelar: 1, motivo: 'Ya no quiere' });
+
+    const reporte = (await api().get('/api/reportes/cancelaciones')).body;
+    const comanda = reporte.find((r) => r.tipo === 'Comanda Cancelada');
+    expect(comanda).toMatchObject({ id: p1, mesa: 1, autorizadoPor: 'Carla Caja', motivoCancela: 'Se equivocó de plato' });
+    const plato = reporte.find((r) => r.tipo === 'Plato Cancelado');
+    expect(plato).toMatchObject({ id: p2, mesa: 2, autorizadoPor: null, motivoCancela: 'Ya no quiere', total: 3.5, resumenItems: '1x Inca Kola' });
+    expect(reporte).toHaveLength(2);
+  });
+});

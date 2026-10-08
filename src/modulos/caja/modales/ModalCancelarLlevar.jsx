@@ -13,12 +13,17 @@ export default function ModalCancelarLlevar({
   usuarioOperador,
 }) {
   const [pin, setPin] = useState('');
+  const [motivo, setMotivo] = useState('');
   const [error, setError] = useState('');
   const [procesando, setProcesando] = useState(false);
 
   if (!abierto || !pedido) return null;
 
   const handleCancelarOrden = async () => {
+    if (!motivo.trim()) {
+      setError('Escribe el motivo de la cancelación.');
+      return;
+    }
     if (!pin.trim()) {
       setError('El PIN es obligatorio.');
       return;
@@ -36,13 +41,14 @@ export default function ModalCancelarLlevar({
 
       const res = await api.cancelarPedido(pedido.pedidoId, {
         canceladoPor: usuarioOperador,
-        motivo: 'Cancelado por cajero (error en pedido)',
+        motivo: motivo.trim(),
         force: true,
         autorizacion: { pin: pin.trim() }, // el backend vuelve a validar el PIN
       });
 
       if (res.ok) {
         setPin('');
+        setMotivo('');
         onCanceladoExitoso?.();
         onCerrar();
       } else {
@@ -71,7 +77,7 @@ export default function ModalCancelarLlevar({
           </div>
           <button
             type="button"
-            onClick={() => { onCerrar(); setPin(''); setError(''); }}
+            onClick={() => { onCerrar(); setPin(''); setMotivo(''); setError(''); }}
             className="bg-black/20 hover:bg-black/30 p-2 rounded-xl transition-colors text-white"
           >
             <X className="w-5 h-5" />
@@ -102,6 +108,20 @@ export default function ModalCancelarLlevar({
             </div>
           </div>
 
+          {/* Motivo (queda en el reporte de anulaciones y en la auditoría) */}
+          <div>
+            <label htmlFor="motivo-cancelar-llevar" className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-2">Motivo de la cancelación</label>
+            <textarea
+              id="motivo-cancelar-llevar"
+              rows={2}
+              maxLength={300}
+              value={motivo}
+              onChange={e => { setMotivo(e.target.value); setError(''); }}
+              placeholder="Ej. el cliente ya no quiere el pedido"
+              className="w-full bg-slate-50 border-2 border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none resize-none transition-all"
+            />
+          </div>
+
           {/* PIN Admin */}
           <div>
             <label className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-2">🔐 PIN del Administrador</label>
@@ -117,7 +137,6 @@ export default function ModalCancelarLlevar({
               style={{ WebkitTextSecurity: 'disc', textSecurity: 'disc' }}
               autoComplete="off"
               name="cancel-pin-auth"
-              autoFocus
             />
           </div>
 
@@ -133,7 +152,7 @@ export default function ModalCancelarLlevar({
           <div className="flex gap-3 mt-2">
             <button
               type="button"
-              onClick={() => { onCerrar(); setPin(''); setError(''); }}
+              onClick={() => { onCerrar(); setPin(''); setMotivo(''); setError(''); }}
               className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase rounded-2xl transition-all"
             >
               Regresar
@@ -141,7 +160,7 @@ export default function ModalCancelarLlevar({
             <button
               type="button"
               onClick={handleCancelarOrden}
-              disabled={!pin.trim() || procesando}
+              disabled={!pin.trim() || !motivo.trim() || procesando}
               className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase rounded-2xl transition-all disabled:opacity-50 shadow-md shadow-red-500/20 cursor-pointer"
             >
               {procesando ? 'Cancelando...' : '✓ Cancelar Orden'}
