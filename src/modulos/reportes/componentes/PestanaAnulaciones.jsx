@@ -2,7 +2,7 @@ import { AlertTriangle, DollarSign, Receipt, XCircle } from 'lucide-react';
 import { kpi, panel, vacio } from './piezas';
 import { soles } from '../utils';
 
-// Pestaña Anulaciones: pedidos cancelados y ventas anuladas o devueltas
+// Pestaña Anulaciones: pedidos cancelados, platos cancelados sueltos y ventas anuladas o devueltas
 export default function PestanaAnulaciones({
   cancelaciones,
   filtroTipoAnulacion,
@@ -17,7 +17,8 @@ export default function PestanaAnulaciones({
   const totalPerdida = cancelacionesFiltradas.reduce((s, c) => s + (Number(c.total) || 0), 0);
   const devolucionesList = cancelaciones.filter(c => c.tipo === 'Devolución en Caja');
   const montoDevoluciones = devolucionesList.reduce((s, c) => s + (Number(c.total) || 0), 0);
-  const comandasList = cancelaciones.filter(c => c.tipo !== 'Devolución en Caja');
+  const comandasList = cancelaciones.filter(c => c.tipo !== 'Devolución en Caja' && c.tipo !== 'Plato Cancelado');
+  const platosList = cancelaciones.filter(c => c.tipo === 'Plato Cancelado');
   const montoComandas = comandasList.reduce((s, c) => s + (Number(c.total) || 0), 0);
 
   return (
@@ -40,6 +41,7 @@ export default function PestanaAnulaciones({
               { id: 'Todos', label: 'Todos', count: cancelaciones.length, activo: 'bg-slate-900 text-white' },
               { id: 'Devolución en Caja', label: 'Devoluciones', count: devolucionesList.length, activo: 'bg-purple-600 text-white' },
               { id: 'Comanda Cancelada', label: 'Comandas', count: comandasList.length, activo: 'bg-amber-500 text-white' },
+              { id: 'Plato Cancelado', label: 'Platos', count: platosList.length, activo: 'bg-orange-500 text-white' },
             ].map(f => (
               <button
                 key={f.id}
@@ -71,6 +73,7 @@ export default function PestanaAnulaciones({
                           </p>
                           <p className="text-xs text-slate-500 truncate">
                             {c.tipo || 'Comanda cancelada'} · {c.fecha || 'Hoy'} {c.hora} · {c.canceladoPor || 'No registrado'}
+                            {c.autorizadoPor && c.autorizadoPor !== c.canceladoPor && <> · Autorizó {c.autorizadoPor}</>}
                           </p>
                         </div>
                         <p className="font-mono text-sm font-semibold tabular-nums text-rose-600 shrink-0">−{soles(c.total)}</p>

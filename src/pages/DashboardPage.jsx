@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Users, Flame, CheckCircle, Banknote, LayoutGrid, ChefHat, Calculator, Lock, Unlock, AlertTriangle, ShieldAlert, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { useEventos } from '../hooks/useEventos';
 import { useAviso } from '../components/ui';
 
 export default function DashboardPage() {
@@ -16,6 +17,7 @@ export default function DashboardPage() {
   const [errorForzar, setErrorForzar] = useState('');
 
   const isFetchingDashboardRef = useRef(false);
+  const actualizarRef = useRef(null);
 
   useEffect(() => {
     let activeCierreCutoff = localStorage.getItem('ultimoCierre');
@@ -68,10 +70,12 @@ export default function DashboardPage() {
       }
     };
 
+    actualizarRef.current = updateStats;
     updateStats();
-    const interval = setInterval(updateStats, 12000);
-    return () => clearInterval(interval);
   }, []);
+
+  // Mesas, ventas y caja al instante (SSE) en vez de consultar cada 12 segundos
+  useEventos(['mesas', 'pedidos', 'ventas', 'caja'], () => actualizarRef.current?.());
 
   const handleForzarCierre = async (e) => {
     e?.preventDefault();

@@ -53,7 +53,7 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
 
   const abrirModalNuevo = () => {
     setEditingUser(null);
-    setNewUser({ nombre: '', rol: '', pin: '', permisos: [], usuario: '', correo: '', contrasena: '' });
+    setNewUser({ nombre: '', rol: '', pin: '', permisos: [], usuario: '', correo: '', contrasena: '', inactividadMin: '' });
     setModalOpen(true);
   };
 
@@ -67,6 +67,7 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
       usuario: u.usuario || '',
       correo: u.correo || '',
       contrasena: '',
+      inactividadMin: u.inactividadMin ?? '',
     });
     setModalOpen(true);
   };
@@ -102,6 +103,12 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
     if (!datos.usuario?.trim()) delete datos.usuario;
     if (!datos.correo?.trim()) delete datos.correo;
     if (!datos.contrasena?.trim()) delete datos.contrasena;
+    // Vacío = sin límite: al editar se envía null para quitar el límite que tuviera
+    if (String(datos.inactividadMin ?? '').trim() === '') {
+      if (editingUser) datos.inactividadMin = null; else delete datos.inactividadMin;
+    } else {
+      datos.inactividadMin = Number(datos.inactividadMin);
+    }
 
     const esquema = editingUser ? usuarioEdicion : usuarioNuevo;
     const validacion = esquema.safeParse(datos);
@@ -374,6 +381,20 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
                       className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500"
                     />
                   </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <label htmlFor="inactividadMin" className="text-[11px] font-bold text-slate-600">Cerrar su sesión tras</label>
+                  <input
+                    id="inactividadMin"
+                    type="number"
+                    min="1"
+                    max="1440"
+                    value={newUser.inactividadMin ?? ''}
+                    onChange={e => setNewUser({ ...newUser, inactividadMin: e.target.value })}
+                    placeholder="Sin límite"
+                    className="w-28 border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500"
+                  />
+                  <span className="text-[11px] text-slate-500">minutos sin usar el sistema (vacío = sin límite)</span>
                 </div>
               </div>
               <div className="border-t border-slate-100 pt-4">

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Download, TrendingUp, XCircle, Users, Truck, Calendar, Search, Printer, Wallet, UtensilsCrossed, History, MessageCircle } from 'lucide-react';
 
 import { api } from '../api';
+import { fechaJornada, primerDiaDelMesJornada } from '../utils/jornada';
 import { useCompany } from '../context/CompanyContext';
 import { generateOfflineQrUrl } from '../utils/qrOffline';
 import { numeroALetras } from '../utils/numeroALetras';
@@ -29,20 +30,9 @@ export default function ReportesPage() {
   const { empresa: COMPANY_CONFIG } = useCompany();
   const aviso = useAviso();
   const pedirDato = usePedirDato();
-  const getPrimerDiaMes = () => {
-    const ahora = new Date();
-    const yyyy = ahora.getFullYear();
-    const mm = String(ahora.getMonth() + 1).padStart(2, '0');
-    return `${yyyy}-${mm}-01`;
-  };
-
-  const getHoyString = () => {
-    const ahora = new Date();
-    const yyyy = ahora.getFullYear();
-    const mm = String(ahora.getMonth() + 1).padStart(2, '0');
-    const dd = String(ahora.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
+  // "Hoy" es la jornada (03:00 a 03:00 de Lima), no el día del calendario
+  const getPrimerDiaMes = () => primerDiaDelMesJornada();
+  const getHoyString = () => fechaJornada();
 
   const [fechaDesde, setFechaDesde] = useState(getHoyString());
   const [fechaHasta, setFechaHasta] = useState(getHoyString());
@@ -290,11 +280,7 @@ export default function ReportesPage() {
   };
 
   const hoyStr = getHoyString();
-  const ayerStr = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  })();
+  const ayerStr = fechaJornada(1);
   const primerDiaMes = getPrimerDiaMes();
   const rangos = [
     { label: 'Hoy', desde: hoyStr, hasta: hoyStr },
@@ -510,6 +496,7 @@ export default function ReportesPage() {
             </div>
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
               <div><dt className="text-xs text-slate-400">Responsable</dt><dd className="text-slate-800">{c.canceladoPor || 'No registrado'}</dd></div>
+              <div><dt className="text-xs text-slate-400">Autorizó (PIN)</dt><dd className="text-slate-800">{c.autorizadoPor || 'No hizo falta'}</dd></div>
               <div className="sm:col-span-2"><dt className="text-xs text-slate-400">Motivo</dt><dd className="text-slate-800 italic">“{c.motivoCancela || 'Sin motivo especificado'}”</dd></div>
             </dl>
             <div>

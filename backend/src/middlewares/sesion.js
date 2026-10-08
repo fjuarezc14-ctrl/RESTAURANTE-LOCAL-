@@ -7,7 +7,8 @@
 const { ErrorApp } = require('./errores');
 const { borrarCookieSesion, registrarActividad, validarSesion } = require('../servicios/sesiones');
 
-const RUTAS_PUBLICAS = ['/api/auth/marca', '/api/auth/activar', '/api/auth/login'];
+// /api/status: el instalador y los chequeos de salud preguntan si el servidor responde, sin sesión
+const RUTAS_PUBLICAS = ['/api/auth/marca', '/api/auth/activar', '/api/auth/login', '/api/status'];
 const authObligatoria = () => process.env.AUTH_OBLIGATORIA === 'true';
 
 function errorDeSesion(motivo) {

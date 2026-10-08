@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Clock, CheckCheck, CheckCircle2, User, Truck, XCircle, AlertTriangle, ShoppingBag, Bike, UtensilsCrossed, Timer, X } from 'lucide-react';
 import { useAviso } from './ui';
+import { useEventos } from '../hooks/useEventos';
 import { parseDeliveryInfo } from '../utils/ventas';
 
 // Tipo y título visible del ticket
@@ -90,17 +91,18 @@ export default function MonitorPreparacion({
     }
   }, [cargarCancelaciones]);
 
+  // Pedidos nuevos, platos listos y cancelaciones llegan al instante (SSE)
+  useEventos(['pedidos', 'cancelaciones'], () => { fetchPedidos(); fetchCancelaciones(); });
+
   useEffect(() => {
     fetchPedidos();
     fetchCancelaciones();
 
-    // Refresco periódico cada 3 segundos solo cuando la pestaña esté visible
+    // Reloj y tiempos de espera (sin consultar al servidor: los pedidos llegan por avisos en vivo)
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
         return;
       }
-      fetchPedidos();
-      fetchCancelaciones();
       setAhora(Date.now());
       setHora(horaLima());
     }, 3000);
