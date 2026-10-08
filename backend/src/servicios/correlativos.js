@@ -1,3 +1,4 @@
+// @ts-check
 // Correlativos de boletas y facturas (sin uso: hoy solo se emiten tickets)
 const { prisma } = require('../db');
 

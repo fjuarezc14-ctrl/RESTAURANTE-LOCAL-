@@ -1,3 +1,4 @@
+// @ts-check
 // ============================================================
 // IDEMPOTENCIA (ACUERDOS §4): header Idempotency-Key en operaciones que mueven dinero.
 // - Sin el header: no hace nada (todo sigue como siempre).

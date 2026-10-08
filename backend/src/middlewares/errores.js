@@ -1,3 +1,4 @@
+// @ts-check
 // ============================================================
 // ERRORES CON FORMATO ÚNICO (scratch/ACUERDOS.md §1)
 // Respuesta: { error: { codigo, mensaje, campo?, datos? } }. El detalle técnico solo va al log.
@@ -5,6 +6,11 @@
 const { CODIGOS, MENSAJE_ERROR_INTERNO, statusDe } = require('../../shared/errores.js');
 
 class ErrorApp extends Error {
+  /**
+   * @param {string} codigo  uno de shared/errores.js (define el status HTTP)
+   * @param {string} mensaje texto para el usuario
+   * @param {{ campo?: string, datos?: any, status?: number }} [opciones] campo del formulario y datos extra
+   */
   constructor(codigo, mensaje, { campo, datos } = {}) {
     super(mensaje);
     if (!CODIGOS[codigo]) throw new Error(`Código de error desconocido: ${codigo}`);

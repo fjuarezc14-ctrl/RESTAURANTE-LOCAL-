@@ -1,3 +1,4 @@
+// @ts-check
 // ============================================================
 // SESIONES Y DISPOSITIVOS (scratch/ACUERDOS.md §2)
 // Dos cookies httpOnly: <CLIENTE>_disp (dispositivo activado, 180 días) y <CLIENTE>_sesion (usuario que entró con PIN).

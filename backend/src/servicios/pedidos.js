@@ -1,3 +1,4 @@
+// @ts-check
 // Pedidos: expansión de ítems y combos para guardarlos en la BD
 const { prisma } = require('../db');
 const { ErrorApp } = require('../middlewares/errores');

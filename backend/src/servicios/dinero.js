@@ -1,3 +1,4 @@
+// @ts-check
 // Cálculos de dinero: IGV, montos por medio de pago y créditos repartidos
 const { configEnCache } = require('./empresa');
 const { ErrorApp } = require('../middlewares/errores');

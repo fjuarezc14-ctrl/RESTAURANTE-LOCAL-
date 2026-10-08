@@ -1,3 +1,4 @@
+// @ts-check
 // ============================================================
 // AUDITORÍA (tarea 11): registro de quién hizo qué y el antes → después.
 // Se llama DENTRO del $transaction de la operación (cliente = tx): si la operación falla, no queda
