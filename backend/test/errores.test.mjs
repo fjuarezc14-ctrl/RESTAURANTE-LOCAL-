@@ -79,8 +79,9 @@ describe('barrido de todas las rutas', () => {
     }
   };
   recorrer(app._router.stack);
-  // Consulta un servicio externo (RENIEC/SUNAT): no se llama en las pruebas
-  const probables = rutas.filter(([, ruta]) => !ruta.startsWith('/api/clientes/consulta/'));
+  // Consulta un servicio externo (RENIEC/SUNAT): no se llama en las pruebas.
+  // /api/eventos deja la conexión abierta a propósito (tiene sus pruebas en eventos.test.mjs)
+  const probables = rutas.filter(([, ruta]) => !ruta.startsWith('/api/clientes/consulta/') && ruta !== '/api/eventos');
 
   it('encuentra todas las rutas de la API', () => {
     expect(probables.length).toBeGreaterThan(80);

@@ -2,6 +2,7 @@
 // INICIO DEL SERVIDOR (la app vive en src/app.js para poder probarla)
 // ============================================================
 const { app, prisma } = require('./src/app');
+const { cerrarTodas: cerrarConexionesEnVivo } = require('./src/servicios/eventos');
 const company = require('./config/company');
 
 const { asegurarAccesoAdministrador, migrarPinesAHash } = require('./src/servicios/auth');
@@ -34,6 +35,7 @@ iniciar().catch((err) => {
 const gracefulShutdown = async (signal) => {
   console.log(`\n🛑 Recibida señal ${signal}. Cerrando servidor y pool de conexiones...`);
   if (!server) process.exit(0);
+  cerrarConexionesEnVivo(); // las conexiones de /api/eventos no se cierran solas
   server.close(async () => {
     try {
       await prisma.$disconnect();
