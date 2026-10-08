@@ -1,5 +1,6 @@
 // Rutas de ventas: cobro, anulación, cambios de una venta y resumen
 const express = require('express');
+const { las3DeLima, inicioJornadaActual } = require('../servicios/jornada');
 const { prisma } = require('../db');
 const { calcularSubtotalEIgv, limpiarCodigoPago, obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
@@ -822,12 +823,7 @@ router.get('/api/ventas', requierePermiso('Caja', 'Reportes'), validar({ query: 
         lte: new Date(nextDayStr + 'T02:59:59.999-05:00')
       };
     } else {
-      const ahora = new Date();
-      const ayerPeru = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Lima' }));
-      ayerPeru.setDate(ayerPeru.getDate() - 1);
-      ayerPeru.setHours(3, 0, 0, 0);
-      const inicioUTC = new Date(ayerPeru.getTime() + 5 * 60 * 60 * 1000);
-      filtroFecha = { gte: inicioUTC };
+      filtroFecha = { gte: las3DeLima(1) };
     }
 
     const ventas = await prisma.venta.findMany({
@@ -911,13 +907,7 @@ router.get('/api/ventas/resumen', requierePermiso('Caja', 'Dashboard'), validar(
       filterDate = new Date(desde);
     } else {
       // Inicio del día operativo a las 3:00 AM en UTC-5
-      const ahora = new Date();
-      const hoyPeru = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Lima' }));
-      if (hoyPeru.getHours() < 3) {
-        hoyPeru.setDate(hoyPeru.getDate() - 1);
-      }
-      hoyPeru.setHours(3, 0, 0, 0);
-      filterDate = new Date(hoyPeru.getTime() + 5 * 60 * 60 * 1000);
+      filterDate = inicioJornadaActual();
     }
 
     const [ventas, abonos, clientes] = await Promise.all([
