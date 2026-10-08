@@ -11,7 +11,8 @@ import {
   
 } from 'lucide-react';
 import { Dialog } from '../../../components/ui';
-import { CalculadoraEfectivoPEN, DENOMINACIONES_PEN } from '../componentes/CalculadoraEfectivoPEN';
+import { CalculadoraEfectivoPEN } from '../componentes/CalculadoraEfectivoPEN';
+import { DENOMINACIONES_PEN } from '../constantes/denominaciones';
 import { api } from '../../../api';
 import { useAviso, useConfirmar } from '../../../components/ui';
 import logoUrl from '../../../assets/logo.png';
