@@ -380,3 +380,27 @@ model Auditoria {
   @@index([accion])
   @@index([usuarioId])
 }
+
+// ============================================================
+// CANCELACIONES (tarea 24): cada pedido o ítem cancelado, por estación.
+// Es el aviso para cocina y barra (antes vivía en memoria y se perdía al reiniciar) y el
+// detalle del reporte de cancelaciones (antes se perdía al borrar el último ítem).
+// ============================================================
+model Cancelacion {
+  id              Int       @id @default(autoincrement())
+  creadoEn        DateTime  @default(now())
+  pedidoId        Int
+  tipo            String // PEDIDO | ITEM
+  estacion        String // Cocina | Barra
+  items           Json // [{ nombre, cantidad, precio, notas }]
+  mesaInfo        String
+  codigoPedidosYa String?
+  motivo          String?
+  canceladoPor    String
+  autorizadoPor   String? // Administrador o Cajero que autorizó con su PIN
+  confirmadaEn    DateTime? // cuando cocina o barra tocó "Entendido"
+
+  @@index([estacion, confirmadaEn])
+  @@index([pedidoId])
+  @@index([creadoEn])
+}
