@@ -159,7 +159,8 @@ async function main() {
     copy(path.join(REPO, 'backend', f), path.join(BACKEND, f));
   }
   fs.rmSync(path.join(BACKEND, 'prisma', 'seed.js'), { force: true }); // seed de demostración: borra ventas
-  sh('npm ci --silent --no-audit --no-fund', { cwd: BACKEND, env: { PRISMA_CLI_BINARY_TARGETS: 'windows' } });
+  // Solo dependencias de producción (prisma incluido: aplica las migraciones al instalar). Sin vitest, typescript, etc.
+  sh('npm ci --omit=dev --silent --no-audit --no-fund', { cwd: BACKEND, env: { PRISMA_CLI_BINARY_TARGETS: 'windows' } });
   sh('npx prisma generate', { cwd: BACKEND, quiet: true });
   // El CLI no siempre descarga el schema-engine de Windows: se obtiene directo de los binarios de Prisma
   const engineHash = spawnSync(process.execPath, ['-p', "require('@prisma/engines-version').enginesVersion"], { cwd: BACKEND, encoding: 'utf8' }).stdout.trim();
