@@ -10,6 +10,10 @@ const texto = (v) => {
 export function resumenCambio(antes, despues) {
   const a = antes && typeof antes === 'object' ? antes : {};
   const d = despues && typeof despues === 'object' ? despues : {};
+  // Solo "antes" (algo eliminado o revocado): sus datos, sin los campos vacíos
+  if (Object.keys(d).length === 0) {
+    return Object.entries(a).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}: ${texto(v)}`).join('\n');
+  }
   const campos = [...new Set([...Object.keys(a), ...Object.keys(d)])];
   return campos
     .map((k) => {
