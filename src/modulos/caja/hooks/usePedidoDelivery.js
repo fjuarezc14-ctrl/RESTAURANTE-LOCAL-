@@ -9,7 +9,7 @@ import { ORDEN_PRIORIDADES_CATEGORIAS } from '../../../config/company';
 import { ordenarCategorias } from '../../../utils/busquedaProductos';
 import { getComboConfig, tieneComplementos } from '../../../utils/combos';
 import { parseDeliveryInfo } from '../../../utils/ventas';
-import { pasosProductoCaja } from '../utils/pasosProducto';
+import { pasosProducto } from '../../../utils/pasosProducto';
 import { pedidoLlevar as pedidoLlevarEsquema } from '@shared/esquemas/pedidos.js';
 
 
@@ -210,7 +210,7 @@ export function usePedidoDelivery({
     setDeliveryModal(true);
   };
 
-  const getProductSteps = (prod, currentSelections = {}) => pasosProductoCaja(prod, currentSelections, productosMenu);
+  const getProductSteps = (prod, currentSelections = {}) => pasosProducto(prod, currentSelections, productosMenu);
 
   const agregarItemDelivery = (prod) => {
     if (!prod) return;

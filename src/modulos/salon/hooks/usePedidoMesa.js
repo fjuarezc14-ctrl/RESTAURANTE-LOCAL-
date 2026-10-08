@@ -6,7 +6,7 @@
 import { COMPANY_CONFIG, ORDEN_PRIORIDADES_CATEGORIAS } from '../../../config/company';
 import { api } from '../../../api';
 import { getComboConfig, tieneComplementos } from '../../../utils/combos';
-import { isMenuProduct, pasosProductoSalon } from '../utils/pasosProducto';
+import { isMenuProduct, pasosProducto } from '../../../utils/pasosProducto';
 import { matchProductSemantic, ordenarCategorias, relevanciaBusqueda } from '../../../utils/busquedaProductos';
 import { useRef, useState } from 'react';
 
@@ -115,7 +115,7 @@ export function usePedidoMesa({
     setModalOpen(true);
   };
 
-  const getProductSteps = (prod, currentSelections = {}) => pasosProductoSalon(prod, currentSelections);
+  const getProductSteps = (prod, currentSelections = {}) => pasosProducto(prod, currentSelections, productos);
 
   const agregarAlTicket = (prod) => {
     if (!prod) return;
