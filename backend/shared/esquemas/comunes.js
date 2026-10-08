@@ -51,8 +51,10 @@ export const fecha = z
     return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
   }, 'La fecha no existe.');
 
-export const rangoFechas = z
-  .object({ desde: fecha, hasta: fecha })
+// Rango de fechas más otros campos en UN solo objeto. No usar rangoFechas.and(...): zod no puede
+// juntar un campo que un lado deja como texto ("5") y el otro convierte a número (Unmergable intersection).
+export const conRangoFechasObligatorio = (campos = {}) => z
+  .looseObject({ desde: fecha, hasta: fecha, ...campos })
   .refine(({ desde, hasta }) => desde <= hasta, {
     message: 'La fecha inicial no puede ser posterior a la final.',
     path: ['hasta'],
@@ -61,6 +63,7 @@ export const rangoFechas = z
     message: `El rango no puede pasar de ${DIAS_MAXIMOS_RANGO} días.`,
     path: ['hasta'],
   });
+export const rangoFechas = conRangoFechasObligatorio();
 
 // Los inputs de los formularios envían texto ("12.50"): se convierte a número antes de validar.
 // Vacío o null = sin valor. Usar con el esquema interno opcional: desdeTexto(monto.optional())
@@ -81,10 +84,11 @@ export const METODOS_PAGO = ['Efectivo', 'Tarjeta', 'Yape', 'Mixto', 'Crédito',
 export const metodoPago = z.enum(METODOS_PAGO, { error: 'Método de pago inválido.' });
 
 // Rango opcional para reportes: si llega una fecha, llegan las dos y desde ≤ hasta
-export const rangoFechasOpcional = z
-  .looseObject({ desde: fecha.optional(), hasta: fecha.optional() })
+export const conRangoFechas = (campos = {}) => z
+  .looseObject({ desde: fecha.optional(), hasta: fecha.optional(), ...campos })
   .refine(({ desde, hasta }) => !desde === !hasta, { message: 'Indica las dos fechas del rango.', path: ['hasta'] })
   .refine(({ desde, hasta }) => !desde || desde <= hasta, { message: 'La fecha inicial no puede ser posterior a la final.', path: ['hasta'] });
+export const rangoFechasOpcional = conRangoFechas();
 
 export const montoPositivo = monto.refine((n) => n > 0, 'El monto debe ser mayor a 0.');
 export const pinOpcional = z.preprocess((v) => (v === '' || v === null ? undefined : v), pin.optional());

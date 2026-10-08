@@ -1,7 +1,7 @@
 // Esquemas de caja: apertura, movimientos y cierre
 import { z } from 'zod';
 import {
-  LARGO, desdeTexto, fecha, id, monto, montoCalculadoOpcional, montoOpcional, montoPositivo, nombre, pinOpcional, rangoFechasOpcional, texto, textoOpcional,
+  LARGO, desdeTexto, fecha, id, monto, montoCalculadoOpcional, montoOpcional, montoPositivo, nombre, pinOpcional, conRangoFechas, texto, textoOpcional,
 } from './comunes.js';
 
 export const aperturaCaja = z.looseObject({
@@ -45,7 +45,7 @@ export const cierreForzado = z.looseObject({
   motivo: textoOpcional(LARGO.nota),
 });
 
-export const consultaMovimientos = rangoFechasOpcional.and(z.looseObject({ turnoId: id.optional() }));
+export const consultaMovimientos = conRangoFechas({ turnoId: id.optional() });
 export const consultaCierres = z.looseObject({ limit: desdeTexto(z.number().int().min(1).max(100).optional()) });
 
 export { fecha, monto, texto };

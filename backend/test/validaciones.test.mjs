@@ -219,3 +219,10 @@ describe('compatibilidad', () => {
     expect(res.body).toEqual({ exists: false });
   });
 });
+
+describe('rango de fechas junto a campos que se convierten a número', () => {
+  it('/api/caja/movimientos?turnoId=5 ya no falla con "Unmergable intersection"', async () => {
+    const res = await api().get('/api/caja/movimientos?turnoId=5');
+    expect(res.status).not.toBe(500);
+  });
+});
