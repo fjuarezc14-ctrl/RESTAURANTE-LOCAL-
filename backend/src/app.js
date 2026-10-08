@@ -18,8 +18,9 @@ const app = express();
 app.use(compression({ filter: (req, res) => !req.path.startsWith('/api/eventos') && compression.filter(req, res) }));
 
 // Detrás del proxy de la web, req.ip es la IP del cliente (límite de intentos). En la red local no hay proxy:
-// confiar en X-Forwarded-For permitiría falsear la IP.
-if (process.env.MODO_INSTALACION === 'web') app.set('trust proxy', 1);
+// confiar en X-Forwarded-For permitiría falsear la IP. PROXIES_DELANTE: nginx solo = 1; Caddy + nginx = 2
+// (con un número menor todos los clientes tendrían la IP del proxy y compartirían el límite de intentos).
+if (process.env.MODO_INSTALACION === 'web') app.set('trust proxy', Number(process.env.PROXIES_DELANTE) || 1);
 
 // Cabeceras de seguridad. La CSP queda apagada hasta probarla con la web servida desde dist/ (instalador Windows);
 // HSTS solo detrás de HTTPS.

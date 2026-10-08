@@ -8,6 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { sacarRespaldo, RESPALDOS_DIR } = require('./respaldo');
 
 const ROOT = path.resolve(__dirname, '..');
 const PG_BIN = path.join(ROOT, 'pgsql', 'bin');
@@ -29,6 +30,7 @@ const DB_SERVICE = 'ValetecPOS-DB';
 const APP_SERVICE = 'ValetecPOS-App';
 const FIREWALL_RULE = 'Valetec POS';
 const NETWORK_SERVICE_SID = '*S-1-5-20'; // SID de NetworkService: independiente del idioma de Windows
+const USERS_SID = '*S-1-5-32-545'; // BUILTIN\Users: el acceso directo "Sacar respaldo" corre sin ser administrador
 
 fs.mkdirSync(LOGS_DIR, { recursive: true });
 const LOG_FILE = path.join(LOGS_DIR, 'instalacion.log');
@@ -214,6 +216,24 @@ async function main() {
   }
   fs.rmSync(MARCA_BASE_NUEVA, { force: true }); // la contraseña ya está guardada: la base deja de ser descartable
 
+  // Contraseña para activar equipos (usuario "admin"). El servidor la aplica al arrancar solo si ningún
+  // administrador tiene contraseña: en una actualización desde 1.0.0 nadie la tiene y sin ella no se entra.
+  let contrasenaAdminNueva = null;
+  if (!/^INITIAL_ADMIN_PASSWORD=/m.test(fs.readFileSync(ENV_FILE, 'utf8'))) {
+    const delCliente = fs.existsSync(CLIENTE_JSON) ? JSON.parse(fs.readFileSync(CLIENTE_JSON, 'utf8')).adminContrasena : null;
+    contrasenaAdminNueva = delCliente || crypto.randomBytes(6).toString('hex');
+    const env = fs.readFileSync(ENV_FILE, 'utf8');
+    fs.appendFileSync(ENV_FILE, `${env.endsWith(os.EOL) ? '' : os.EOL}INITIAL_ADMIN_PASSWORD="${contrasenaAdminNueva}"${os.EOL}`);
+  }
+
+  // Respaldo antes de migrar una base que ya tiene datos: si falla, no se toca nada
+  fs.mkdirSync(RESPALDOS_DIR, { recursive: true });
+  run('icacls.exe', [RESPALDOS_DIR, '/grant', `${USERS_SID}:(OI)(CI)M`, '/T', '/Q'], { allowFail: true });
+  if (clusterExists && psql(password, `SELECT to_regclass('"Venta"') IS NOT NULL`, DB_NAME) === 't') {
+    log('Sacando respaldo antes de actualizar...');
+    log(`Respaldo listo: ${sacarRespaldo('antes-de-actualizar', password)}`);
+  }
+
   // 4. Migraciones
   // Rutas explícitas de los motores para que Prisma no intente descargarlos (instalación sin internet)
   const prismaEnv = {
@@ -288,8 +308,10 @@ async function main() {
     ...urls.slice(1).map((u) => `Celulares mozos:  ${u}`),
     '',
     hayCliente
-      ? 'PINs de acceso: según las credenciales entregadas por VT VALETEC'
+      ? 'PINs y contraseña para activar equipos: según las credenciales entregadas por VT VALETEC'
       : 'PIN inicial del administrador: 1234 (cámbialo en Usuarios)',
+    ...(!hayCliente && contrasenaAdminNueva
+      ? ['', `Activar cada equipo (una sola vez): usuario "admin" / contraseña "${contrasenaAdminNueva}"`] : []),
     '',
   ].join(os.EOL));
 

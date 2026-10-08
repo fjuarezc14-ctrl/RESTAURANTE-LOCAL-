@@ -9,8 +9,12 @@ scratch/
 installer/cache/
 installer/build/
 installer/dist/
-installer/clientes/*/pins.local.json
+installer/clientes/*/*.local.json
 backend/carta.json
 backend/cliente.json
 .env.*
 !.env.example
+!.env.*.example
+
+# Respaldos que deja scripts/importar-respaldo.sh
+respaldos/
