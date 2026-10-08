@@ -9,7 +9,7 @@ import { ORDEN_PRIORIDADES_CATEGORIAS } from '../../../config/company';
 import { ordenarCategorias } from '../../../utils/busquedaProductos';
 import { getComboConfig, tieneComplementos } from '../../../utils/combos';
 import { parseDeliveryInfo } from '../../../utils/ventas';
-import { pasosProductoCaja } from '../utils/pasosProducto';
+import { pasosProducto } from '../../../utils/pasosProducto';
 import { pedidoLlevar as pedidoLlevarEsquema } from '@shared/esquemas/pedidos.js';
 
 
@@ -58,6 +58,7 @@ export function usePedidoDelivery({
   const [tipoDelivery, setTipoDelivery] = useState('PedidosYa'); // 'PedidosYa' | 'ParaLlevar'
 
   const deliverySearchInputRef = useRef(null);
+  const claveIdempotenciaRef = useRef(null);
 
   const buscarClienteDelivery = async () => {
     if (!deliveryNumDocumento) return;
@@ -209,7 +210,7 @@ export function usePedidoDelivery({
     setDeliveryModal(true);
   };
 
-  const getProductSteps = (prod, currentSelections = {}) => pasosProductoCaja(prod, currentSelections, productosMenu);
+  const getProductSteps = (prod, currentSelections = {}) => pasosProducto(prod, currentSelections, productosMenu);
 
   const agregarItemDelivery = (prod) => {
     if (!prod) return;
@@ -498,11 +499,14 @@ export function usePedidoDelivery({
         return;
       }
 
+      // La misma clave en los reintentos de este pedido; se renueva cuando sale bien
+      if (!claveIdempotenciaRef.current) claveIdempotenciaRef.current = crypto.randomUUID();
       const result = editingPedidoId
         ? await api.actualizarDelivery(editingPedidoId, validacionPedido.data)
-        : await api.crearPedidoLlevar(validacionPedido.data);
+        : await api.crearPedidoLlevar(validacionPedido.data, claveIdempotenciaRef.current);
 
       if (result.error) throw new Error(result.error);
+      claveIdempotenciaRef.current = null;
 
       // Cerrar modal y recargar datos de Caja
       setDeliveryModal(false);

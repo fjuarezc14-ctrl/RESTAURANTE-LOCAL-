@@ -1,0 +1,70 @@
+# ================================================================
+# PRODUCCIÓN (servidor): frontend compilado con nginx y backend sin carpetas montadas.
+#   docker compose -f docker-compose.prod.yml --env-file .env.<cliente> up -d --build
+# Desarrollo local sigue igual: docker compose --env-file .env.<cliente> up -d
+# Usa el mismo COMPOSE_PROJECT_NAME y el mismo volumen que el de desarrollo: los datos se conservan.
+#
+# MODO_INSTALACION=web solo si el sitio va detrás de HTTPS: en ese modo las cookies de sesión
+# son "Secure" y por HTTP simple el navegador no las envía (nadie podría entrar).
+# ================================================================
+name: restaurante-valetec
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      args:
+        - CLIENTE=${CLIENTE:-}
+    ports:
+      - "${WEB_PORT:-5188}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    # Solo para revisar desde el mismo servidor; los navegadores entran por nginx (/api)
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-3010}:3010"
+    volumes:
+      - ./installer/clientes:/clientes:ro
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-local_user}:${DB_PASSWORD:-local_password}@db:5432/restaurante_local?connection_limit=20&pool_timeout=10
+      - PORT=3010
+      - CLIENTE=${CLIENTE:-}
+      - CLIENTES_DIR=/clientes
+      - INITIAL_ADMIN_PIN=${INITIAL_ADMIN_PIN:-}
+      - PIN_SECRET=${PIN_SECRET:-}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-}
+      - AUTH_OBLIGATORIA=${AUTH_OBLIGATORIA:-false}
+      - MODO_INSTALACION=${MODO_INSTALACION:-local}
+      - CORS_ORIGIN=${CORS_ORIGIN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    # Solo desde el mismo servidor (respaldos, revisión); nunca expuesta a la red
+    ports:
+      - "127.0.0.1:${DB_PORT:-5445}:5432"
+    environment:
+      # Usuario y clave solo se aplican al crear el volumen; cambiarlos después no cambia la BD
+      - POSTGRES_USER=${DB_USER:-local_user}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-local_password}
+      - POSTGRES_DB=restaurante_local
+    volumes:
+      - postgres_data_restaurante_local:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-local_user} -d restaurante_local" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data_restaurante_local:

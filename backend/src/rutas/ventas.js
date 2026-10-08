@@ -8,6 +8,8 @@ const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { anulacion, cobro, correccionDatosCliente, correccionMetodoPago, correccionTipoEntrega } = require('../../shared/esquemas/ventas.js');
 const { consultaDesde, rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
 const { requierePermiso } = require('../middlewares/permisos');
+const { registrarAuditoria } = require('../servicios/auditoria');
+const { idempotente } = require('../middlewares/idempotencia');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -90,8 +92,9 @@ router.patch('/api/ventas/:ventaId/metodo-pago', requierePermiso('Caja'), valida
       return next(new ErrorApp('VALIDACION', 'Debe seleccionar un cliente para registrar la venta a crédito.', { campo: 'clienteCreditoId' }));
     }
 
-    // Actualizar Venta
-    const ventaActualizada = await prisma.venta.update({
+    // Venta, pedido y auditoría juntos: o se guarda todo o nada
+    const ventaActualizada = await prisma.$transaction(async (tx) => {
+    const actualizada = await tx.venta.update({
       where: { id: parseInt(ventaId) },
       data: {
         metodoPago,
@@ -106,12 +109,22 @@ router.patch('/api/ventas/:ventaId/metodo-pago', requierePermiso('Caja'), valida
       },
     });
 
-    // Actualizar Pedido
-    await prisma.pedido.update({
+    await tx.pedido.update({
       where: { id: pedido.id },
       data: {
         total: nuevoTotal
       }
+    });
+
+    await registrarAuditoria(tx, req, {
+      accion: 'METODO_PAGO_CORREGIDO', entidad: 'Venta', entidadId: venta.id, autorizadoPor: admin.nombre,
+      antes: { metodoPago: metodoPagoAnterior, total: venta.total },
+      despues: {
+        metodoPago, total: actualizada.total, montoEfectivo: actualizada.montoEfectivo, montoTarjeta: actualizada.montoTarjeta,
+        montoYape: actualizada.montoYape, montoCredito: actualizada.montoCredito,
+      },
+    });
+    return actualizada;
     });
 
     console.log(`🔄 Método de pago corregido por ${admin.nombre} (${admin.rol}): Venta #${ventaId} → ${metodoPagoAnterior} (S/ ${venta.total.toFixed(2)}) → ${metodoPago} (S/ ${nuevoTotal.toFixed(2)})`);
@@ -194,8 +207,9 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', requierePermiso('Caja'), valid
 
     const { subtotal, igv } = calcularSubtotalEIgv(nuevoTotal);
 
-    // Actualizar Pedido
-    await prisma.pedido.update({
+    // Pedido, venta y auditoría juntos: o se guarda todo o nada
+    const ventaActualizada = await prisma.$transaction(async (tx) => {
+    await tx.pedido.update({
       where: { id: pedido.id },
       data: {
         total: nuevoTotal,
@@ -204,8 +218,7 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', requierePermiso('Caja'), valid
       }
     });
 
-    // Actualizar Venta
-    const ventaActualizada = await prisma.venta.update({
+    const actualizada = await tx.venta.update({
       where: { id: venta.id },
       data: {
         total: nuevoTotal,
@@ -215,6 +228,13 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', requierePermiso('Caja'), valid
         nombreCliente: finalNombre,
         numDocumento: tipoEntrega === 'PedidosYa' ? finalCodigo : (venta.numDocumento || 'S/D'),
       }
+    });
+    await registrarAuditoria(tx, req, {
+      accion: 'TIPO_ENTREGA_CORREGIDO', entidad: 'Venta', entidadId: venta.id, autorizadoPor: admin.nombre,
+      antes: { tipoEntrega: pedido.tipoEntrega, metodoPago: venta.metodoPago, total: venta.total },
+      despues: { tipoEntrega: nuevoTipoEntrega, metodoPago: finalMetodoPago, total: actualizada.total },
+    });
+    return actualizada;
     });
 
     console.log(`🔄 Tipo de entrega corregido por ${admin.nombre} (${admin.rol}): Venta #${ventaId} a ${tipoEntrega}`);
@@ -262,7 +282,7 @@ router.patch('/api/ventas/:ventaId/datos-cliente', requierePermiso('Caja'), vali
       const newEstado = 'NO_APLICA';
       const newEstadoNube = 'NO_APLICA';
 
-      return await tx.venta.update({
+      const actualizada = await tx.venta.update({
         where: { id: venta.id },
         data: {
           tipoComprobante: 'Ticket',
@@ -275,6 +295,12 @@ router.patch('/api/ventas/:ventaId/datos-cliente', requierePermiso('Caja'), vali
           estadoNubefact: newEstadoNube
         }
       });
+      await registrarAuditoria(tx, req, {
+        accion: 'DATOS_CLIENTE_CORREGIDOS', entidad: 'Venta', entidadId: venta.id, autorizadoPor: admin.nombre,
+        antes: { numDocumento: venta.numDocumento, nombreCliente: venta.nombreCliente, clienteDireccion: venta.clienteDireccion },
+        despues: { numDocumento: actualizada.numDocumento, nombreCliente: actualizada.nombreCliente, clienteDireccion: actualizada.clienteDireccion },
+      });
+      return actualizada;
     });
 
     console.log(`🔄 Datos de cliente corregidos por ${admin.nombre} (${admin.rol}): Venta #${ventaId}`);
@@ -287,7 +313,7 @@ router.patch('/api/ventas/:ventaId/datos-cliente', requierePermiso('Caja'), vali
 });
 
 // PATCH /api/ventas/:ventaId/anular → Anular / Registrar devolución de un pedido entregado
-router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), validar({ body: anulacion }), async (req, res, next) => {
+router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), idempotente, validar({ body: anulacion }), async (req, res, next) => {
   const { ventaId } = req.params;
   const { pin, motivo } = req.body;
 
@@ -371,7 +397,14 @@ router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), validar({ b
         orderBy: { fechaApertura: 'desc' },
       });
       const ventaEfectivoPrevio = Number(venta.montoEfectivo) || (venta.metodoPago === 'Efectivo' ? Number(venta.total) : 0);
-      if (turnoAbierto && ventaEfectivoPrevio > 0 && new Date(venta.createdAt) < new Date(turnoAbierto.fechaApertura)) {
+      const devuelveEfectivo = Boolean(turnoAbierto && ventaEfectivoPrevio > 0 && new Date(venta.createdAt) < new Date(turnoAbierto.fechaApertura));
+      await registrarAuditoria(tx, req, {
+        accion: devuelveEfectivo ? 'VENTA_DEVUELTA' : 'VENTA_ANULADA', entidad: 'Venta', entidadId: venta.id,
+        autorizadoPor: admin.nombre, motivo: motivoFinal,
+        antes: { total: venta.total, metodoPago: venta.metodoPago, anulado: false },
+        despues: { anulado: true, ...(devuelveEfectivo ? { efectivoDevuelto: ventaEfectivoPrevio } : {}) },
+      });
+      if (devuelveEfectivo) {
         await tx.movimientoCaja.create({
           data: {
             tipo: 'RETIRO',
@@ -401,7 +434,7 @@ router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), validar({ b
 });
 
 // POST /api/ventas → Cobrar mesa (acepta pedidoIds array o pedidoId simple)
-router.post('/api/ventas', requierePermiso('Caja'), validar({ body: cobro }), async (req, res, next) => {
+router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body: cobro }), async (req, res, next) => {
   const {
     pedidoId,
     pedidoIds,
@@ -702,10 +735,10 @@ router.post('/api/ventas', requierePermiso('Caja'), validar({ body: cobro }), as
         }
       }
 
-      // Marcar TODOS los pedidos de la mesa como Cobrado
+      // Marcar TODOS los pedidos de la mesa como Cobrado (con la fecha de la venta, también los adicionales)
       await tx.pedido.updateMany({
         where: { id: { in: idsAPagar } },
-        data: { estado: 'Cobrado' },
+        data: { estado: 'Cobrado', cobradoEn: ventaCreada.createdAt },
       });
 
       // Liberar la mesa
@@ -719,6 +752,23 @@ router.post('/api/ventas', requierePermiso('Caja'), validar({ body: cobro }), as
         await tx.mesa.updateMany({
           where: { estado: `Unida a Mesa ${mObj.numero}` },
           data: { estado: 'Libre' },
+        });
+      }
+
+      // Auditoría: descuentos y cortesías que se dieron al cobrar
+      const descuentoManual = descuentoAplicado ? parseFloat(descuentoAplicado) : 0;
+      const cortesia = metodoPago === 'Cortesía' ? nuevoTotalPedido : itemsCortesiaDescuento;
+      const baseAuditoria = { entidad: 'Venta', entidadId: ventaCreada.id, nombreDeclarado: cajeroNombre };
+      if (descuentoManual > 0 && metodoPago !== 'Cortesía' && metodoPago !== 'Consumo') {
+        await registrarAuditoria(tx, req, {
+          ...baseAuditoria, accion: 'DESCUENTO', motivo: ofertaDescripcion || null,
+          despues: { descuento: descuentoManual, total: ventaCreada.total, metodoPago },
+        });
+      }
+      if (cortesia > 0) {
+        await registrarAuditoria(tx, req, {
+          ...baseAuditoria, accion: 'CORTESIA', motivo: motivoCortesia ? String(motivoCortesia).trim() : null,
+          despues: { montoRegalado: cortesia, total: ventaCreada.total, cortesiaTotal: metodoPago === 'Cortesía' },
         });
       }
 

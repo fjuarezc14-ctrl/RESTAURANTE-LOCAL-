@@ -6,9 +6,12 @@
 import { COMPANY_CONFIG, ORDEN_PRIORIDADES_CATEGORIAS } from '../../../config/company';
 import { api } from '../../../api';
 import { getComboConfig, tieneComplementos } from '../../../utils/combos';
-import { isMenuProduct, pasosProductoSalon } from '../utils/pasosProducto';
+import { isMenuProduct, pasosProducto } from '../../../utils/pasosProducto';
 import { matchProductSemantic, ordenarCategorias, relevanciaBusqueda } from '../../../utils/busquedaProductos';
 import { useRef, useState } from 'react';
+
+// Respuestas del backend que piden el PIN de un Administrador o Cajero para anular
+const PIDE_AUTORIZACION = ['LIMITE_ANULACION_VENCIDO', 'AUTORIZACION_REQUERIDA'];
 
 export function usePedidoMesa({
   aviso,
@@ -112,7 +115,7 @@ export function usePedidoMesa({
     setModalOpen(true);
   };
 
-  const getProductSteps = (prod, currentSelections = {}) => pasosProductoSalon(prod, currentSelections);
+  const getProductSteps = (prod, currentSelections = {}) => pasosProducto(prod, currentSelections, productos);
 
   const agregarAlTicket = (prod) => {
     if (!prod) return;
@@ -227,27 +230,36 @@ export function usePedidoMesa({
     setMesaActual(null);
     setCancelMotivo('');
 
-    try {
-      const result = await api.cancelarPedido(pedidoId, {
-        canceladoPor,
-        motivo: motivoFinal,
-        force: isForce,
-      });
-      if (result.error) throw new Error(result.error);
-      
-      await fetchMesas();
-      
-      if (result.mesaLiberada) {
-        aviso.exito(`Pedido cancelado correctamente. Mesa ${mesaNum} ha sido liberada.`);
-      } else {
-        aviso.exito(`Pedido adicional cancelado correctamente. Mesa ${mesaNum} sigue activa con consumos previos.`);
+    const enviar = async (pinAutorizacion) => {
+      try {
+        const result = await api.cancelarPedido(pedidoId, {
+          canceladoPor,
+          motivo: motivoFinal,
+          force: isForce,
+          ...(pinAutorizacion ? { autorizacion: { pin: pinAutorizacion } } : {}),
+        });
+        if (result.error) throw new Error(result.error);
+
+        await fetchMesas();
+
+        if (result.mesaLiberada) {
+          aviso.exito(`Pedido cancelado correctamente. Mesa ${mesaNum} ha sido liberada.`);
+        } else {
+          aviso.exito(`Pedido adicional cancelado correctamente. Mesa ${mesaNum} sigue activa con consumos previos.`);
+        }
+      } catch (err) {
+        fetchMesas(); // Revertir a la realidad de la BD
+        // Pasaron los 5 minutos o hace falta autorización: se pide el PIN y se reintenta
+        if (!pinAutorizacion && PIDE_AUTORIZACION.includes(err.codigo)) {
+          requestSupervisorAuth(`Autorizar anulación · Mesa ${mesaNum}`, (supervisor) => enviar(supervisor.pin));
+          return;
+        }
+        aviso.error('Error al cancelar: ' + err.message);
+      } finally {
+        setCancelandoPedido(false);
       }
-    } catch (err) {
-      aviso.error('Error al cancelar: ' + err.message);
-      fetchMesas(); // Revertir a la realidad de la BD si ocurrió error
-    } finally {
-      setCancelandoPedido(false);
-    }
+    };
+    await enviar(supervisorAprobador?.pin);
   };
 
   const handleCancelarItem = (item, supervisor) => {
@@ -255,7 +267,7 @@ export function usePedidoMesa({
     setSupervisorItem(supervisor);
   };
 
-  const confirmarCancelacionItem = async ({ cantidad, motivo }) => {
+  const confirmarCancelacionItem = async ({ cantidad, motivo }, pinAutorizacion = supervisorItem?.pin) => {
     if (!itemACancelar) return;
     setCancelandoItem(true);
 
@@ -275,6 +287,7 @@ export function usePedidoMesa({
         motivo,
         canceladoPor,
         force: isForce,
+        ...(pinAutorizacion ? { autorizacion: { pin: pinAutorizacion } } : {}),
       });
       if (res.error) throw new Error(res.error);
 
@@ -308,6 +321,11 @@ export function usePedidoMesa({
         fetchMesas();
       }
     } catch (err) {
+      // Pasaron los 5 minutos o el plato ya estaba listo: se pide el PIN y se reintenta
+      if (!pinAutorizacion && PIDE_AUTORIZACION.includes(err.codigo)) {
+        requestSupervisorAuth(`Anular "${nombreProd}"`, (supervisor) => confirmarCancelacionItem({ cantidad, motivo }, supervisor.pin));
+        return;
+      }
       aviso.error("Error al anular ítem: " + err.message);
     } finally {
       setCancelandoItem(false);
@@ -326,7 +344,8 @@ export function usePedidoMesa({
       
       // Autorización exitosa! Ejecutar el callback
       if (typeof authModal.callback === 'function') {
-        authModal.callback(res);
+        // El PIN va con la respuesta: el backend lo vuelve a validar al anular
+        authModal.callback({ ...res, pin });
       }
       setAuthModal({ open: false, pin: '', error: '', callback: null, promptText: '' });
     } catch (err) {

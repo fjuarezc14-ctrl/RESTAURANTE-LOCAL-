@@ -1,3 +1,4 @@
+// @ts-check
 // ============================================================
 // VALIDACIÓN DE ENTRADA CON ZOD (esquemas en shared/esquemas/)
 // Un error responde VALIDACION con el campo exacto: { error: { codigo, mensaje, campo } }

@@ -1,8 +1,9 @@
 // ================================================================
-// PASOS DEL ASISTENTE DE OPCIONES EN EL SALÓN (comanda del mozo)
-// Ojo: no es igual al de Caja (modulos/caja/utils/pasosProducto.js).
+// PASOS DEL ASISTENTE DE OPCIONES (uno solo para Caja y Salón)
+// Primero mandan las opciones configuradas en la Carta; lo demás son pasos de respaldo
+// para cartas antiguas sin configurar.
 // ================================================================
-import { getComboConfig, parsePasosOpciones, pasoComplementos } from '../../../utils/combos';
+import { getComboConfig, parsePasosOpciones, pasoComplementos } from './combos';
 
 export function isMenuProduct(prod) {
   if (!prod) return false;
@@ -11,7 +12,9 @@ export function isMenuProduct(prod) {
   return cat === 'menú' || cat === 'menu' || cat.includes('menú') || cat.includes('menu') || nom.startsWith('menú') || nom.startsWith('menu');
 }
 
-export function pasosProductoSalon(prod, currentSelections = {}) {
+// productosMenu: la carta completa; sirve para armar las variantes de Tallarines Verdes
+// cuando el producto agrupado no las trae.
+export function pasosProducto(prod, currentSelections = {}, productosMenu = []) {
   if (!prod) return [];
 
   // 1. OPCIONES Y MODIFICADORES PERSONALIZADOS DEL CLIENTE (MÁXIMA PRIORIDAD)
@@ -22,11 +25,14 @@ export function pasosProductoSalon(prod, currentSelections = {}) {
   if (pasoAcomp) return [pasoAcomp];
 
   // 2. Variantes agrupadas de carne (Tallarines Verdes)
-  if (prod.esAgrupado && Array.isArray(prod.variantes)) {
+  if (prod.esAgrupado) {
+    const variantes = prod.variantes?.length > 0
+      ? prod.variantes
+      : productosMenu.filter(p => (p.categoria === 'Tallarines Verdes' || /tallar[ií]n(es)?\s+verde(s)?/i.test(p.nombre || '')) && p.activo !== false);
     return [{
       name: "Elige la Variante de Carne",
       key: "producto_variante",
-      options: prod.variantes.map(v => ({
+      options: variantes.map(v => ({
         label: `${v.nombre.replace(/tallar[ií]n(es)?\s+verde(s)?\s*(con\s*)?/i, 'Con ')} (S/ ${v.precio.toFixed(2)})`,
         value: v
       }))
@@ -100,9 +106,9 @@ export function pasosProductoSalon(prod, currentSelections = {}) {
       name: "Elige la Bebida",
       key: "bebida",
       options: [
-        { label: "Chicha Morada - Vaso", value: "Chicha Morada - Vaso" },
-        { label: "Limonada - Vaso", value: "Limonada - Vaso" },
-        { label: "Gaseosa Chiki", value: "Gaseosa Mediana" },
+        { label: "Chicha Morada (Vaso)", value: "Chicha Morada - Vaso" },
+        { label: "Limonada (Vaso)", value: "Limonada - Vaso" },
+        { label: "Gaseosa Chiki", value: "Gaseosa Chiki" },
         { label: "Omitir (Sin Bebida)", value: "Sin Bebida" }
       ]
     });

@@ -476,12 +476,6 @@ export default function ModalPedidoMesa({
                 </h3>
               </div>
               <div className="flex items-center gap-1.5">
-                {mesa?.pedidoData?.estadoEnsalada === 'Pendiente' && (
-                  <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded uppercase animate-pulse">🥗 Ens: Pend.</span>
-                )}
-                {mesa?.pedidoData?.estadoEnsalada === 'Listo' && (
-                  <span className="text-[9px] font-black bg-blue-100 text-blue-800 border border-blue-300 px-2 py-0.5 rounded uppercase">🥗 Ens: Listo</span>
-                )}
                 <span className={`text-[10px] font-bold px-2 py-1 rounded shadow-sm border border-slate-200 uppercase ${badgeEstado} ${mesa?.estado === 'Servido' ? 'animate-pulse' : ''}`}>
                   {badgeTexto}
                 </span>

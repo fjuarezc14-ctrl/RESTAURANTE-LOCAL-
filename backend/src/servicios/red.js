@@ -1,3 +1,4 @@
+// @ts-check
 // Direcciones IP del servidor para conectar celulares y tablets
 const os = require('os');
 

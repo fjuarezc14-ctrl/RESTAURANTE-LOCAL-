@@ -344,7 +344,8 @@ router.get('/api/reportes/pollos', requierePermiso('Reportes'), validar({ query:
     const pedidos = await prisma.pedido.findMany({
       where: {
         estado: 'Cobrado',
-        createdAt: filtroFecha
+        // Por la fecha del cobro (como el balance); los pedidos viejos sin cobradoEn, por su creación
+        OR: [{ cobradoEn: filtroFecha }, { cobradoEn: null, createdAt: filtroFecha }]
       },
       include: {
         items: {
@@ -474,7 +475,8 @@ router.get('/api/reportes/rotacion', requierePermiso('Reportes', 'Dashboard'), v
     const pedidos = await prisma.pedido.findMany({
       where: {
         estado: 'Cobrado',
-        createdAt: filtroFecha
+        // Por la fecha del cobro (como el balance); los pedidos viejos sin cobradoEn, por su creación
+        OR: [{ cobradoEn: filtroFecha }, { cobradoEn: null, createdAt: filtroFecha }]
       },
       include: {
         items: {

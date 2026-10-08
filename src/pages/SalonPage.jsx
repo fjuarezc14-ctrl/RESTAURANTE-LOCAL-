@@ -7,15 +7,15 @@ import {
   ModalCancelarPedido,
   ModalAutorizacionPin,
   ModalUnionMesas,
-  ModalTodasCategoriasSalon,
   ModalPrecuentaMesa,
   ModalPedidoMesa,
   DrawerBandejaDespacho,
   ModalAdminMesas,
   ModalCancelarItem,
 } from '../modulos/salon/modales';
+import ModalTodasCategorias from '../components/modales/ModalTodasCategorias';
 import AvisosFlotantes from '../modulos/salon/componentes/AvisosFlotantes';
-import ModalOpcionesProducto from '../modulos/caja/modales/ModalOpcionesProducto';
+import { ModalOpcionesProducto } from '../components/modales';
 import { playChimeNotification } from '../modulos/salon/utils/sonido';
 import { avisosDePlatosListos } from '../modulos/salon/utils/avisosListos';
 import { usePedidoMesa } from '../modulos/salon/hooks/usePedidoMesa';
@@ -637,7 +637,7 @@ export default function SalonPage({ currentUser }) {
       />
 
       {/* MODAL: TODAS LAS CATEGORÍAS */}
-      <ModalTodasCategoriasSalon
+      <ModalTodasCategorias
         abierto={categoriasModalOpen}
         onCerrar={() => setCategoriasModalOpen(false)}
         categorias={categoriasOrdenadas}
@@ -647,6 +647,7 @@ export default function SalonPage({ currentUser }) {
           setCategoriasModalOpen(false);
         }}
         contarProductos={contarProductosCategoria}
+        tema="oscuro"
       />
 
       {!modalOpen && !optionsModalOpen && !cancelModal && !authModal.open && (

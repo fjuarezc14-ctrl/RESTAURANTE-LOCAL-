@@ -2,16 +2,17 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { calcularSubtotalEIgv, limpiarCodigoPago, verificarPagoMixto } = require('../servicios/dinero');
-const { evaluarEstadoEnsalada, expandPedidoItemsForDb } = require('../servicios/pedidos');
+const { expandPedidoItemsForDb } = require('../servicios/pedidos');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { pedidoLlevar } = require('../../shared/esquemas/pedidos.js');
 const { requierePermiso } = require('../middlewares/permisos');
+const { idempotente } = require('../middlewares/idempotencia');
 
 const router = express.Router();
 validarIdsEnUrl(router);
 
-router.post('/api/pedidos/llevar', requierePermiso('Caja'), validar({ body: pedidoLlevar }), async (req, res, next) => {
+router.post('/api/pedidos/llevar', requierePermiso('Caja'), idempotente, validar({ body: pedidoLlevar }), async (req, res, next) => {
   const {
     codigoPedidosYa,
     cajero,
@@ -70,7 +71,6 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), validar({ body: pedi
     }
 
     const expandedItems = await expandPedidoItemsForDb(items);
-    const finalEstadoEnsalada = await evaluarEstadoEnsalada(items);
 
     const { subtotal, igv } = calcularSubtotalEIgv(grandTotal);
 
@@ -118,7 +118,6 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), validar({ body: pedi
           mesero: String(cajero),
           total: grandTotal,
           estado: 'Cocina', // Todos van a Cocina primero para que la cocina/barra los prepare
-          estadoEnsalada: finalEstadoEnsalada,
           tipoEntrega: isOwnDelivery ? 'delivery' : 'llevar',
           codigoPedidosYa: codigoPedidosYa ? String(codigoPedidosYa) : null,
           items: {
@@ -187,6 +186,8 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), validar({ body: pedi
         },
       });
 
+      // Delivery se cobra al tomarlo: esa es su fecha de cobro para los reportes
+      await tx.pedido.update({ where: { id: pedidoCreado.id }, data: { cobradoEn: ventaCreada.createdAt } });
       return { pedido: pedidoCreado, venta: ventaCreada };
     });
 
@@ -294,7 +295,6 @@ router.put('/api/pedidos/llevar/:id', requierePermiso('Caja'), validar({ body: p
     const descuentoFinal = finalMetodoPago === 'Cortesía' ? itemsBruto : descuentoMonto;
 
     const expandedItems = await expandPedidoItemsForDb(items);
-    const finalEstadoEnsalada = await evaluarEstadoEnsalada(items);
 
     // 1. Obtener pedido actual
     const pedido = await prisma.pedido.findUnique({
@@ -358,7 +358,6 @@ router.put('/api/pedidos/llevar/:id', requierePermiso('Caja'), validar({ body: p
           mesero: String(cajero),
           total: grandTotal,
           estado: 'Cocina', // Al modificarlo, debe volver a cocina para preparación/validación
-          estadoEnsalada: finalEstadoEnsalada,
           tipoEntrega: isOwnDelivery ? 'delivery' : 'llevar',
           codigoPedidosYa: codigoPedidosYa ? String(codigoPedidosYa) : null
         }

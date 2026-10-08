@@ -64,7 +64,7 @@ export function Badge({ className, ...props }) {
 }
 
 // Diálogo modal: cierra con Escape o tocando el fondo (desactivable en formularios largos)
-export function Dialog({ open, onClose, closeOnBackdrop = true, className, children }) {
+export function Dialog({ open, onClose, closeOnBackdrop = true, capa = 'z-50', className, children }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
@@ -75,7 +75,7 @@ export function Dialog({ open, onClose, closeOnBackdrop = true, className, child
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/60 backdrop-blur-sm p-0 sm:p-4 animate-fade-in"
+      className={cn('fixed inset-0 flex items-end sm:items-center justify-center bg-slate-950/60 backdrop-blur-sm p-0 sm:p-4 animate-fade-in', capa)}
       onMouseDown={(e) => { if (closeOnBackdrop && e.target === e.currentTarget) onClose?.(); }}
     >
       <div className={cn('relative flex max-h-[95vh] w-full flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl', className)}>

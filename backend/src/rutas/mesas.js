@@ -1,7 +1,7 @@
 // Rutas de mesas del salón: crear, unir, separar y enviar pedidos a cocina
 const express = require('express');
 const { prisma } = require('../db');
-const { evaluarEstadoEnsalada, expandPedidoItemsForDb } = require('../servicios/pedidos');
+const { expandPedidoItemsForDb } = require('../servicios/pedidos');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { mesaNueva, mesaRenumerar, mesaSeparar, mesaUnir, pedidoMesa } = require('../../shared/esquemas/pedidos.js');
@@ -58,14 +58,6 @@ router.get('/api/mesas', requierePermiso('Salon', 'Caja', 'Dashboard'), async (r
       const primerPedido = pedidosActivos[0];
       const ultimoPedido = pedidosActivos[pedidosActivos.length - 1];
 
-      let consolidadoEstadoEnsalada = 'No Aplica';
-      const estadosEnsaladas = pedidosActivos.map(p => p.estadoEnsalada);
-      if (estadosEnsaladas.includes('Pendiente')) {
-        consolidadoEstadoEnsalada = 'Pendiente';
-      } else if (estadosEnsaladas.includes('Listo')) {
-        consolidadoEstadoEnsalada = 'Listo';
-      }
-
       return {
         num: m.numero,
         estado: m.estado,
@@ -80,7 +72,6 @@ router.get('/api/mesas', requierePermiso('Salon', 'Caja', 'Dashboard'), async (r
           pedidoCreadoEn: ultimoPedido.createdAt.toISOString(),
           adicional: pedidosActivos.length > 1,
           items: todosLosItems,
-          estadoEnsalada: consolidadoEstadoEnsalada,
         },
       };
     });
@@ -295,7 +286,6 @@ router.post('/api/mesas/:num/pedido', requierePermiso('Salon'), validar({ body: 
     const safeTotal = isNaN(parseFloat(total)) ? 0 : parseFloat(total);
 
     const expandedItems = await expandPedidoItemsForDb(itemsNuevos);
-    const finalEstadoEnsalada = await evaluarEstadoEnsalada(itemsNuevos);
 
     const pedido = await prisma.$transaction(async (tx) => {
       const p = await tx.pedido.create({
@@ -305,7 +295,6 @@ router.post('/api/mesas/:num/pedido', requierePermiso('Salon'), validar({ body: 
           total: safeTotal,
           adicional: adicional || false,
           estado: 'Cocina',
-          estadoEnsalada: finalEstadoEnsalada,
           items: {
             create: expandedItems.map(i => ({
               productoId: i.productoId,

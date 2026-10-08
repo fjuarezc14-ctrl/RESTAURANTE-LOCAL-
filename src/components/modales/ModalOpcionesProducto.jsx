@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Sparkles } from 'lucide-react';
-import { useAviso } from '../../../components/ui';
-import { resolverComplementos } from '../../../utils/combos';
+import { useAviso } from '../ui';
+import { resolverComplementos } from '../../utils/combos';
 
 /**
  * Modal interactivo para selección de opciones, variantes de carne y complementos de un producto

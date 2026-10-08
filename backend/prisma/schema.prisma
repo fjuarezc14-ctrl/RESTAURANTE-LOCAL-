@@ -14,23 +14,23 @@ datasource db {
 // USUARIOS Y ROLES
 // ============================================================
 model Usuario {
-  id        Int      @id @default(autoincrement())
-  nombre    String
-  rol       String   // "Administrador", "Cajero", "Mozo", "Cocinero", "Contador"
-  pin       String?  // texto plano heredado: al arrancar se convierte a pinHash y se vacía
-  pinHash   String?  // HMAC-SHA256(PIN_SECRET, pin): permite buscar por PIN sin guardarlo
-  permisos  String[] // ["Dashboard", "Salon", "Cocina", "Barra", "Caja", ...]
-  activo    Boolean  @default(true)
-  creadoEn  DateTime @default(now())
+  id       Int      @id @default(autoincrement())
+  nombre   String
+  rol      String // "Administrador", "Cajero", "Mozo", "Cocinero", "Contador"
+  pin      String? // texto plano heredado: al arrancar se convierte a pinHash y se vacía
+  pinHash  String? // HMAC-SHA256(PIN_SECRET, pin): permite buscar por PIN sin guardarlo
+  permisos String[] // ["Dashboard", "Salon", "Cocina", "Barra", "Caja", ...]
+  activo   Boolean  @default(true)
+  creadoEn DateTime @default(now())
 
   // Activación de dispositivos (usuario o correo + contraseña)
   usuario        String? @unique
   correo         String? @unique
   contrasenaHash String? // bcrypt
-  inactividadMin Int?    // minutos sin actividad para cerrar la sesión; null = sin límite
+  inactividadMin Int? // minutos sin actividad para cerrar la sesión; null = sin límite
 
-  Sesiones               Sesion[]
-  DispositivosActivados  Dispositivo[]
+  Sesiones              Sesion[]
+  DispositivosActivados Dispositivo[]
 }
 
 // ============================================================
@@ -40,8 +40,8 @@ model Usuario {
 model Dispositivo {
   id          Int       @id @default(autoincrement())
   tokenHash   String    @unique
-  nombre      String    // "Tablet caja", lo escribe quien activa
-  agente      String    // user-agent, para reconocerlo en la lista
+  nombre      String // "Tablet caja", lo escribe quien activa
+  agente      String // user-agent, para reconocerlo en la lista
   activador   Usuario   @relation(fields: [activadoPor], references: [id])
   activadoPor Int
   creadoEn    DateTime  @default(now())
@@ -62,7 +62,7 @@ model Sesion {
   creadaEn        DateTime    @default(now())
   ultimaActividad DateTime    @default(now())
   cerradaEn       DateTime?
-  motivoCierre    String?     // LOGOUT | INACTIVIDAD | REVOCADA | USUARIO_DESACTIVADO | PIN_CAMBIADO | OTRA_SESION
+  motivoCierre    String? // LOGOUT | INACTIVIDAD | REVOCADA | USUARIO_DESACTIVADO | PIN_CAMBIADO | OTRA_SESION
 
   @@index([usuarioId])
   @@index([dispositivoId])
@@ -72,17 +72,17 @@ model Sesion {
 // CLIENTES CON CRÉDITO
 // ============================================================
 model Cliente {
-  id          Int      @id @default(autoincrement())
-  nombre      String
-  tipoDoc     String   @default("DNI") // "DNI" | "RUC"
-  numDoc      String?
-  telefono    String?
-  direccion   String?
-  esTrabajador Boolean @default(false) // true si es personal interno
-  tieneCredito Boolean @default(true)  // true: cuenta corriente de crédito/fiado, false: cliente de consumo general
-  usuarioId   Int?     // Si esTrabajador, referencia al Usuario
-  activo      Boolean  @default(true)
-  creadoEn    DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  tipoDoc      String   @default("DNI") // "DNI" | "RUC"
+  numDoc       String?
+  telefono     String?
+  direccion    String?
+  esTrabajador Boolean  @default(false) // true si es personal interno
+  tieneCredito Boolean  @default(true) // true: cuenta corriente de crédito/fiado, false: cliente de consumo general
+  usuarioId    Int? // Si esTrabajador, referencia al Usuario
+  activo       Boolean  @default(true)
+  creadoEn     DateTime @default(now())
 
   AbonosCredito AbonoCredito[]
 
@@ -97,17 +97,17 @@ model Cliente {
 // ABONOS A CRÉDITOS
 // ============================================================
 model AbonoCredito {
-  id          Int      @id @default(autoincrement())
-  cliente     Cliente  @relation(fields: [clienteId], references: [id])
-  clienteId   Int
-  monto       Decimal @db.Decimal(10, 2)
-  metodoPago  String   @default("Efectivo") // "Efectivo" | "Tarjeta" | "Yape" | "Mixto"
-  montoEfectivo Decimal @db.Decimal(10, 2) @default(0)
-  montoTarjeta  Decimal @db.Decimal(10, 2) @default(0)
-  montoYape     Decimal @db.Decimal(10, 2) @default(0)
+  id            Int      @id @default(autoincrement())
+  cliente       Cliente  @relation(fields: [clienteId], references: [id])
+  clienteId     Int
+  monto         Decimal  @db.Decimal(10, 2)
+  metodoPago    String   @default("Efectivo") // "Efectivo" | "Tarjeta" | "Yape" | "Mixto"
+  montoEfectivo Decimal  @default(0) @db.Decimal(10, 2)
+  montoTarjeta  Decimal  @default(0) @db.Decimal(10, 2)
+  montoYape     Decimal  @default(0) @db.Decimal(10, 2)
   registradoPor String
-  nota        String?
-  creadoEn    DateTime @default(now())
+  nota          String?
+  creadoEn      DateTime @default(now())
 
   @@index([clienteId])
   @@index([creadoEn])
@@ -117,19 +117,19 @@ model AbonoCredito {
 // CARTA / PRODUCTOS
 // ============================================================
 model Producto {
-  id        Int      @id @default(autoincrement())
-  nombre    String
-  categoria String   // "Pollos a la Brasa", "Parrillas y Cortes", "Porciones y Piqueos", "Parrilladas Mixtas", "Platos Criollos", "Tallarines Verdes", "Ensaladas", "Guarniciones", "Combos", "Bebidas y Refrescos", "Cervezas", "Bar y Cocteles", "Postres"
-  precio    Decimal @db.Decimal(10, 2)
-  tipoStock String   @default("ilimitado") // "ilimitado" | "limitado"
-  stock     Int      @default(0)
-  activo    Boolean  @default(true)
-  requiereGuarnicion Boolean @default(false)
-  opcionesConfig String? // JSON con pasos de opciones/combos: [{"name": "...", "key": "...", "options": [...]}]
-  componentes    String? // JSON de combo armado con productos de la carta: [{"productoId": 1, "cantidad": 2}]
-  complementos   String? // JSON de acompañamientos: [{"nombre": "Papas", "incluido": true, "precio": 0}]
-  creadoEn  DateTime @default(now())
-  
+  id                 Int      @id @default(autoincrement())
+  nombre             String
+  categoria          String // "Pollos a la Brasa", "Parrillas y Cortes", "Porciones y Piqueos", "Parrilladas Mixtas", "Platos Criollos", "Tallarines Verdes", "Ensaladas", "Guarniciones", "Combos", "Bebidas y Refrescos", "Cervezas", "Bar y Cocteles", "Postres"
+  precio             Decimal  @db.Decimal(10, 2)
+  tipoStock          String   @default("ilimitado") // "ilimitado" | "limitado"
+  stock              Int      @default(0)
+  activo             Boolean  @default(true)
+  requiereGuarnicion Boolean  @default(false)
+  opcionesConfig     String? // JSON con pasos de opciones/combos: [{"name": "...", "key": "...", "options": [...]}]
+  componentes        String? // JSON de combo armado con productos de la carta: [{"productoId": 1, "cantidad": 2}]
+  complementos       String? // JSON de acompañamientos: [{"nombre": "Papas", "incluido": true, "precio": 0}]
+  creadoEn           DateTime @default(now())
+
   ItemPedido ItemPedido[]
 }
 
@@ -148,54 +148,55 @@ model Categoria {
 // MESAS Y PEDIDOS
 // ============================================================
 model Mesa {
-  id      Int      @id @default(autoincrement())
-  numero  Int      @unique
-  estado  String   @default("Libre") // "Libre", "Cocina", "Servido"
-  
+  id     Int    @id @default(autoincrement())
+  numero Int    @unique
+  estado String @default("Libre") // "Libre", "Cocina", "Servido"
+
   Pedidos Pedido[]
 }
 
 model Pedido {
-  id        Int          @id @default(autoincrement())
-  mesa      Mesa?        @relation(fields: [mesaId], references: [id], onDelete: SetNull)
-  mesaId    Int?         // Opcional: null para pedidos de delivery
-  mesero    String
-  estado          String       @default("Cocina") // "Cocina", "Servido", "Cobrado", "Cancelado"
-  estadoEnsalada  String       @default("No Aplica") // "Pendiente", "Listo", "No Aplica"
-  total           Decimal @db.Decimal(10, 2)
-  adicional       Boolean      @default(false)
-  createdAt       DateTime     @default(now())
+  id             Int      @id @default(autoincrement())
+  mesa           Mesa?    @relation(fields: [mesaId], references: [id], onDelete: SetNull)
+  mesaId         Int? // Opcional: null para pedidos de delivery
+  mesero         String
+  estado         String   @default("Cocina") // "Cocina", "Servido", "Cobrado", "Cancelado"
+  total          Decimal  @db.Decimal(10, 2)
+  adicional      Boolean  @default(false)
+  createdAt      DateTime @default(now())
 
   // --- Delivery / PedidosYa ---
-  tipoEntrega      String    @default("salon")  // "salon" | "llevar"
-  codigoPedidosYa  String?                      // "FG-4821"
+  tipoEntrega     String  @default("salon") // "salon" | "llevar"
+  codigoPedidosYa String? // "FG-4821"
 
   // --- Auditoría de cancelación ---
-  canceladoPor   String?
-  motivoCancela  String?
-  canceladoEn    DateTime?
+  canceladoPor  String?
+  motivoCancela String?
+  canceladoEn   DateTime?
+  cobradoEn     DateTime? // cuándo se cobró (los reportes de ventas cuentan por esta fecha, no por la de creación)
 
-  items  ItemPedido[]
-  Venta  Venta?
+  items ItemPedido[]
+  Venta Venta?
 
   @@index([mesaId, estado])
   @@index([createdAt])
   @@index([estado])
+  @@index([cobradoEn])
 }
 
 model ItemPedido {
-  id         Int      @id @default(autoincrement())
-  pedido     Pedido   @relation(fields: [pedidoId], references: [id])
-  pedidoId   Int
-  producto   Producto @relation(fields: [productoId], references: [id])
-  productoId Int
-  nombre     String   // Guardamos el nombre al momento de la venta
-  precio     Decimal @db.Decimal(10, 2)
-  cantidad   Int
-  historial  Boolean  @default(false)
-  entregado  Boolean  @default(false)
-  notas      String?
-  esComponente Boolean @default(false) // parte incluida de un combo: no se cobra ni se lista en el ticket
+  id           Int      @id @default(autoincrement())
+  pedido       Pedido   @relation(fields: [pedidoId], references: [id])
+  pedidoId     Int
+  producto     Producto @relation(fields: [productoId], references: [id])
+  productoId   Int
+  nombre       String // Guardamos el nombre al momento de la venta
+  precio       Decimal  @db.Decimal(10, 2)
+  cantidad     Int
+  historial    Boolean  @default(false)
+  entregado    Boolean  @default(false)
+  notas        String?
+  esComponente Boolean  @default(false) // parte incluida de un combo: no se cobra ni se lista en el ticket
 
   @@index([pedidoId])
   @@index([productoId])
@@ -205,40 +206,40 @@ model ItemPedido {
 // VENTAS / CAJA
 // ============================================================
 model Venta {
-  id              Int      @id @default(autoincrement())
-  pedido          Pedido   @relation(fields: [pedidoId], references: [id])
-  pedidoId        Int      @unique
-  tipoComprobante String   // "Boleta", "Factura", "Ticket"
-  numDocumento    String?  // DNI o RUC del cliente
-  nombreCliente   String?
-  clienteDireccion String?
-  total           Decimal @db.Decimal(10, 2)
-  igv             Decimal @db.Decimal(10, 2)
-  subtotal        Decimal @db.Decimal(10, 2)
-  metodoPago      String   @default("Efectivo") // "Efectivo", "Tarjeta", "Yape", "PedidosYa", "Crédito", "Mixto"
-  montoEfectivo   Decimal @db.Decimal(10, 2) @default(0)
-  montoTarjeta    Decimal @db.Decimal(10, 2) @default(0)
-  montoYape       Decimal @db.Decimal(10, 2) @default(0)
-  montoCredito    Decimal @db.Decimal(10, 2) @default(0) // Monto cargado a crédito
-  clienteCreditoId Int?    // Cliente al que se le cargó el crédito
-  codigoPago      String?  // Nº de operación Yape/Plin o voucher de tarjeta
-  estadoNubefact  String   @default("PENDIENTE") // Obsoleto (usar estadoSunat en su lugar)
-  estadoSunat     String   @default("PENDIENTE")
-  serie           String?  // "F001" o "B001"
-  numero          Int?     // Número correlativo asignado
-  urlPdf          String?  // Enlace del PDF del comprobante
-  urlXml          String?  // Enlace del XML del comprobante
-  cajeroNombre    String?  // Nombre del cajero en turno que procesó el cobro
+  id                Int       @id @default(autoincrement())
+  pedido            Pedido    @relation(fields: [pedidoId], references: [id])
+  pedidoId          Int       @unique
+  tipoComprobante   String // "Boleta", "Factura", "Ticket"
+  numDocumento      String? // DNI o RUC del cliente
+  nombreCliente     String?
+  clienteDireccion  String?
+  total             Decimal   @db.Decimal(10, 2)
+  igv               Decimal   @db.Decimal(10, 2)
+  subtotal          Decimal   @db.Decimal(10, 2)
+  metodoPago        String    @default("Efectivo") // "Efectivo", "Tarjeta", "Yape", "PedidosYa", "Crédito", "Mixto"
+  montoEfectivo     Decimal   @default(0) @db.Decimal(10, 2)
+  montoTarjeta      Decimal   @default(0) @db.Decimal(10, 2)
+  montoYape         Decimal   @default(0) @db.Decimal(10, 2)
+  montoCredito      Decimal   @default(0) @db.Decimal(10, 2) // Monto cargado a crédito
+  clienteCreditoId  Int? // Cliente al que se le cargó el crédito
+  codigoPago        String? // Nº de operación Yape/Plin o voucher de tarjeta
+  estadoNubefact    String    @default("PENDIENTE") // Obsoleto (usar estadoSunat en su lugar)
+  estadoSunat       String    @default("PENDIENTE")
+  serie             String? // "F001" o "B001"
+  numero            Int? // Número correlativo asignado
+  urlPdf            String? // Enlace del PDF del comprobante
+  urlXml            String? // Enlace del XML del comprobante
+  cajeroNombre      String? // Nombre del cajero en turno que procesó el cobro
   // --- Ofertas / Descuentos ---
-  ofertaDescripcion  String?  // Nombre de la oferta aplicada, si hubo
-  descuentoAplicado  Decimal @db.Decimal(10, 2) @default(0) // Monto total descontado en esta venta
+  ofertaDescripcion String? // Nombre de la oferta aplicada, si hubo
+  descuentoAplicado Decimal   @default(0) @db.Decimal(10, 2) // Monto total descontado en esta venta
   // --- Anulación / Devolución ---
-  anulado            Boolean   @default(false)
-  motivoAnulacion    String?
-  anuladoPor         String?
-  anuladoEn          DateTime?
-  montoOriginal      Decimal? @db.Decimal(10, 2) // Guarda el monto cobrado originalmente antes de ser devuelto
-  createdAt          DateTime @default(now())
+  anulado           Boolean   @default(false)
+  motivoAnulacion   String?
+  anuladoPor        String?
+  anuladoEn         DateTime?
+  montoOriginal     Decimal?  @db.Decimal(10, 2) // Guarda el monto cobrado originalmente antes de ser devuelto
+  createdAt         DateTime  @default(now())
 
   @@index([createdAt])
   @@index([estadoSunat])
@@ -251,24 +252,25 @@ model Venta {
 // COMPRAS / GASTOS (RCE - SUNAT)
 // ============================================================
 model Compra {
-  id             Int       @id @default(autoincrement())
-  fecha          DateTime  @default(now())
-  proveedor      String
-  ruc            String?
-  tipoDocumento  String    @default("Factura") // "Factura", "Boleta", "Nota de Crédito", "Nota de Débito"
-  serieNumero    String?
-  baseImponible  Decimal @db.Decimal(10, 2)
-  igv            Decimal @db.Decimal(10, 2)
-  total          Decimal @db.Decimal(10, 2)
-  xmlData        String?
-  origenCarga    String    @default("manual") // "xml", "manual", "sunat"
-  categoria      String?   // "Insumos y Alimentos", "Bebidas", "Gas y Carbón", "Limpieza e Higiene", "Personal", "Otros"
-  fechaEmision   DateTime? // Fecha real de la factura emitida por el proveedor
-  urlPdf         String?   // URL de descarga del PDF desde apisunat.pe
-  urlXml         String?   // URL de descarga del XML desde apisunat.pe
-  metodoPago     String    @default("Efectivo") // "Efectivo", "Tarjeta", "Yape", "Crédito", "Mixto"
-  creadoEn       DateTime  @default(now())
+  id            Int       @id @default(autoincrement())
+  fecha         DateTime  @default(now())
+  proveedor     String
+  ruc           String?
+  tipoDocumento String    @default("Factura") // "Factura", "Boleta", "Nota de Crédito", "Nota de Débito"
+  serieNumero   String?
+  baseImponible Decimal   @db.Decimal(10, 2)
+  igv           Decimal   @db.Decimal(10, 2)
+  total         Decimal   @db.Decimal(10, 2)
+  xmlData       String?
+  origenCarga   String    @default("manual") // "xml", "manual", "sunat"
+  categoria     String? // "Insumos y Alimentos", "Bebidas", "Gas y Carbón", "Limpieza e Higiene", "Personal", "Otros"
+  fechaEmision  DateTime? // Fecha real de la factura emitida por el proveedor
+  urlPdf        String? // URL de descarga del PDF desde apisunat.pe
+  urlXml        String? // URL de descarga del XML desde apisunat.pe
+  metodoPago    String    @default("Efectivo") // "Efectivo", "Tarjeta", "Yape", "Crédito", "Mixto"
+  creadoEn      DateTime  @default(now())
 
+  @@index([creadoEn])
   @@index([fecha])
   @@index([fechaEmision])
 }
@@ -277,36 +279,36 @@ model Compra {
 // OFERTAS POR TEMPORADA
 // ============================================================
 model Oferta {
-  id              Int      @id @default(autoincrement())
-  nombre          String   // "Día del Maestro - 20% Bebidas"
-  descripcion     String?
-  tipoDescuento   String   // "porcentaje" | "monto_fijo"
-  valorDescuento  Decimal @db.Decimal(10, 2) // ej. 20.0 para 20%, o 5.0 para S/5 fijo
-  categorias      String[] // Categorías afectadas, ej. ["Bebidas y Refrescos"]
-  activa          Boolean  @default(false)
-  fechaInicio     DateTime?
-  fechaFin        DateTime?
-  creadoPor       String
-  creadoEn        DateTime @default(now())
+  id             Int       @id @default(autoincrement())
+  nombre         String // "Día del Maestro - 20% Bebidas"
+  descripcion    String?
+  tipoDescuento  String // "porcentaje" | "monto_fijo"
+  valorDescuento Decimal   @db.Decimal(10, 2) // ej. 20.0 para 20%, o 5.0 para S/5 fijo
+  categorias     String[] // Categorías afectadas, ej. ["Bebidas y Refrescos"]
+  activa         Boolean   @default(false)
+  fechaInicio    DateTime?
+  fechaFin       DateTime?
+  creadoPor      String
+  creadoEn       DateTime  @default(now())
 }
 
 // ============================================================
 // CONFIGURACIÓN DINÁMICA DE LA EMPRESA
 // ============================================================
 model EmpresaConfig {
-  id           Int      @id @default(autoincrement())
-  name         String   @default("Valetec Gourmet")
-  brandShort   String   @default("VALETEC GOURMET")
-  tagline      String   @default("Sistema Gastronómico & Punto de Venta")
-  legalName    String   @default("VALETEC GOURMET S.A.C.")
-  ruc          String   @default("20600000001")
-  address      String   @default("Av. Principal 123")
-  phone        String   @default("987-654-321")
-  email        String   @default("contacto@valetecgourmet.pe")
-  ticketFooter String   @default("¡Gracias por su preferencia! · VALETEC GOURMET")
-  tipoNegocio  String   @default("restaurante") // "polleria" | "restaurante" | "bar" | "pizzeria" | "cafeteria"
+  id              Int      @id @default(autoincrement())
+  name            String   @default("Valetec Gourmet")
+  brandShort      String   @default("VALETEC GOURMET")
+  tagline         String   @default("Sistema Gastronómico & Punto de Venta")
+  legalName       String   @default("VALETEC GOURMET S.A.C.")
+  ruc             String   @default("20600000001")
+  address         String   @default("Av. Principal 123")
+  phone           String   @default("987-654-321")
+  email           String   @default("contacto@valetecgourmet.pe")
+  ticketFooter    String   @default("¡Gracias por su preferencia! · VALETEC GOURMET")
+  tipoNegocio     String   @default("restaurante") // "polleria" | "restaurante" | "bar" | "pizzeria" | "cafeteria"
   barraCategorias String[] @default(["Bebidas y Refrescos", "Cervezas", "Bar y Cocteles", "Postres", "Bebidas"])
-  updatedAt    DateTime @updatedAt
+  updatedAt       DateTime @updatedAt
 }
 
 // ============================================================
@@ -318,18 +320,18 @@ model CierreCaja {
   fechaApertura    DateTime
   fechaCierre      DateTime?
   cajeroNombre     String
-  montoInicial     Decimal @db.Decimal(10, 2) @default(0) // Fondo de sencillo inicial en efectivo
+  montoInicial     Decimal   @default(0) @db.Decimal(10, 2) // Fondo de sencillo inicial en efectivo
   notaApertura     String?
-  efectivoVentas   Decimal @db.Decimal(10, 2) @default(0)
-  efectivoEsperado Decimal @db.Decimal(10, 2) @default(0)
-  efectivoContado  Decimal @db.Decimal(10, 2) @default(0)
-  diferencia       Decimal @db.Decimal(10, 2) @default(0)
-  totalTarjeta     Decimal @db.Decimal(10, 2) @default(0)
-  totalYape        Decimal @db.Decimal(10, 2) @default(0)
-  totalConsumo     Decimal @db.Decimal(10, 2) @default(0)
-  totalPedidosYa   Decimal @db.Decimal(10, 2) @default(0)
-  egresosEfectivo  Decimal @db.Decimal(10, 2) @default(0)
-  abonosEfectivo   Decimal @db.Decimal(10, 2) @default(0)
+  efectivoVentas   Decimal   @default(0) @db.Decimal(10, 2)
+  efectivoEsperado Decimal   @default(0) @db.Decimal(10, 2)
+  efectivoContado  Decimal   @default(0) @db.Decimal(10, 2)
+  diferencia       Decimal   @default(0) @db.Decimal(10, 2)
+  totalTarjeta     Decimal   @default(0) @db.Decimal(10, 2)
+  totalYape        Decimal   @default(0) @db.Decimal(10, 2)
+  totalConsumo     Decimal   @default(0) @db.Decimal(10, 2)
+  totalPedidosYa   Decimal   @default(0) @db.Decimal(10, 2)
+  egresosEfectivo  Decimal   @default(0) @db.Decimal(10, 2)
+  abonosEfectivo   Decimal   @default(0) @db.Decimal(10, 2)
   nota             String?
   cerradoPorAdmin  Boolean   @default(false)
   creadoEn         DateTime  @default(now())
@@ -342,14 +344,82 @@ model CierreCaja {
 // MOVIMIENTOS Y SALIDAS DE CAJA (EMERGENCIAS / CAJA CHICA)
 // ============================================================
 model MovimientoCaja {
-  id           Int        @id @default(autoincrement())
-  turnoId      Int?       // Vinculado al turno de CierreCaja si aplica
-  tipo         String     @default("RETIRO") // "RETIRO" (salida de efectivo) | "INGRESO" (entrada de sencillo extra)
-  monto        Decimal @db.Decimal(10, 2)
-  motivo       String     // Descripción / concepto del retiro o ingreso
-  cajeroNombre String     // Cajero que registró el movimiento
-  creadoEn     DateTime   @default(now())
+  id           Int      @id @default(autoincrement())
+  turnoId      Int? // Vinculado al turno de CierreCaja si aplica
+  tipo         String   @default("RETIRO") // "RETIRO" (salida de efectivo) | "INGRESO" (entrada de sencillo extra)
+  monto        Decimal  @db.Decimal(10, 2)
+  motivo       String // Descripción / concepto del retiro o ingreso
+  cajeroNombre String // Cajero que registró el movimiento
+  creadoEn     DateTime @default(now())
 
   @@index([turnoId])
+  @@index([creadoEn])
+}
+
+// ============================================================
+// AUDITORÍA (tarea 11): quién hizo qué, cuándo, desde qué equipo, y el antes → después.
+// Sin claves foráneas a propósito: el registro guarda id y nombre tal como eran en ese momento,
+// así no cambia ni se pierde si después se renombra o desactiva al usuario o al equipo.
+// Solo se inserta desde el backend, dentro del mismo $transaction que la operación.
+// ============================================================
+model Auditoria {
+  id                Int      @id @default(autoincrement())
+  creadoEn          DateTime @default(now())
+  usuarioId         Int?
+  usuarioNombre     String // quien hizo la acción (o "Sin sesión" en la transición)
+  dispositivoId     Int?
+  dispositivoNombre String?
+  accion            String // VENTA_ANULADA, CAJA_ABIERTA, PRECIO_CAMBIADO, ... (ver servicios/auditoria.js)
+  entidad           String // Venta, Pedido, CierreCaja, Producto, Usuario, Dispositivo...
+  entidadId         String?
+  antes             Json?
+  despues           Json?
+  motivo            String?
+  autorizadoPor     String? // si la acción necesitó el PIN de un Administrador o Cajero
+
+  @@index([creadoEn])
+  @@index([accion])
+  @@index([usuarioId])
+}
+
+// ============================================================
+// CANCELACIONES (tarea 24): cada pedido o ítem cancelado, por estación.
+// Es el aviso para cocina y barra (antes vivía en memoria y se perdía al reiniciar) y el
+// detalle del reporte de cancelaciones (antes se perdía al borrar el último ítem).
+// ============================================================
+model Cancelacion {
+  id              Int       @id @default(autoincrement())
+  creadoEn        DateTime  @default(now())
+  pedidoId        Int
+  tipo            String // PEDIDO | ITEM
+  estacion        String // Cocina | Barra
+  items           Json // [{ nombre, cantidad, precio, notas }]
+  mesaInfo        String
+  codigoPedidosYa String?
+  motivo          String?
+  canceladoPor    String
+  autorizadoPor   String? // Administrador o Cajero que autorizó con su PIN
+  confirmadaEn    DateTime? // cuando cocina o barra tocó "Entendido"
+
+  @@index([estacion, confirmadaEn])
+  @@index([pedidoId])
+  @@index([creadoEn])
+}
+
+// ============================================================
+// IDEMPOTENCIA (tarea 12, ACUERDOS §4): header Idempotency-Key en cobros, caja, abonos y anulaciones.
+// Un doble clic o un reintento con la misma clave recibe la misma respuesta en vez de repetir la operación.
+// Se guarda 24 h; si la operación falló, la clave se borra para poder reintentar.
+// ============================================================
+model IdempotenciaClave {
+  id        Int      @id @default(autoincrement())
+  clave     String
+  ruta      String // método + ruta, ej. "POST /api/ventas"
+  estado    String // EN_CURSO | HECHA
+  status    Int?
+  respuesta Json?
+  creadoEn  DateTime @default(now())
+
+  @@unique([clave, ruta])
   @@index([creadoEn])
 }

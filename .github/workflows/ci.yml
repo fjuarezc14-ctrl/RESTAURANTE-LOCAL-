@@ -37,6 +37,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npx prisma generate
+      # Chequeo de tipos de los archivos con // @ts-check (servicios y middlewares)
+      - run: npm run tipos
       - run: npm test
 
   frontend:

@@ -1,8 +1,11 @@
 // Esquemas de pedidos: mesas, comandas, delivery y cancelaciones
 import { z } from 'zod';
 import {
-  LARGO, booleanoOpcional, cantidad, desdeTexto, idOpcional, metodoPago, montoCalculado, montoCalculadoOpcional, textoOpcional,
+  LARGO, booleanoOpcional, cantidad, desdeTexto, idOpcional, metodoPago, montoCalculado, montoCalculadoOpcional, pin, textoOpcional,
 } from './comunes.js';
+
+// PIN de un Administrador o Cajero; el backend lo vuelve a validar (servicios/cancelaciones.js)
+const autorizacion = z.looseObject({ pin }).optional();
 
 const NOTAS_ITEM = 1000; // las notas de un combo incluyen todas las opciones elegidas
 const numeroMesa = (mensaje) => desdeTexto(z.number({ error: mensaje }).int(mensaje).positive(mensaje).max(999, mensaje));
@@ -64,6 +67,7 @@ export const cancelacionPedido = z.looseObject({
   motivo: textoOpcional(LARGO.nota),
   canceladoPor: textoOpcional(LARGO.nombre),
   force: booleanoOpcional,
+  autorizacion,
 });
 
 export const cancelacionItem = z.looseObject({
@@ -73,4 +77,5 @@ export const cancelacionItem = z.looseObject({
   motivo: textoOpcional(LARGO.nota),
   canceladoPor: textoOpcional(LARGO.nombre),
   force: booleanoOpcional,
+  autorizacion,
 });

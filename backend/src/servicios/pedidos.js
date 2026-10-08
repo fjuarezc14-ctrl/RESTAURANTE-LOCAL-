@@ -1,3 +1,4 @@
+// @ts-check
 // Pedidos: expansión de ítems y combos para guardarlos en la BD
 const { prisma } = require('../db');
 const { ErrorApp } = require('../middlewares/errores');
@@ -344,8 +345,4 @@ async function expandPedidoItemsForDb(itemsList) {
   return expandedList;
 }
 
-async function evaluarEstadoEnsalada() {
-  return 'No Aplica';
-}
-
-module.exports = { LIMITE_CANCELACION_MS, MIX_PRODUCTS_DECOMPOSITION, parseSelectionsFromNotes, parseJsonSafe, expandPedidoItemsForDb, evaluarEstadoEnsalada };
+module.exports = { LIMITE_CANCELACION_MS, MIX_PRODUCTS_DECOMPOSITION, parseSelectionsFromNotes, parseJsonSafe, expandPedidoItemsForDb };
