@@ -209,6 +209,8 @@ export function useCobroMesa({
 
     // Guardar los datos preparados para la confirmación
     setDatosConfirmacionCobro({
+      // Una clave por intento de cobro: si se reintenta tras un corte, el backend no cobra dos veces
+      claveIdempotencia: crypto.randomUUID(),
       mesaNum: mesaSeleccionada.num,
       esDelivery: mesaSeleccionada.num === 'DELIVERY',
       tipoComprobante,
@@ -240,7 +242,7 @@ export function useCobroMesa({
     try {
       const { payload, total, itemsParaImpresion, mesaNum, tipoComprobante: tComp, numDocumento: nDoc, nombreCliente: nomCli, clienteDireccion: dirCli, metodoPago: mPago } = datosConfirmacionCobro;
 
-      const response = await api.cobrar(payload);
+      const response = await api.cobrar(payload, datosConfirmacionCobro.claveIdempotencia);
 
       setModalConfirmarCobro(false);
       setDatosConfirmacionCobro(null);

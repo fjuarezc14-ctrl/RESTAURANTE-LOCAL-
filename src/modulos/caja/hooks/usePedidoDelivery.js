@@ -58,6 +58,7 @@ export function usePedidoDelivery({
   const [tipoDelivery, setTipoDelivery] = useState('PedidosYa'); // 'PedidosYa' | 'ParaLlevar'
 
   const deliverySearchInputRef = useRef(null);
+  const claveIdempotenciaRef = useRef(null);
 
   const buscarClienteDelivery = async () => {
     if (!deliveryNumDocumento) return;
@@ -498,11 +499,14 @@ export function usePedidoDelivery({
         return;
       }
 
+      // La misma clave en los reintentos de este pedido; se renueva cuando sale bien
+      if (!claveIdempotenciaRef.current) claveIdempotenciaRef.current = crypto.randomUUID();
       const result = editingPedidoId
         ? await api.actualizarDelivery(editingPedidoId, validacionPedido.data)
-        : await api.crearPedidoLlevar(validacionPedido.data);
+        : await api.crearPedidoLlevar(validacionPedido.data, claveIdempotenciaRef.current);
 
       if (result.error) throw new Error(result.error);
+      claveIdempotenciaRef.current = null;
 
       // Cerrar modal y recargar datos de Caja
       setDeliveryModal(false);

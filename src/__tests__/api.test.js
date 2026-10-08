@@ -48,3 +48,16 @@ describe('api.js: sesión perdida', () => {
     expect(alPerder).not.toHaveBeenCalled();
   });
 });
+
+describe('api.js: Idempotency-Key', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('cobrar manda la clave en el header; sin clave no manda nada', async () => {
+    const fetchFalso = vi.fn(async () => new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchFalso);
+    await api.cobrar({ pedidoId: 1 }, 'clave-123');
+    await api.cobrar({ pedidoId: 1 });
+    expect(fetchFalso.mock.calls[0][1].headers['Idempotency-Key']).toBe('clave-123');
+    expect(fetchFalso.mock.calls[1][1].headers['Idempotency-Key']).toBeUndefined();
+  });
+});
