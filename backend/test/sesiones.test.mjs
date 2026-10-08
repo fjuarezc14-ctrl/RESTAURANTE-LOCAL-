@@ -127,6 +127,8 @@ describe('con AUTH_OBLIGATORIA=true', () => {
   it('sin sesión → NO_AUTENTICADO; las rutas públicas siguen abiertas', async () => {
     esperarError(await api().get('/api/mesas'), 401, 'NO_AUTENTICADO');
     expect((await api().get('/api/auth/marca')).status).toBe(200);
+    // El instalador de Windows espera a que /api/status responda: tiene que hacerlo sin sesión
+    expect((await api().get('/api/status')).status).toBe(200);
     const nav = navegador();
     expect((await activar(nav)).status).toBe(200);
     expect((await nav.get('/api/mesas')).status).toBe(200);
