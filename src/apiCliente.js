@@ -118,3 +118,30 @@ export async function apiRequest(endpoint, options = {}) {
 
 // Header Idempotency-Key: un reintento con la misma clave no repite la operación en el backend
 export const conClave = (clave) => (clave ? { headers: { 'Idempotency-Key': clave } } : {});
+
+/**
+ * Descarga un archivo (respuesta binaria) y lo guarda con el nombre que manda el servidor.
+ * Los errores llegan en el formato normal { error: { codigo, mensaje } }.
+ */
+export async function descargarArchivo(endpoint, nombrePorDefecto = 'descarga') {
+  const response = await fetch(`${API_BASE}${endpoint}`, { credentials: 'include' });
+  if (!response.ok) {
+    const datos = await response.json().catch(() => ({}));
+    const err = new Error(datos.error?.mensaje || `Error HTTP ${response.status}`);
+    err.codigo = datos.error?.codigo || 'ERROR_INTERNO';
+    err.status = response.status;
+    if (esErrorDeSesion(err)) alPerderSesion?.(err);
+    throw err;
+  }
+  const nombre = /filename="([^"]+)"/.exec(response.headers.get('content-disposition') || '')?.[1] || nombrePorDefecto;
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = nombre;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  return { nombre, bytes: blob.size };
+}
