@@ -1,7 +1,7 @@
 // Registro de auditoría (tarea 11)
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PIN_CAJERO, api, app, crearBase, esperarError, limpiarBD, prisma } from './helpers.mjs';
+import { PIN_ADMIN, PIN_CAJERO, api, app, crearBase, esperarError, limpiarBD, prisma } from './helpers.mjs';
 
 const CONTRASENA = 'clave-segura-1';
 let admin;
@@ -78,6 +78,40 @@ describe('equipos y sesiones', () => {
 
     expect((await registros({ accion: 'SESIONES_CERRADAS' }))[0].despues).toEqual({ nombre: 'Carla Caja', sesionesCerradas: 1 });
     expect((await registros({ accion: 'DISPOSITIVO_REVOCADO' }))[0]).toMatchObject({ entidadId: String(tablet.id), antes: { nombre: 'Tablet' } });
+  });
+});
+
+describe('caja', () => {
+  it('apertura, retiro y cierre quedan con sus montos', async () => {
+    await nav.post('/api/caja/apertura').send({ cajeroNombre: 'Admin', montoInicial: 150, notaApertura: 'Sencillo del banco' });
+    await nav.post('/api/caja/movimientos').send({ tipo: 'RETIRO', monto: 20.5, motivo: 'Compra de hielo' });
+    await nav.post('/api/caja/cierre').send({ cajeroNombre: 'Admin', efectivoEsperado: 129.5, efectivoContado: 128 });
+
+    const [abierta] = await registros({ accion: 'CAJA_ABIERTA' });
+    expect(abierta).toMatchObject({ usuarioNombre: 'Admin', despues: { montoInicial: 150 }, motivo: 'Sencillo del banco' });
+    const [mov] = await registros({ accion: 'CAJA_MOVIMIENTO' });
+    expect(mov).toMatchObject({ despues: { tipo: 'RETIRO', monto: 20.5 }, motivo: 'Compra de hielo' });
+    const [cerrada] = await registros({ accion: 'CAJA_CERRADA' });
+    expect(cerrada.despues).toMatchObject({ estado: 'CERRADO', efectivoEsperado: 129.5, efectivoContado: 128, diferencia: -1.5 });
+  });
+
+  it('el cierre forzado guarda qué administrador lo autorizó y el motivo', async () => {
+    await nav.post('/api/caja/apertura').send({ cajeroNombre: 'Carla Caja', montoInicial: 50 });
+    await nav.post('/api/caja/cierre-forzado').send({ adminPin: PIN_ADMIN, motivo: 'La cajera se fue sin cerrar' });
+    const [r] = await registros({ accion: 'CAJA_CIERRE_FORZADO' });
+    expect(r).toMatchObject({ autorizadoPor: 'Admin', motivo: 'La cajera se fue sin cerrar', antes: { cajeroNombre: 'Carla Caja' } });
+  });
+
+  it('sin sesión, el nombre que manda la pantalla queda marcado como no verificado', async () => {
+    await api().post('/api/caja/apertura').send({ cajeroNombre: 'Carla Caja', montoInicial: 0 });
+    const [r] = await registros({ accion: 'CAJA_ABIERTA' });
+    expect(r.usuarioNombre).toBe('Carla Caja (sin sesión)');
+  });
+
+  it('si la operación falla no queda registro', async () => {
+    await nav.post('/api/caja/apertura').send({ cajeroNombre: 'Admin', montoInicial: 10 });
+    await nav.post('/api/caja/apertura').send({ cajeroNombre: 'Admin', montoInicial: 10 }); // CAJA_YA_ABIERTA
+    expect(await registros({ accion: 'CAJA_ABIERTA' })).toHaveLength(1);
   });
 });
 
