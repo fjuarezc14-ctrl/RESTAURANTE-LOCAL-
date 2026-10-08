@@ -98,7 +98,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.<cliente> up -d --buil
    (En una versión 1.0.0, que no tiene ese acceso directo, desde una consola de administrador:
    `C:\ValetecPOS\pgsql\bin\pg_dump.exe -h localhost -p 5446 -U postgres -d restaurante_local -Fc --no-owner -f C:\respaldo.dump`,
    con la contraseña que está en `DATABASE_URL` de `C:\ValetecPOS\app\backend\.env`.)
-2. Copiar de `C:\ValetecPOS\app\backend\.env` el valor de **`PIN_SECRET`**. Sin el mismo secreto, ningún PIN funciona en la web.
+2. Abrir `C:\ValetecPOS\app\backend\.env`. Si tiene **`PIN_SECRET`**, copiar ese valor: sin el mismo secreto ningún PIN funciona en la web.
+   Si **no** lo tiene (instalaciones 1.0.0, como La Carreta), los PIN están sin cifrar: en el servidor se usa uno nuevo (`openssl rand -base64 32`).
 3. En el servidor: `cp .env.la-carreta-web.example .env.la-carreta-web` y completar `DOMINIO`, `DB_PASSWORD`, `PIN_SECRET` e `INITIAL_ADMIN_PASSWORD`.
 4. Subir el `.dump` al servidor y ejecutar `./scripts/importar-respaldo.sh .env.la-carreta-web respaldo.dump`.
    El script se niega si la base web ya tiene ventas; con `--reemplazar` respalda la actual en `respaldos/` y la pisa.
