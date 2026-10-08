@@ -8,6 +8,7 @@ const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { aperturaCaja, cierreCaja, cierreForzado, consultaCierres, consultaMovimientos, movimientoCaja } = require('../../shared/esquemas/caja.js');
 const { requierePermiso } = require('../middlewares/permisos');
 const { registrarAuditoria } = require('../servicios/auditoria');
+const { idempotente } = require('../middlewares/idempotencia');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -138,7 +139,7 @@ router.get('/api/caja/estado', requierePermiso('Caja', 'Dashboard'), async (req,
 });
 
 // POST /api/caja/movimientos → Registrar salida (retiro de emergencia) o ingreso extra en la gaveta
-router.post('/api/caja/movimientos', requierePermiso('Caja'), validar({ body: movimientoCaja }), async (req, res, next) => {
+router.post('/api/caja/movimientos', requierePermiso('Caja'), idempotente, validar({ body: movimientoCaja }), async (req, res, next) => {
   try {
     const { monto, motivo, tipo = 'RETIRO', cajeroNombre } = req.body;
     const parsedMonto = parseFloat(monto || 0);
@@ -225,7 +226,7 @@ router.get('/api/caja/movimientos', requierePermiso('Caja', 'Reportes'), validar
 });
 
 // POST /api/caja/apertura → Registrar la apertura formal de turno con fondo inicial
-router.post('/api/caja/apertura', requierePermiso('Caja'), validar({ body: aperturaCaja }), async (req, res, next) => {
+router.post('/api/caja/apertura', requierePermiso('Caja'), idempotente, validar({ body: aperturaCaja }), async (req, res, next) => {
   try {
     const { cajeroNombre, montoInicial, notaApertura } = req.body;
 
@@ -233,18 +234,15 @@ router.post('/api/caja/apertura', requierePermiso('Caja'), validar({ body: apert
       return next(new ErrorApp('VALIDACION', 'El nombre del cajero es obligatorio para abrir la caja.', { campo: 'cajeroNombre' }));
     }
 
-    // Verificar si ya existe un turno abierto
-    const turnoExistente = await prisma.cierreCaja.findFirst({
-      where: { estado: 'ABIERTO' },
-    });
-
-    if (turnoExistente) {
-      return next(new ErrorApp('CAJA_YA_ABIERTA', `Ya existe un turno abierto por "${turnoExistente.cajeroNombre}" desde las ${new Date(turnoExistente.fechaApertura).toLocaleTimeString('es-PE')}. Debe cerrarse antes de abrir uno nuevo.`));
-    }
-
     const fondo = parseFloat(montoInicial || 0);
 
     const nuevoTurno = await prisma.$transaction(async (tx) => {
+      // Un solo turno abierto: el candado evita que dos aperturas simultáneas pasen las dos la verificación
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('apertura_caja'))`;
+      const turnoExistente = await tx.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
+      if (turnoExistente) {
+        throw new ErrorApp('CAJA_YA_ABIERTA', `Ya existe un turno abierto por "${turnoExistente.cajeroNombre}" desde las ${new Date(turnoExistente.fechaApertura).toLocaleTimeString('es-PE')}. Debe cerrarse antes de abrir uno nuevo.`);
+      }
       const turno = await tx.cierreCaja.create({
       data: {
         estado: 'ABIERTO',
@@ -274,7 +272,7 @@ router.post('/api/caja/apertura', requierePermiso('Caja'), validar({ body: apert
 });
 
 // POST /api/caja/cierre → Registrar un arqueo y cierre de turno
-router.post('/api/caja/cierre', requierePermiso('Caja'), validar({ body: cierreCaja }), async (req, res, next) => {
+router.post('/api/caja/cierre', requierePermiso('Caja'), idempotente, validar({ body: cierreCaja }), async (req, res, next) => {
   try {
     const {
       fechaCierre,
@@ -378,7 +376,7 @@ router.post('/api/caja/cierre', requierePermiso('Caja'), validar({ body: cierreC
 });
 
 // POST /api/caja/cierre-forzado → Cierre administrativo por parte del Administrador
-router.post('/api/caja/cierre-forzado', requierePermiso('Caja', 'Dashboard'), validar({ body: cierreForzado }), async (req, res, next) => {
+router.post('/api/caja/cierre-forzado', requierePermiso('Caja', 'Dashboard'), idempotente, validar({ body: cierreForzado }), async (req, res, next) => {
   try {
     const { adminPin, motivo } = req.body;
 

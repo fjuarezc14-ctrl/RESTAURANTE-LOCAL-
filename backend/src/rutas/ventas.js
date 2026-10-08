@@ -9,6 +9,7 @@ const { anulacion, cobro, correccionDatosCliente, correccionMetodoPago, correcci
 const { consultaDesde, rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
 const { requierePermiso } = require('../middlewares/permisos');
 const { registrarAuditoria } = require('../servicios/auditoria');
+const { idempotente } = require('../middlewares/idempotencia');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -312,7 +313,7 @@ router.patch('/api/ventas/:ventaId/datos-cliente', requierePermiso('Caja'), vali
 });
 
 // PATCH /api/ventas/:ventaId/anular → Anular / Registrar devolución de un pedido entregado
-router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), validar({ body: anulacion }), async (req, res, next) => {
+router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), idempotente, validar({ body: anulacion }), async (req, res, next) => {
   const { ventaId } = req.params;
   const { pin, motivo } = req.body;
 
@@ -433,7 +434,7 @@ router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), validar({ b
 });
 
 // POST /api/ventas → Cobrar mesa (acepta pedidoIds array o pedidoId simple)
-router.post('/api/ventas', requierePermiso('Caja'), validar({ body: cobro }), async (req, res, next) => {
+router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body: cobro }), async (req, res, next) => {
   const {
     pedidoId,
     pedidoIds,

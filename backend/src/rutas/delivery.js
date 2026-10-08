@@ -7,11 +7,12 @@ const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { pedidoLlevar } = require('../../shared/esquemas/pedidos.js');
 const { requierePermiso } = require('../middlewares/permisos');
+const { idempotente } = require('../middlewares/idempotencia');
 
 const router = express.Router();
 validarIdsEnUrl(router);
 
-router.post('/api/pedidos/llevar', requierePermiso('Caja'), validar({ body: pedidoLlevar }), async (req, res, next) => {
+router.post('/api/pedidos/llevar', requierePermiso('Caja'), idempotente, validar({ body: pedidoLlevar }), async (req, res, next) => {
   const {
     codigoPedidosYa,
     cajero,
