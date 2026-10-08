@@ -7,8 +7,7 @@ import { generateOfflineQrUrl } from '../utils/qrOffline';
 import { numeroALetras } from '../utils/numeroALetras';
 import { exportarReporteExcel } from '../utils/exportarReporteExcel';
 import { useAviso, usePedirDato } from '../components/ui';
-import ModalReimpresionCierre from '../modulos/caja/modales/ModalReimpresionCierre';
-import ModalComprobanteSunat from '../modulos/caja/modales/ModalComprobanteSunat';
+import { ModalComprobanteSunat, ModalReimpresionCierre } from '../components/modales';
 import { ModalReporteGerencial } from '../modulos/reportes/modales';
 import { parseDeliveryInfo, parsearCreditoSplit } from '../utils/ventas';
 

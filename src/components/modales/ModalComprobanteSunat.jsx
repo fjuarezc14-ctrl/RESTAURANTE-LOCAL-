@@ -1,5 +1,5 @@
 import { Receipt, X } from 'lucide-react';
-import logoUrl from '../../../assets/logo.png';
+import logoUrl from '../../assets/logo.png';
 
 /**
  * Modal visor e impresión de comprobante / ticket SUNAT / control interno
