@@ -1,7 +1,10 @@
 // Rutas de pedidos de salón: monitores de cocina y barra, servir, entregar y cancelar
 const express = require('express');
 const { prisma } = require('../db');
-const { alertasCancelacion } = require('../servicios/cancelaciones');
+const {
+  actualizarEstadoMesa, autorizarCancelacion, avisosPendientes, confirmarAviso, registrarCancelacion,
+} = require('../servicios/cancelaciones');
+const { registrarAuditoria } = require('../servicios/auditoria');
 const { BARRA_CATEGORIAS } = require('../servicios/empresa');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
@@ -326,6 +329,8 @@ router.patch('/api/pedidos/items/:id/notas', requierePermiso('Salon', 'Caja'), v
 // CANCELACIÓN DE PEDIDOS (Solo Mozo, límite 5 min)
 // ============================================================
 
+// PATCH /api/pedidos/:id/cancelar → cancela el pedido completo (y su venta, si la tiene)
+// Sin autorización solo dentro de los 5 minutos y en cocina; si no, { autorizacion: { pin } } (ver servicios/cancelaciones.js)
 router.patch('/api/pedidos/:id/cancelar', requierePermiso('Salon', 'Caja'), validar({ body: cancelacionPedido }), async (req, res, next) => {
   const id = parseInt(req.params.id);
   const { canceladoPor, motivo, force } = req.body;
@@ -333,361 +338,153 @@ router.patch('/api/pedidos/:id/cancelar', requierePermiso('Salon', 'Caja'), vali
   try {
     const pedido = await prisma.pedido.findUnique({
       where: { id },
-      include: {
-        items: { include: { producto: true } },
-        mesa: true,
-      },
+      include: { items: { include: { producto: true } }, mesa: true },
+    });
+    if (!pedido) return next(new ErrorApp('NO_ENCONTRADO', 'Pedido no encontrado.'));
+    if (pedido.estado === 'Cancelado') return next(new ErrorApp('CONFLICTO', 'Este pedido ya está cancelado.'));
+    if (!force && pedido.estado !== 'Cocina') {
+      return next(new ErrorApp('CONFLICTO', 'Este pedido ya no puede cancelarse. Solo se cancelan pedidos en estado "Cocina".'));
+    }
+    const autorizadoPor = await autorizarCancelacion(pedido, req.body, {
+      forzada: Boolean(force), itemListo: pedido.items.some((i) => i.historial),
     });
 
-    if (!pedido) return next(new ErrorApp('NO_ENCONTRADO', 'Pedido no encontrado.'));
-
-    // Si no es una cancelación forzada por supervisor, aplicar filtros normales
-    if (!force) {
-      if (pedido.estado !== 'Cocina') {
-        return next(new ErrorApp('CONFLICTO', 'Este pedido ya no puede cancelarse. Solo se cancelan pedidos en estado "Cocina".'));
-      }
-    }
-
     const now = new Date();
-    let mesaLiberada = false;
-    let nuevoEstadoMesa = 'Libre';
+    const motivoFinal = motivo || 'Sin motivo';
+    const quien = canceladoPor || 'Sin especificar';
 
-    await prisma.$transaction(async (tx) => {
-      // 1. Cancelar el pedido
+    const estadoMesa = await prisma.$transaction(async (tx) => {
       await tx.pedido.update({
         where: { id },
-        data: {
-          estado: 'Cancelado',
-          canceladoPor: canceladoPor || 'Sin especificar',
-          motivoCancela: motivo || 'Sin motivo',
-          canceladoEn: now,
-        },
+        data: { estado: 'Cancelado', canceladoPor: quien, motivoCancela: motivoFinal, canceladoEn: now },
       });
 
-      // 2. Si existe venta asociada (ej. pedido delivery o ya cobrado), anularla también
+      // Si tiene venta (delivery o ya cobrado), se anula también
       await tx.venta.updateMany({
         where: { pedidoId: id, anulado: false },
         data: {
-          anulado: true,
-          motivoAnulacion: `[CANCELACIÓN PEDIDO]: ${motivo || 'Sin motivo'}`,
-          anuladoPor: canceladoPor || 'Administrador',
-          anuladoEn: now,
-          total: 0.00,
-          subtotal: 0.00,
-          igv: 0.00,
-          montoEfectivo: 0.00,
-          montoTarjeta: 0.00,
-          montoYape: 0.00,
-          montoCredito: 0.00,
-          descuentoAplicado: 0.00,
+          anulado: true, motivoAnulacion: `[CANCELACIÓN PEDIDO]: ${motivoFinal}`, anuladoPor: autorizadoPor || quien, anuladoEn: now,
+          total: 0, subtotal: 0, igv: 0, montoEfectivo: 0, montoTarjeta: 0, montoYape: 0, montoCredito: 0, descuentoAplicado: 0,
         },
       });
 
-      // 3. Restaurar stock de productos limitados
       for (const item of pedido.items) {
         if (item.producto?.tipoStock === 'limitado') {
-          await tx.producto.update({
-            where: { id: item.productoId },
-            data: { stock: { increment: item.cantidad } },
-          });
+          await tx.producto.update({ where: { id: item.productoId }, data: { stock: { increment: item.cantidad } } });
         }
       }
 
-      // 4. Liberar mesa si no quedan pedidos activos o actualizar su estado
-      if (pedido.mesaId) {
-        const activos = await tx.pedido.findMany({
-          where: { mesaId: pedido.mesaId, estado: { in: ['Cocina', 'Servido'] }, id: { not: id } },
-        });
-
-        if (activos.length === 0) {
-          const mObj = await tx.mesa.update({
-            where: { id: pedido.mesaId },
-            data: { estado: 'Libre' },
-          });
-          if (mObj?.numero) {
-            await tx.mesa.updateMany({
-              where: { estado: `Unida a Mesa ${mObj.numero}` },
-              data: { estado: 'Libre' },
-            });
-          }
-          mesaLiberada = true;
-        } else {
-          // Si hay al menos un pedido activo en Cocina, la mesa debe quedarse en Cocina.
-          // Si todos los activos están en Servido, pasa a Servido (Azul).
-          const hayEnCocina = activos.some(p => p.estado === 'Cocina');
-          nuevoEstadoMesa = hayEnCocina ? 'Cocina' : 'Servido';
-
-          await tx.mesa.update({
-            where: { id: pedido.mesaId },
-            data: { estado: nuevoEstadoMesa },
-          });
-        }
-      }
+      await registrarCancelacion(tx, {
+        pedido, tipo: 'PEDIDO', motivo: motivoFinal, canceladoPor: quien, autorizadoPor, barraCategorias: BARRA_CATEGORIAS,
+        items: pedido.items.map((i) => ({ nombre: i.nombre, cantidad: i.cantidad, precio: i.precio, notas: i.notas, categoria: i.producto?.categoria })),
+      });
+      await registrarAuditoria(tx, req, {
+        accion: 'PEDIDO_CANCELADO', entidad: 'Pedido', entidadId: id, motivo: motivoFinal, autorizadoPor, nombreDeclarado: canceladoPor,
+        antes: { estado: pedido.estado, total: pedido.total, mesa: pedido.mesa?.numero ?? null }, despues: { estado: 'Cancelado' },
+      });
+      return actualizarEstadoMesa(tx, pedido.mesaId);
     });
 
-    // 🔔 Registrar alerta de cancelación para cocina (store en memoria)
-    const itemsParaCocina = (pedido.items || []).filter(i =>
-      !BARRA_CATEGORIAS.includes(i.producto?.categoria || '')
-    );
-    if (itemsParaCocina.length > 0) {
-      alertasCancelacion.cocina.push({
-        id: `cancel-${Date.now()}-${pedido.id}`,
-        pedidoId: pedido.id,
-        items: itemsParaCocina.map(i => ({
-          nombre: i.nombre,
-          cantidad: i.cantidad,
-          precio: i.precio,
-          notas: i.notas || null,
-        })),
-        mesaInfo: pedido.mesaId ? `Mesa ${pedido.mesa?.numero || pedido.mesaId}` : (pedido.codigoPedidosYa ? `🛵 ${pedido.codigoPedidosYa}` : 'Para Llevar/Delivery'),
-        codigoPedidosYa: pedido.codigoPedidosYa || null,
-        canceladoPor: canceladoPor || 'Administrador',
-        canceladoEn: new Date().toISOString(),
-      });
-    }
-
-    // 🔔 Registrar alerta de cancelación para barra (store en memoria)
-    const itemsParaBarra = (pedido.items || []).filter(i =>
-      BARRA_CATEGORIAS.includes(i.producto?.categoria || '')
-    );
-    if (itemsParaBarra.length > 0) {
-      alertasCancelacion.barra.push({
-        id: `cancel-${Date.now()}-${pedido.id}`,
-        pedidoId: pedido.id,
-        items: itemsParaBarra.map(i => ({
-          nombre: i.nombre,
-          cantidad: i.cantidad,
-          precio: i.precio,
-          notas: i.notas || null,
-        })),
-        mesaInfo: pedido.mesaId ? `Mesa ${pedido.mesa?.numero || pedido.mesaId}` : (pedido.codigoPedidosYa ? `🛵 ${pedido.codigoPedidosYa}` : 'Para Llevar/Delivery'),
-        codigoPedidosYa: pedido.codigoPedidosYa || null,
-        canceladoPor: canceladoPor || 'Administrador',
-        canceladoEn: new Date().toISOString(),
-      });
-    }
-
-    res.json({ ok: true, mesaLiberada, nuevoEstadoMesa });
+    res.json({ ok: true, mesaLiberada: estadoMesa.mesaLiberada, nuevoEstadoMesa: estadoMesa.nuevoEstadoMesa ?? 'Libre' });
   } catch (err) {
     next(err);
   }
 });
 
-// GET /api/cocina/cancelaciones → Devuelve las alertas de cancelación pendientes de confirmación para Cocina
-router.get('/api/cocina/cancelaciones', requierePermiso('Cocina'), (req, res) => {
-  res.json(alertasCancelacion.cocina);
+// Avisos de cancelación pendientes para cada monitor (guardados en la BD: sobreviven a un reinicio)
+router.get('/api/cocina/cancelaciones', requierePermiso('Cocina'), async (req, res, next) => {
+  try { res.json(await avisosPendientes('Cocina')); } catch (err) { next(err); }
+});
+router.delete('/api/cocina/cancelaciones/:id', requierePermiso('Cocina'), async (req, res, next) => {
+  try { await confirmarAviso(parseInt(req.params.id), 'Cocina'); res.json({ ok: true }); } catch (err) { next(err); }
+});
+router.get('/api/barra/cancelaciones', requierePermiso('Barra'), async (req, res, next) => {
+  try { res.json(await avisosPendientes('Barra')); } catch (err) { next(err); }
+});
+router.delete('/api/barra/cancelaciones/:id', requierePermiso('Barra'), async (req, res, next) => {
+  try { await confirmarAviso(parseInt(req.params.id), 'Barra'); res.json({ ok: true }); } catch (err) { next(err); }
 });
 
-// DELETE /api/cocina/cancelaciones/:id → Cocina confirma que vio la alerta ("Entendido")
-router.delete('/api/cocina/cancelaciones/:id', requierePermiso('Cocina'), (req, res) => {
-  const { id } = req.params;
-  alertasCancelacion.cocina = alertasCancelacion.cocina.filter(c => c.id !== id);
-  res.json({ ok: true });
-});
-
-// GET /api/barra/cancelaciones → Devuelve las alertas de cancelación pendientes de confirmación para Barra
-router.get('/api/barra/cancelaciones', requierePermiso('Barra'), (req, res) => {
-  res.json(alertasCancelacion.barra);
-});
-
-// DELETE /api/barra/cancelaciones/:id → Barra confirma que vio la alerta ("Entendido")
-router.delete('/api/barra/cancelaciones/:id', requierePermiso('Barra'), (req, res) => {
-  const { id } = req.params;
-  alertasCancelacion.barra = alertasCancelacion.barra.filter(c => c.id !== id);
-  res.json({ ok: true });
-});
-
+// PATCH /api/pedidos/:id/cancelar-item → cancela una cantidad de un ítem; si era lo último, el pedido entero
 router.patch('/api/pedidos/:id/cancelar-item', requierePermiso('Salon', 'Caja'), validar({ body: cancelacionItem }), async (req, res, next) => {
   const id = parseInt(req.params.id);
-  const { productoId, itemId, cantidadACancelar, motivo, canceladoPor, force } = req.body;
+  const { productoId, itemId, motivo, canceladoPor, force } = req.body;
 
   try {
     const pedido = await prisma.pedido.findUnique({
       where: { id },
-      include: {
-        items: { include: { producto: true } },
-        mesa: true,
-      },
+      include: { items: { include: { producto: true } }, mesa: true },
     });
-
     if (!pedido) return next(new ErrorApp('NO_ENCONTRADO', 'Pedido no encontrado.'));
-
-    // Si no es una cancelación forzada por supervisor, aplicar filtros normales
-    if (!force) {
-      if (pedido.estado !== 'Cocina') {
-        return next(new ErrorApp('CONFLICTO', 'Este pedido ya no puede modificarse. Solo se cancelan ítems de pedidos en estado "Cocina".'));
-      }
+    if (pedido.estado === 'Cancelado') return next(new ErrorApp('CONFLICTO', 'Este pedido ya está cancelado.'));
+    if (!force && pedido.estado !== 'Cocina') {
+      return next(new ErrorApp('CONFLICTO', 'Este pedido ya no puede modificarse. Solo se cancelan ítems de pedidos en estado "Cocina".'));
     }
 
     const item = itemId
-      ? pedido.items.find(i => i.id === parseInt(itemId))
+      ? pedido.items.find((i) => i.id === parseInt(itemId))
       : (force
-          ? pedido.items.find(i => String(i.productoId) === String(productoId))
-          : pedido.items.find(i => String(i.productoId) === String(productoId) && !i.historial));
-
+          ? pedido.items.find((i) => String(i.productoId) === String(productoId))
+          : pedido.items.find((i) => String(i.productoId) === String(productoId) && !i.historial));
     if (!item) return next(new ErrorApp('NO_ENCONTRADO', 'El ítem seleccionado no se encuentra en la comanda activa.'));
 
-    if (cantidadACancelar > item.cantidad) {
+    // Sin cantidad se cancela el ítem completo
+    const cantidad = req.body.cantidadACancelar ?? item.cantidad;
+    if (cantidad > item.cantidad) {
       return next(new ErrorApp('VALIDACION', 'La cantidad a cancelar supera la cantidad pedida.', { campo: 'cantidadACancelar' }));
     }
+    const autorizadoPor = await autorizarCancelacion(pedido, req.body, { forzada: Boolean(force), itemListo: Boolean(item.historial) });
 
-    // Calcular nueva cantidad
-    const nuevaCantidad = item.cantidad - cantidadACancelar;
+    const nuevaCantidad = item.cantidad - cantidad;
+    // Componentes de un combo o plato compuesto: se cancelan junto con él
+    const componentes = pedido.items.filter((i) => i.esComponente && i.productoId === item.productoId && i.id !== item.id);
+    const otros = pedido.items.filter((i) => i.id !== item.id && !componentes.includes(i));
+    const pedidoVacio = nuevaCantidad === 0 && otros.length === 0;
+    const quien = canceladoPor || 'Sin especificar';
 
-    // Restaurar stock
-    if (item.producto?.tipoStock === 'limitado') {
-      await prisma.producto.update({
-        where: { id: item.productoId },
-        data: { stock: { increment: cantidadACancelar } },
-      });
-    }
-
-    // Si el item cancelado es un combo o plato con componentes vinculados, limpiar componentes huérfanos
-    const componentesVinculados = (pedido.items || []).filter(i => i.esComponente && i.productoId === item.productoId);
-    for (const comp of componentesVinculados) {
-      if (nuevaCantidad === 0) {
-        await prisma.itemPedido.delete({ where: { id: comp.id } }).catch(() => null);
-      } else {
-        const nuevaCantComp = Math.max(0, comp.cantidad - cantidadACancelar);
-        if (nuevaCantComp === 0) {
-          await prisma.itemPedido.delete({ where: { id: comp.id } }).catch(() => null);
-        } else {
-          await prisma.itemPedido.update({ where: { id: comp.id }, data: { cantidad: nuevaCantComp } }).catch(() => null);
+    const estadoMesa = await prisma.$transaction(async (tx) => {
+      if (item.producto?.tipoStock === 'limitado') {
+        await tx.producto.update({ where: { id: item.productoId }, data: { stock: { increment: cantidad } } });
+      }
+      for (const comp of componentes) {
+        if (comp.producto?.tipoStock === 'limitado') {
+          await tx.producto.update({ where: { id: comp.productoId }, data: { stock: { increment: cantidad } } });
         }
       }
-      if (comp.producto?.tipoStock === 'limitado') {
-        await prisma.producto.update({
-          where: { id: comp.productoId },
-          data: { stock: { increment: cantidadACancelar } },
-        }).catch(() => null);
-      }
-    }
 
-    // 🔔 Registrar alerta de cancelación para KDS (Cocina y Barra)
-    const categoriaProd = item.producto?.categoria || '';
-    const esBarra = BARRA_CATEGORIAS.includes(categoriaProd);
-    const mesaInfo = pedido.mesaId 
-      ? `Mesa ${pedido.mesa?.numero || pedido.mesaId}` 
-      : (pedido.codigoPedidosYa ? `🛵 ${pedido.codigoPedidosYa}` : 'Para Llevar/Delivery');
-
-    const itemAlerta = {
-      nombre: item.nombre,
-      cantidad: cantidadACancelar,
-      precio: item.precio,
-      notas: motivo ? `CANCELADO: ${motivo}` : 'Cancelado por mozo',
-    };
-
-    if (esBarra) {
-      alertasCancelacion.barra.push({
-        id: `cancel-item-${Date.now()}-${item.id}`,
-        pedidoId: pedido.id,
-        items: [itemAlerta],
-        mesaInfo,
-        codigoPedidosYa: pedido.codigoPedidosYa || null,
-        canceladoPor: canceladoPor || 'Mozo',
-        canceladoEn: new Date().toISOString(),
-      });
-    } else {
-      alertasCancelacion.cocina.push({
-        id: `cancel-item-${Date.now()}-${item.id}`,
-        pedidoId: pedido.id,
-        items: [itemAlerta],
-        mesaInfo,
-        codigoPedidosYa: pedido.codigoPedidosYa || null,
-        canceladoPor: canceladoPor || 'Mozo',
-        canceladoEn: new Date().toISOString(),
-      });
-    }
-
-    const esUltimoItem = pedido.items.length === 1 && cantidadACancelar === item.cantidad;
-
-    // Declarar en el scope externo para que esté disponible en el res.json final
-    let itemsRestantes = [];
-
-    if (esUltimoItem) {
-      // Tratar como cancelación total de la comanda
-      await prisma.pedido.update({
-        where: { id },
-        data: {
-          estado: 'Cancelado',
-          canceladoPor: canceladoPor || 'Sin especificar',
-          motivoCancela: motivo || 'Cancelación completa de ítems',
-          canceladoEn: new Date(),
-          total: 0,
-        },
-      });
-      await prisma.itemPedido.delete({ where: { id: item.id } }).catch(() => null);
-      // itemsRestantes queda [] — el pedido se canceló por completo
-    } else {
-      if (nuevaCantidad === 0) {
-        // Eliminar el ítem del pedido
-        await prisma.itemPedido.delete({ where: { id: item.id } });
-      } else {
-        // Actualizar cantidad
-        await prisma.itemPedido.update({
-          where: { id: item.id },
-          data: { cantidad: nuevaCantidad },
-        });
-      }
-
-      // Recalcular total del pedido
-      itemsRestantes = await prisma.itemPedido.findMany({
-        where: { pedidoId: id },
-      });
-
-      const nuevoTotal = itemsRestantes.reduce((sum, i) => sum + (i.cantidad * i.precio), 0);
-
-      if (itemsRestantes.length === 0) {
-        // Fallback: Si no quedan ítems, cancelamos todo el pedido
-        await prisma.pedido.update({
+      if (pedidoVacio) {
+        // Era lo último: se cancela el pedido y sus ítems se CONSERVAN (el reporte de cancelaciones los necesita)
+        await tx.pedido.update({
           where: { id },
-          data: {
-            estado: 'Cancelado',
-            canceladoPor: canceladoPor || 'Sin especificar',
-            motivoCancela: motivo || 'Cancelación completa de ítems',
-            canceladoEn: new Date(),
-            total: 0,
-          },
+          data: { estado: 'Cancelado', canceladoPor: quien, motivoCancela: motivo || 'Cancelación completa de ítems', canceladoEn: new Date(), total: 0 },
         });
       } else {
-        // Actualizar total
-        await prisma.pedido.update({
-          where: { id },
-          data: { total: nuevoTotal },
-        });
+        if (nuevaCantidad === 0) await tx.itemPedido.delete({ where: { id: item.id } });
+        else await tx.itemPedido.update({ where: { id: item.id }, data: { cantidad: nuevaCantidad } });
+        for (const comp of componentes) {
+          const restante = Math.max(0, comp.cantidad - cantidad);
+          if (nuevaCantidad === 0 || restante === 0) await tx.itemPedido.delete({ where: { id: comp.id } });
+          else await tx.itemPedido.update({ where: { id: comp.id }, data: { cantidad: restante } });
+        }
+        const restantes = await tx.itemPedido.findMany({ where: { pedidoId: id } });
+        const nuevoTotal = restantes.reduce((sum, i) => sum + i.cantidad * Number(i.precio), 0);
+        await tx.pedido.update({ where: { id }, data: { total: nuevoTotal } });
       }
-    }
 
-    let mesaLiberada = false;
-    let nuevoEstadoMesa = 'Libre';
-
-    if (pedido.mesaId) {
-      const activos = await prisma.pedido.findMany({
-        where: { mesaId: pedido.mesaId, estado: { in: ['Cocina', 'Servido'] } },
+      await registrarCancelacion(tx, {
+        pedido, tipo: pedidoVacio ? 'PEDIDO' : 'ITEM', canceladoPor: quien, autorizadoPor, motivo, barraCategorias: BARRA_CATEGORIAS,
+        items: [{ nombre: item.nombre, cantidad, precio: item.precio, notas: motivo ? `CANCELADO: ${motivo}` : 'Cancelado por mozo', categoria: item.producto?.categoria }],
       });
+      await registrarAuditoria(tx, req, {
+        accion: pedidoVacio ? 'PEDIDO_CANCELADO' : 'ITEM_CANCELADO', entidad: 'Pedido', entidadId: id,
+        motivo: motivo || null, autorizadoPor, nombreDeclarado: canceladoPor,
+        antes: { item: item.nombre, cantidad: item.cantidad, listo: Boolean(item.historial) },
+        despues: { cantidad: nuevaCantidad, ...(pedidoVacio ? { estadoPedido: 'Cancelado' } : {}) },
+      });
+      return actualizarEstadoMesa(tx, pedido.mesaId);
+    });
 
-      if (activos.length === 0) {
-        const mObj = await prisma.mesa.update({
-          where: { id: pedido.mesaId },
-          data: { estado: 'Libre' },
-        });
-        // Liberar automáticamente las mesas que estaban unidas a esta
-        await prisma.mesa.updateMany({
-          where: { estado: `Unida a Mesa ${mObj.numero}` },
-          data: { estado: 'Libre' },
-        });
-        mesaLiberada = true;
-      } else {
-        const hayEnCocina = activos.some(p => p.estado === 'Cocina');
-        nuevoEstadoMesa = hayEnCocina ? 'Cocina' : 'Servido';
-        await prisma.mesa.update({
-          where: { id: pedido.mesaId },
-          data: { estado: nuevoEstadoMesa },
-        });
-      }
-    }
-
-    res.json({ ok: true, mesaLiberada, nuevoEstadoMesa, pedidoVacio: itemsRestantes.length === 0 });
+    res.json({ ok: true, mesaLiberada: estadoMesa.mesaLiberada, nuevoEstadoMesa: estadoMesa.nuevoEstadoMesa ?? 'Libre', pedidoVacio });
   } catch (err) {
     next(err);
   }

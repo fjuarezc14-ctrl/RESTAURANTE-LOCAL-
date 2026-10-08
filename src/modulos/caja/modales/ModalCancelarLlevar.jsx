@@ -38,6 +38,7 @@ export default function ModalCancelarLlevar({
         canceladoPor: usuarioOperador,
         motivo: 'Cancelado por cajero (error en pedido)',
         force: true,
+        autorizacion: { pin: pin.trim() }, // el backend vuelve a validar el PIN
       });
 
       if (res.ok) {
