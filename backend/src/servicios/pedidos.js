@@ -345,8 +345,4 @@ async function expandPedidoItemsForDb(itemsList) {
   return expandedList;
 }
 
-async function evaluarEstadoEnsalada() {
-  return 'No Aplica';
-}
-
-module.exports = { LIMITE_CANCELACION_MS, MIX_PRODUCTS_DECOMPOSITION, parseSelectionsFromNotes, parseJsonSafe, expandPedidoItemsForDb, evaluarEstadoEnsalada };
+module.exports = { LIMITE_CANCELACION_MS, MIX_PRODUCTS_DECOMPOSITION, parseSelectionsFromNotes, parseJsonSafe, expandPedidoItemsForDb };

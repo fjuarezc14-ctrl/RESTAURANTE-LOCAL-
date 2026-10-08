@@ -31,7 +31,6 @@ router.get('/api/pedidos/cocina', requierePermiso('Cocina'), async (req, res, ne
         codigoPedidosYa: true,
         mesero: true,
         adicional: true,
-        estadoEnsalada: true,
         createdAt: true,
         mesa: { select: { numero: true } },
         items: {
@@ -55,7 +54,6 @@ router.get('/api/pedidos/cocina', requierePermiso('Cocina'), async (req, res, ne
       codigoPedidosYa: p.codigoPedidosYa,
       mesero: p.mesero,
       adicional: p.adicional,
-      estadoEnsalada: p.estadoEnsalada,
       hora: p.createdAt.toLocaleTimeString('es-PE', {
         hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima',
       }),

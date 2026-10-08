@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Clock, CheckCheck, CheckCircle2, User, Truck, XCircle, AlertTriangle, Salad, ShoppingBag, Bike, UtensilsCrossed, Timer, X } from 'lucide-react';
+import { Clock, CheckCheck, CheckCircle2, User, Truck, XCircle, AlertTriangle, ShoppingBag, Bike, UtensilsCrossed, Timer, X } from 'lucide-react';
 import { useAviso } from './ui';
 import { parseDeliveryInfo } from '../utils/ventas';
 
@@ -52,7 +52,6 @@ export default function MonitorPreparacion({
   descartarCancelacion,
   marcarPedidoListo,
   marcarItemListo, // opcional: solo cocina marca platos individuales
-  mostrarEnsalada = false,
   etiquetaCancelacion = 'Pedido cancelado',
   textoVacio = 'Sin pedidos pendientes',
   subtextoVacio = 'Todo al día.',
@@ -320,14 +319,6 @@ export default function MonitorPreparacion({
                     </span>
                   </div>
 
-                  {mostrarEnsalada && p.estadoEnsalada && p.estadoEnsalada !== 'No Aplica' && (
-                    <div className="px-4 py-1.5 flex items-center justify-between text-xs border-b border-slate-800">
-                      <span className="text-slate-400 flex items-center gap-1.5"><Salad className="w-3.5 h-3.5" /> Ensalada</span>
-                      {p.estadoEnsalada === 'Pendiente'
-                        ? <span className="rounded-md bg-emerald-500/15 text-emerald-300 px-2 py-0.5 font-semibold animate-pulse">Pendiente</span>
-                        : <span className="rounded-md bg-sky-500/15 text-sky-300 px-2 py-0.5 font-semibold">Lista</span>}
-                    </div>
-                  )}
 
                   {/* Items */}
                   <ul className="flex-1 divide-y divide-slate-800/80">

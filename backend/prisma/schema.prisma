@@ -161,7 +161,6 @@ model Pedido {
   mesaId         Int? // Opcional: null para pedidos de delivery
   mesero         String
   estado         String   @default("Cocina") // "Cocina", "Servido", "Cobrado", "Cancelado"
-  estadoEnsalada String   @default("No Aplica") // "Pendiente", "Listo", "No Aplica"
   total          Decimal  @db.Decimal(10, 2)
   adicional      Boolean  @default(false)
   createdAt      DateTime @default(now())

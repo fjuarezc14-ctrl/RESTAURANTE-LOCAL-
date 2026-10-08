@@ -20,7 +20,6 @@ export default function CocinaPage() {
       descartarCancelacion={descartarCancelacion}
       marcarPedidoListo={marcarPedidoListo}
       marcarItemListo={marcarItemListo}
-      mostrarEnsalada
       etiquetaCancelacion="Pedido cancelado"
       textoVacio="Sin pedidos pendientes"
       subtextoVacio="La cocina está al día."
