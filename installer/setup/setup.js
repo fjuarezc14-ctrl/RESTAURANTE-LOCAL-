@@ -211,6 +211,7 @@ async function main() {
       'INITIAL_ADMIN_PIN=1234',
       // Con este secreto se guardan los PIN como hash: único por instalación y no debe cambiar (docs/SOPORTE.md)
       `PIN_SECRET="${crypto.randomBytes(32).toString('base64')}"`,
+      'AUTH_OBLIGATORIA=true',
       '',
     ].join(os.EOL));
   }
@@ -224,6 +225,13 @@ async function main() {
     contrasenaAdminNueva = delCliente || crypto.randomBytes(6).toString('hex');
     const env = fs.readFileSync(ENV_FILE, 'utf8');
     fs.appendFileSync(ENV_FILE, `${env.endsWith(os.EOL) ? '' : os.EOL}INITIAL_ADMIN_PASSWORD="${contrasenaAdminNueva}"${os.EOL}`);
+  }
+
+  // Desde la 1.2.0 el inicio de sesión es obligatorio (equipo activado + PIN). Se agrega en las
+  // actualizaciones; si alguien lo puso en false a propósito, se respeta.
+  if (!/^AUTH_OBLIGATORIA=/m.test(fs.readFileSync(ENV_FILE, 'utf8'))) {
+    const env = fs.readFileSync(ENV_FILE, 'utf8');
+    fs.appendFileSync(ENV_FILE, `${env.endsWith(os.EOL) ? '' : os.EOL}AUTH_OBLIGATORIA=true${os.EOL}`);
   }
 
   // Respaldo antes de migrar una base que ya tiene datos: si falla, no se toca nada
