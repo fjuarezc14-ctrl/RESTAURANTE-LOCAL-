@@ -28,7 +28,8 @@ sql() { dc exec -T db psql -U "$DB_USER" -d restaurante_local -v ON_ERROR_STOP=1
 echo "▶ Levantando la base..."
 dc up -d --wait db
 
-VENTAS="$(sql "SELECT CASE WHEN to_regclass('\"Venta\"') IS NULL THEN 0 ELSE (SELECT count(*) FROM \"Venta\") END")"
+VENTAS=0
+[[ "$(sql "SELECT to_regclass('\"Venta\"') IS NOT NULL")" == "t" ]] && VENTAS="$(sql 'SELECT count(*) FROM "Venta"')"
 if [[ "$VENTAS" -gt 0 ]]; then
   [[ "$MODO" == "--reemplazar" ]] || falla "La base web ya tiene $VENTAS ventas. Para pisarla, repite con --reemplazar."
   mkdir -p respaldos

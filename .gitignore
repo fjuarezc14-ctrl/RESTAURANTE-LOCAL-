@@ -15,3 +15,6 @@ backend/cliente.json
 .env.*
 !.env.example
 !.env.*.example
+
+# Respaldos que deja scripts/importar-respaldo.sh
+respaldos/
