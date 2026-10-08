@@ -6,9 +6,9 @@ WORKDIR /app
 # Prisma necesita openssl
 RUN apk add --no-cache openssl postgresql16-client
 
-# Todas las dependencias: prisma (devDependency) aplica las migraciones al arrancar
+# Solo dependencias de producción (prisma está en ellas: aplica las migraciones al arrancar)
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund
 
 COPY prisma ./prisma
 RUN npx prisma generate
