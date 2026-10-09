@@ -18,5 +18,8 @@ COPY . .
 ENV NODE_ENV=production
 EXPOSE 3010
 
+# Sin privilegios de root: el servidor solo lee su código (los archivos temporales van a /tmp)
+USER node
+
 # Al iniciar: migraciones pendientes, primer arranque del cliente (solo con la BD vacía) y servidor
 CMD ["sh", "-c", "npx prisma migrate deploy && node scripts/iniciar-cliente.js && node server.js"]
