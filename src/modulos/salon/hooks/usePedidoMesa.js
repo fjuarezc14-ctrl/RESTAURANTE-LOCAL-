@@ -45,6 +45,8 @@ export function usePedidoMesa({
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   const searchInputRef = useRef(null);
+  // La misma clave en los reintentos de este envío; se renueva cuando sale bien
+  const claveEnvioRef = useRef(null);
 
   const abrirModal = (m) => {
     // Si la mesa está unida a otra, informar al usuario y bloquear ingreso
@@ -373,12 +375,14 @@ export function usePedidoMesa({
       const esAdicional = mesaActual.pedidoData?.items?.length > 0;
 
       const mesaNum = mesaActual.numero || mesaActual.num;
+      if (!claveEnvioRef.current) claveEnvioRef.current = crypto.randomUUID();
       await api.enviarACocina(mesaNum, {
         mesero: meseroGlobal,
         items: nuevosItems, // Enviamos UNICAMENTE los nuevos items añadidos
         total: totalNuevos, // Enviamos el total del pedido adicional específico
         adicional: esAdicional,
-      });
+      }, claveEnvioRef.current);
+      claveEnvioRef.current = null;
 
       if (mesaNum) {
         localStorage.removeItem(`${COMPANY_CONFIG.localStoragePrefix || 'pos_draft_mesa_'}${mesaNum}`);

@@ -1,10 +1,11 @@
 // API de Salón: mesas, pedidos de mesa, cancelaciones y entregas
-import { apiRequest } from '../../apiCliente';
+import { apiRequest, conClave } from '../../apiCliente';
 
 export const apiSalon = {
   getMesas: () => apiRequest('/api/mesas'),
-  enviarACocina: (num, body) => apiRequest(`/api/mesas/${num}/pedido`, {
-    method: 'POST', body: JSON.stringify(body)
+  // claveIdempotencia: la misma en los reintentos del mismo envío (un WiFi inestable no duplica la comanda)
+  enviarACocina: (num, body, claveIdempotencia) => apiRequest(`/api/mesas/${num}/pedido`, {
+    method: 'POST', body: JSON.stringify(body), ...conClave(claveIdempotencia)
   }),
   unirMesa: (num, numeroMesaAUnir) => apiRequest(`/api/mesas/${num}/unir`, {
     method: 'POST', body: JSON.stringify({ numeroMesaAUnir })

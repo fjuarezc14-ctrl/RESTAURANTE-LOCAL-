@@ -6,6 +6,7 @@ const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { mesaNueva, mesaRenumerar, mesaSeparar, mesaUnir, pedidoMesa } = require('../../shared/esquemas/pedidos.js');
 const { requierePermiso } = require('../middlewares/permisos');
+const { idempotente } = require('../middlewares/idempotencia');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -258,7 +259,7 @@ router.post('/api/mesas/:num/separar', requierePermiso('Salon'), validar({ body:
 });
 
 // POST /api/mesas/:num/pedido → Enviar a cocina (con descuento de stock)
-router.post('/api/mesas/:num/pedido', requierePermiso('Salon'), validar({ body: pedidoMesa }), async (req, res, next) => {
+router.post('/api/mesas/:num/pedido', requierePermiso('Salon'), idempotente, validar({ body: pedidoMesa }), async (req, res, next) => {
   const { num } = req.params;
   const { mesero, items, total, adicional } = req.body;
 
