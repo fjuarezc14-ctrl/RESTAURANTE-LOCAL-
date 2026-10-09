@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Lock } from 'lucide-react';
-import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy } from 'react';
 import { api, esErrorDeSesion, onSesionPerdida } from './api';
 import { useEventos } from './hooks/useEventos';
 import { useAviso } from './components/ui';
@@ -24,6 +24,24 @@ const CreditosPage = lazy(() => import('./pages/CreditosPage'));
 const ConfiguracionPage = lazy(() => import('./pages/ConfiguracionPage'));
 const EquiposPage = lazy(() => import('./pages/EquiposPage'));
 const AuditoriaPage = lazy(() => import('./pages/AuditoriaPage'));
+
+// Título del encabezado de cada pantalla
+const TITULOS = {
+  '/': 'Resumen de Ventas',
+  '/salon': 'Gestión de Salón',
+  '/cocina': 'Monitor de Preparación',
+  '/barra': 'Monitor de Barra',
+  '/caja': 'Punto de Cobro',
+  '/creditos': 'Módulo de Créditos',
+  '/compras': 'Registro de Compras',
+  '/reportes': 'Panel Contable',
+  '/carta': 'Carta e Inventario',
+  '/categorias': 'Categorías de la Carta',
+  '/usuarios': 'Personal y Accesos',
+  '/equipos': 'Equipos y Sesiones',
+  '/auditoria': 'Auditoría',
+  '/configuracion': 'Configuración de Empresa',
+};
 
 // === SESIÓN ===
 // La sesión vive en sessionStorage: al cerrar la pestaña/navegador hay que volver a poner el PIN.
@@ -316,28 +334,25 @@ function App() {
       </div>
     )}
     <BrowserRouter>
-      <Suspense fallback={
-        <div className="flex-1 min-h-[50vh] flex items-center justify-center">
-          <div className="w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      }>
-        <Routes>
-          <Route path="/" element={<Layout title="Resumen de Ventas" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><DashboardPage /></ProtectedRoute></Layout>} />
-          <Route path="/salon" element={<Layout title="Gestión de Salón" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Salon" currentUser={currentUser}><SalonPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-          <Route path="/cocina" element={<Layout title="Monitor de Preparación" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Cocina" currentUser={currentUser}><CocinaPage /></ProtectedRoute></Layout>} />
-          <Route path="/barra" element={<Layout title="Monitor de Barra" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Barra" currentUser={currentUser}><BarraPage /></ProtectedRoute></Layout>} />
-          <Route path="/caja" element={<Layout title="Punto de Cobro" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Caja" currentUser={currentUser}><CajaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-          <Route path="/creditos" element={<Layout title="Módulo de Créditos" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Creditos" currentUser={currentUser}><CreditosPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-          <Route path="/compras" element={<Layout title="Registro de Compras" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Compras" currentUser={currentUser}><ComprasPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-          <Route path="/reportes" element={<Layout title="Panel Contable" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Reportes" currentUser={currentUser}><ReportesPage /></ProtectedRoute></Layout>} />
-          <Route path="/carta" element={<Layout title="Carta e Inventario" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Carta" currentUser={currentUser}><CartaPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-          <Route path="/categorias" element={<Layout title="Categorías de la Carta" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Categorias" currentUser={currentUser}><CategoriasPage /></ProtectedRoute></Layout>} />
-          <Route path="/usuarios" element={<Layout title="Personal y Accesos" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Usuarios" currentUser={currentUser}><UsuariosPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-          <Route path="/equipos" element={<Layout title="Equipos y Sesiones" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="SoloAdmin" currentUser={currentUser}><EquiposPage /></ProtectedRoute></Layout>} />
-          <Route path="/auditoria" element={<Layout title="Auditoría" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="SoloAdmin" currentUser={currentUser}><AuditoriaPage /></ProtectedRoute></Layout>} />
-          <Route path="/configuracion" element={<Layout title="Configuración de Empresa" currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion}><ProtectedRoute permission="Dashboard" currentUser={currentUser}><ConfiguracionPage currentUser={currentUser} /></ProtectedRoute></Layout>} />
-        </Routes>
-      </Suspense>
+      <Routes>
+        {/* El menú y el encabezado quedan montados al cambiar de pantalla; solo el contenido central espera la carga */}
+        <Route element={<Layout titulos={TITULOS} currentUser={currentUser} onLogout={handleLogout} modoInstalacion={modoInstalacion} />}>
+          <Route path="/" element={<ProtectedRoute permission="Dashboard" currentUser={currentUser}><DashboardPage /></ProtectedRoute>} />
+          <Route path="/salon" element={<ProtectedRoute permission="Salon" currentUser={currentUser}><SalonPage currentUser={currentUser} /></ProtectedRoute>} />
+          <Route path="/cocina" element={<ProtectedRoute permission="Cocina" currentUser={currentUser}><CocinaPage /></ProtectedRoute>} />
+          <Route path="/barra" element={<ProtectedRoute permission="Barra" currentUser={currentUser}><BarraPage /></ProtectedRoute>} />
+          <Route path="/caja" element={<ProtectedRoute permission="Caja" currentUser={currentUser}><CajaPage currentUser={currentUser} /></ProtectedRoute>} />
+          <Route path="/creditos" element={<ProtectedRoute permission="Creditos" currentUser={currentUser}><CreditosPage currentUser={currentUser} /></ProtectedRoute>} />
+          <Route path="/compras" element={<ProtectedRoute permission="Compras" currentUser={currentUser}><ComprasPage currentUser={currentUser} /></ProtectedRoute>} />
+          <Route path="/reportes" element={<ProtectedRoute permission="Reportes" currentUser={currentUser}><ReportesPage /></ProtectedRoute>} />
+          <Route path="/carta" element={<ProtectedRoute permission="Carta" currentUser={currentUser}><CartaPage currentUser={currentUser} /></ProtectedRoute>} />
+          <Route path="/categorias" element={<ProtectedRoute permission="Categorias" currentUser={currentUser}><CategoriasPage /></ProtectedRoute>} />
+          <Route path="/usuarios" element={<ProtectedRoute permission="Usuarios" currentUser={currentUser}><UsuariosPage currentUser={currentUser} /></ProtectedRoute>} />
+          <Route path="/equipos" element={<ProtectedRoute permission="SoloAdmin" currentUser={currentUser}><EquiposPage /></ProtectedRoute>} />
+          <Route path="/auditoria" element={<ProtectedRoute permission="SoloAdmin" currentUser={currentUser}><AuditoriaPage /></ProtectedRoute>} />
+          <Route path="/configuracion" element={<ProtectedRoute permission="Dashboard" currentUser={currentUser}><ConfiguracionPage currentUser={currentUser} /></ProtectedRoute>} />
+        </Route>
+      </Routes>
     </BrowserRouter>
     </>
   );

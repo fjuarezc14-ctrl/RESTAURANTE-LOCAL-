@@ -1,6 +1,7 @@
-// Estructura de cada página: menú lateral, encabezado y contenido
+// Estructura común de las páginas: menú lateral, encabezado y contenido (la pantalla de la ruta va en el <Outlet />)
 import { Menu, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import { BotonPantallaCompleta } from './PantallaCompleta';
 import { Sidebar } from './Sidebar';
 
@@ -32,14 +33,24 @@ const Header = ({ toggleSidebar, title, currentUser }) => (
   </header>
 );
 
-export const Layout = ({ children, title, currentUser, onLogout, modoInstalacion }) => {
+const Cargando = () => (
+  <div className="flex-1 min-h-[50vh] flex items-center justify-center">
+    <div className="w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+  </div>
+);
+
+export const Layout = ({ titulos = {}, currentUser, onLogout, modoInstalacion }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { pathname } = useLocation();
+  const title = titulos[pathname];
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100 relative">
       <Sidebar isOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(!sidebarOpen)} currentUser={currentUser} onLogout={onLogout} modoInstalacion={modoInstalacion} />
       <main className="flex-1 flex flex-col overflow-hidden w-full">
         <Header toggleSidebar={() => setSidebarOpen(!sidebarOpen)} title={title} currentUser={currentUser} />
-        {children}
+        <Suspense fallback={<Cargando />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );
