@@ -47,7 +47,7 @@ services:
       # si cambia después, los PIN guardados dejan de coincidir y hay que volver a asignarlos.
       - PIN_SECRET=${PIN_SECRET:-}
       - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-}
-      - AUTH_OBLIGATORIA=${AUTH_OBLIGATORIA:-false}
+      - AUTH_OBLIGATORIA=${AUTH_OBLIGATORIA:-true}
       - MODO_INSTALACION=${MODO_INSTALACION:-local}
       # IP de esta PC en el WiFi, para el QR de "Compartir dirección" (dentro de Docker no se puede detectar)
       - IP_SERVIDOR=${IP_SERVIDOR:-}
