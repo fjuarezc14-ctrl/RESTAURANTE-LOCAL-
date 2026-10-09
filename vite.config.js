@@ -50,8 +50,14 @@ export default defineConfig({
     warmup: {
       clientFiles: ['./src/pages/*.jsx'],
     },
+    // En Docker sobre Windows los cambios del disco no llegan como eventos y hay que revisar los archivos (polling).
+    // Antes se revisaban ~2.200 archivos cada 100 ms y la VM de WSL (Vmmem) se comía la CPU: ahora cada 1 s
+    // y solo lo que usa el frontend (del backend, solo shared/, que se importa con @shared)
     watch: {
-      usePolling: true
+      usePolling: true,
+      interval: 1000,
+      binaryInterval: 3000,
+      ignored: [/[\\/](installer|dist|scratch|docs)[\\/]/, /[\\/]backend[\\/](?!shared[\\/])/],
     },
     proxy: {
       '/api': {
