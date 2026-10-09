@@ -4,7 +4,7 @@ const { inicioJornadaActual } = require('../servicios/jornada');
 const { prisma } = require('../db');
 const { obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
-const { rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
+const { consultaRotacion, rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
 const { requierePermiso } = require('../middlewares/permisos');
 
 const router = express.Router();
@@ -474,7 +474,7 @@ router.get('/api/reportes/pollos', requierePermiso('Reportes'), validar({ query:
 });
 
 // GET /api/reportes/rotacion → Cantidad vendida de cada producto por rango de fechas
-router.get('/api/reportes/rotacion', requierePermiso('Reportes', 'Dashboard'), validar({ query: rangoFechasOpcional }), async (req, res, next) => {
+router.get('/api/reportes/rotacion', requierePermiso('Reportes', 'Dashboard'), validar({ query: consultaRotacion }), async (req, res, next) => {
   const { desde, hasta } = req.query;
   try {
     let filtroFecha = {};

@@ -94,7 +94,14 @@ export const montoPositivo = monto.refine((n) => n > 0, 'El monto debe ser mayor
 export const pinOpcional = z.preprocess((v) => (v === '' || v === null ? undefined : v), pin.optional());
 export const booleanoOpcional = z.boolean().optional();
 export const TIPOS_COMPROBANTE = ['Ticket', 'Boleta', 'Factura'];
-export const consultaDesde = z.looseObject({ desde: fecha.optional() });
+// Día (AAAA-MM-DD) o instante ISO completo: el dashboard filtra desde la hora del último cierre de caja
+export const fechaOInstante = z.union([fecha, z.iso.datetime({ offset: true })], { error: 'La fecha no es válida.' });
+export const consultaDesde = z.looseObject({ desde: fechaOInstante.optional() });
+// Rotación: el rango de reportes, o solo `desde` (corte del dashboard)
+export const consultaRotacion = z
+  .looseObject({ desde: fechaOInstante.optional(), hasta: fecha.optional() })
+  .refine(({ desde, hasta }) => !hasta || Boolean(desde), { message: 'Indica las dos fechas del rango.', path: ['desde'] })
+  .refine(({ desde, hasta }) => !hasta || !desde || desde.slice(0, 10) <= hasta, { message: 'La fecha inicial no puede ser posterior a la final.', path: ['hasta'] });
 export const consultaDirectorio = z.looseObject({
   page: desdeTexto(z.number().int().min(1).max(100000).optional()),
   limit: desdeTexto(z.number().int().min(1).max(500).optional()),
