@@ -12,8 +12,18 @@ const RESPALDO_MS = 60000;
 const ESPERA_MS = 250; // varios avisos seguidos → una sola recarga
 
 const suscriptores = new Set(); // { temas: Set, avisar: () => void }
+const oyentes = new Set(); // (temas: string[]) => void — no abren la conexión (ej. la memoria de utils/cacheApi.js)
 let fuente = null;
 let huboError = false;
+
+// '*' = pudieron perderse avisos (conexión nueva o reconectada): todo puede haber cambiado
+const avisarOyentes = (temas) => { for (const fn of oyentes) fn(temas); };
+
+/** Escucha los avisos sin mantener abierta la conexión (solo los recibe mientras alguna pantalla escucha) */
+export function alCambiarDatos(fn) {
+  oyentes.add(fn);
+  return () => oyentes.delete(fn);
+}
 
 const pestanaVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 
@@ -23,10 +33,15 @@ function abrirConexion() {
   fuente.addEventListener('cambio', (e) => {
     let temas;
     try { temas = JSON.parse(e.data).temas || []; } catch { return; }
+    avisarOyentes(temas);
     for (const s of suscriptores) if (temas.some((t) => s.temas.has(t))) s.avisar();
   });
+  avisarOyentes(['*']); // mientras no había conexión no llegaban avisos
   fuente.onopen = () => {
-    if (huboError) for (const s of suscriptores) s.avisar(); // volvió la conexión: ponerse al día
+    if (huboError) {
+      avisarOyentes(['*']);
+      for (const s of suscriptores) s.avisar(); // volvió la conexión: ponerse al día
+    }
     huboError = false;
   };
   fuente.onerror = () => { huboError = true; }; // EventSource reintenta solo (retry: 3000)
