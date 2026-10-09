@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, X, Search, List, LayoutGrid, Flame, Receipt, ChefHat, SlidersHorizontal } from 'lucide-react';
 import { Dialog } from '../../../components/ui';
 import { ListaPlatosMesa } from '../componentes/ListaPlatosMesa';
@@ -5,6 +6,9 @@ import { ComandaMesa } from '../componentes/ComandaMesa';
 import { MenuAccionesMesa } from '../componentes/MenuAccionesMesa';
 
 const MAS_PEDIDOS = '🔥 Más Pedidos';
+const CIERRA_CON_PX = 110; // arrastrar la hoja del pedido más que esto hacia abajo la cierra
+const CIERRA_CON_VELOCIDAD = 0.6; // o un deslizamiento rápido (px por ms)
+const esCelular = () => window.matchMedia('(max-width: 767px)').matches;
 
 /**
  * ModalPedidoMesa: toma de pedidos de una mesa.
@@ -53,7 +57,43 @@ export default function ModalPedidoMesa({
   enviarACocina,
   enviando
 }) {
+  // Hoja del pedido: se cierra deslizándola hacia abajo
+  const [arrastre, setArrastre] = useState(0);
+  const gestoRef = useRef(null);
+
+  // Mientras el modal está abierto, deslizar hacia abajo no recarga la página ("jalar para actualizar" del navegador)
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const elementos = [document.documentElement, document.body];
+    const antes = elementos.map((el) => el.style.overscrollBehaviorY);
+    elementos.forEach((el) => { el.style.overscrollBehaviorY = 'none'; });
+    return () => elementos.forEach((el, i) => { el.style.overscrollBehaviorY = antes[i]; });
+  }, [abierto]);
+
   if (!abierto || !mesa) return null;
+
+  // Solo se arrastra si la lista está arriba del todo (si no, el dedo está desplazando la lista)
+  const alTocar = (e) => {
+    if (!esCelular()) return;
+    const lista = e.target.closest('[data-desplazable]');
+    gestoRef.current = lista && lista.scrollTop > 0 ? null : { y: e.touches[0].clientY, t: Date.now(), dy: 0 };
+  };
+  const alMover = (e) => {
+    const gesto = gestoRef.current;
+    if (!gesto) return;
+    const dy = e.touches[0].clientY - gesto.y;
+    if (dy < -8) { gestoRef.current = null; setArrastre(0); return; } // sube: está desplazando la lista
+    gesto.dy = Math.max(0, dy);
+    setArrastre(gesto.dy);
+  };
+  const alSoltar = () => {
+    const gesto = gestoRef.current;
+    gestoRef.current = null;
+    if (gesto && (gesto.dy > CIERRA_CON_PX || gesto.dy / Math.max(1, Date.now() - gesto.t) > CIERRA_CON_VELOCIDAD)) {
+      setMobileTab('menu');
+    }
+    setArrastre(0);
+  };
 
   const cantNuevos = ticketActual.filter((i) => !i.yaEnviado).reduce((s, i) => s + i.cant, 0);
   const cantTotal = ticketActual.reduce((s, i) => s + i.cant, 0);
@@ -104,7 +144,7 @@ export default function ModalPedidoMesa({
         key={cat}
         type="button"
         onClick={() => setCategoriaActiva(cat)}
-        className={`h-10 max-w-[12rem] px-3.5 rounded-xl text-sm font-bold flex items-center gap-1.5 shrink-0 active:scale-95 transition-colors cursor-pointer ${extra} ${
+        className={`h-9 max-w-[11rem] px-3 rounded-xl text-[13px] font-bold flex items-center gap-1.5 shrink-0 active:scale-95 transition-colors cursor-pointer ${extra} ${
           activa
             ? (esMasPedidos ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-white')
             : (esMasPedidos ? 'bg-amber-100 text-amber-900' : 'bg-white border border-slate-200 text-slate-700')
@@ -131,13 +171,13 @@ export default function ModalPedidoMesa({
           type="button"
           onClick={salir}
           aria-label="Salir de la mesa"
-          className="w-11 h-11 rounded-xl flex items-center justify-center text-slate-200 active:bg-slate-800 cursor-pointer"
+          className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-200 active:bg-slate-800 cursor-pointer"
         >
           <ArrowLeft className="w-6 h-6 sm:hidden" />
           <X className="w-6 h-6 hidden sm:block" />
         </button>
         <div className="flex-1 min-w-0">
-          <h2 className="font-black text-xl leading-tight">
+          <h2 className="font-black text-lg leading-tight">
             Mesa <span className="text-amber-400">{mesa.num}</span>
           </h2>
           <p className="text-xs text-slate-400 truncate">
@@ -169,7 +209,7 @@ export default function ModalPedidoMesa({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                  className="w-full h-11 pl-10 pr-10 rounded-xl bg-slate-100 border border-transparent text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-amber-400 [&::-webkit-search-cancel-button]:hidden"
+                  className="w-full h-10 pl-10 pr-10 rounded-xl bg-slate-100 border border-transparent text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-amber-400 [&::-webkit-search-cancel-button]:hidden"
                 />
                 {searchQuery && (
                   <button
@@ -187,7 +227,7 @@ export default function ModalPedidoMesa({
                 onClick={toggleModoVista}
                 aria-label={modoVista === 'tarjetas' ? 'Ver como lista' : 'Ver como tarjetas'}
                 title={modoVista === 'tarjetas' ? 'Ver como lista' : 'Ver como tarjetas'}
-                className="w-11 h-11 shrink-0 rounded-xl border border-slate-200 bg-white text-slate-700 flex items-center justify-center active:scale-95 cursor-pointer"
+                className="w-10 h-10 shrink-0 rounded-xl border border-slate-200 bg-white text-slate-700 flex items-center justify-center active:scale-95 cursor-pointer"
               >
                 {modoVista === 'tarjetas' ? <List className="w-5 h-5" /> : <LayoutGrid className="w-5 h-5" />}
               </button>
@@ -200,7 +240,7 @@ export default function ModalPedidoMesa({
                 <button
                   type="button"
                   onClick={onAbrirCategoriasModal}
-                  className="h-10 px-3.5 rounded-xl text-sm font-bold flex items-center gap-1.5 bg-cyan-50 border border-cyan-300 text-cyan-900 active:scale-95 cursor-pointer"
+                  className="h-9 px-3 rounded-xl text-[13px] font-bold flex items-center gap-1.5 bg-cyan-50 border border-cyan-300 text-cyan-900 active:scale-95 cursor-pointer"
                 >
                   <SlidersHorizontal className="w-4 h-4" /> Categorías
                 </button>
@@ -212,7 +252,7 @@ export default function ModalPedidoMesa({
                 <button
                   type="button"
                   onClick={onAbrirCategoriasModal}
-                  className="h-10 px-3.5 rounded-xl text-sm font-bold flex items-center gap-1.5 bg-cyan-50 border border-cyan-300 text-cyan-900 active:scale-95 cursor-pointer"
+                  className="h-9 px-3 rounded-xl text-[13px] font-bold flex items-center gap-1.5 bg-cyan-50 border border-cyan-300 text-cyan-900 active:scale-95 cursor-pointer"
                 >
                   <LayoutGrid className="w-4 h-4" /> Ver todas ({categoriasOrdenadas.length - 2})
                 </button>
@@ -271,7 +311,13 @@ export default function ModalPedidoMesa({
         )}
 
         {/* Comanda: hoja que sube en el celular; columna derecha en pantallas grandes */}
-        <div className={`fixed inset-x-0 bottom-0 top-[6dvh] z-40 rounded-t-3xl overflow-hidden shadow-2xl transition-transform duration-300 ease-out
+        <div
+          onTouchStart={alTocar}
+          onTouchMove={alMover}
+          onTouchEnd={alSoltar}
+          onTouchCancel={alSoltar}
+          style={arrastre > 0 ? { transform: `translateY(${arrastre}px)`, transition: 'none' } : undefined}
+          className={`fixed inset-x-0 bottom-0 top-[6dvh] z-40 rounded-t-3xl overflow-hidden shadow-2xl transition-transform duration-300 ease-out
           md:static md:z-auto md:w-2/5 md:rounded-none md:shadow-none md:translate-y-0 ${verComanda ? 'translate-y-0' : 'translate-y-full'}`}
         >
           <ComandaMesa

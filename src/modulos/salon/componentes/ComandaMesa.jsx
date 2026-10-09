@@ -27,7 +27,7 @@ function PrecioItem({ item, productos, apagado }) {
   return (
     <span className="flex items-baseline gap-1.5">
       {conDescuento && <span className="line-through text-slate-400 text-xs">S/ {(item.cant * original.precio).toFixed(2)}</span>}
-      <span className={`font-mono font-black text-[15px] ${apagado ? 'text-slate-500' : 'text-emerald-700'}`}>S/ {sub.toFixed(2)}</span>
+      <span className={`font-black text-sm tabular-nums whitespace-nowrap ${apagado ? 'text-slate-500' : 'text-emerald-700'}`}>S/ {sub.toFixed(2)}</span>
     </span>
   );
 }
@@ -86,24 +86,24 @@ export function ComandaMesa({
           className="md:hidden w-full pt-2 pb-1 flex justify-center cursor-pointer"
           aria-label="Volver a la carta"
         >
-          <span className="w-12 h-1.5 rounded-full bg-slate-300" />
+          <span className="w-12 h-1.5 rounded-full bg-slate-300" aria-hidden="true" />
         </button>
         <div className="flex items-center justify-between gap-2 px-4 py-2.5 md:py-3.5">
           <div className="min-w-0">
-            <h3 className="font-black text-slate-900 text-lg leading-tight">Pedido de la mesa</h3>
+            <h3 className="font-black text-slate-900 text-base leading-tight">Pedido de la mesa</h3>
             <span className={`inline-block mt-0.5 text-[11px] font-black uppercase px-2 py-0.5 rounded-md ${badgeEstado}`}>{badgeTexto}</span>
           </div>
           <button
             type="button"
             onClick={onVolverALaCarta}
-            className="md:hidden h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-800 font-bold text-sm flex items-center gap-1.5 active:scale-95 cursor-pointer"
+            className="md:hidden h-9 px-3 shrink-0 rounded-xl border border-slate-200 bg-white text-slate-800 font-bold text-[13px] flex items-center gap-1 active:scale-95 cursor-pointer"
           >
             <ChevronDown className="w-4 h-4" /> Seguir pidiendo
           </button>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar px-3 py-3 space-y-4 bg-slate-50">
+      <div data-desplazable className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar px-3 py-3 space-y-4 bg-slate-50">
         {ticketActual.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center gap-2 text-slate-400 py-10">
             <ShoppingBag className="w-10 h-10" />
@@ -119,7 +119,7 @@ export function ComandaMesa({
                 <li key={idx} className="rounded-2xl border border-amber-200 bg-white p-3 shadow-sm">
                   <div className="flex items-start gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-[15px] leading-snug text-slate-900">{item.nombre}</p>
+                      <p className="font-bold text-sm leading-snug text-slate-900 break-words">{item.nombre}</p>
                       <PrecioItem item={item} productos={productos} />
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
@@ -127,18 +127,18 @@ export function ComandaMesa({
                         type="button"
                         onClick={() => alterarCantidad(idx, '-')}
                         aria-label="Quitar uno"
-                        className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 flex items-center justify-center active:scale-95 cursor-pointer"
+                        className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 flex items-center justify-center active:scale-95 cursor-pointer"
                       >
-                        <Minus className="w-5 h-5" strokeWidth={3} />
+                        <Minus className="w-4 h-4" strokeWidth={3} />
                       </button>
-                      <span className="w-7 text-center font-black text-lg tabular-nums">{item.cant}</span>
+                      <span className="min-w-6 text-center font-black text-base tabular-nums">{item.cant}</span>
                       <button
                         type="button"
                         onClick={() => alterarCantidad(idx, '+')}
                         aria-label="Agregar uno"
-                        className="w-11 h-11 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center active:scale-95 cursor-pointer"
+                        className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center active:scale-95 cursor-pointer"
                       >
-                        <Plus className="w-5 h-5" strokeWidth={3} />
+                        <Plus className="w-4 h-4" strokeWidth={3} />
                       </button>
                     </div>
                   </div>
@@ -153,14 +153,14 @@ export function ComandaMesa({
                     <button
                       type="button"
                       onClick={() => setNotaAbierta(notaAbierta === idx ? null : idx)}
-                      className="h-10 px-3 rounded-xl text-sm font-bold text-amber-800 bg-amber-50 border border-amber-200 flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                      className="h-9 px-2.5 rounded-xl text-[13px] font-bold text-amber-800 bg-amber-50 border border-amber-200 flex items-center gap-1.5 active:scale-95 cursor-pointer"
                     >
                       <StickyNote className="w-4 h-4" /> {item.notas ? 'Editar nota' : 'Agregar nota'}
                     </button>
                     <button
                       type="button"
                       onClick={() => quitar(idx)}
-                      className="h-10 px-3 rounded-xl text-sm font-bold text-rose-600 flex items-center gap-1.5 active:bg-rose-50 cursor-pointer"
+                      className="h-9 px-2.5 rounded-xl text-[13px] font-bold text-rose-600 flex items-center gap-1.5 active:bg-rose-50 cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" /> Quitar
                     </button>
@@ -182,7 +182,7 @@ export function ComandaMesa({
                     <div className="flex items-start gap-3">
                       <span className="w-8 h-8 shrink-0 rounded-lg bg-slate-100 font-black text-slate-700 flex items-center justify-center tabular-nums">{item.cant}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-[15px] leading-snug text-slate-800">{item.nombre}</p>
+                        <p className="font-bold text-sm leading-snug text-slate-800 break-words">{item.nombre}</p>
                         <div className="mt-0.5 flex items-center gap-2 flex-wrap">
                           <PrecioItem item={item} productos={productos} apagado />
                           {item.historial ? (
@@ -230,13 +230,13 @@ export function ComandaMesa({
       <div className="shrink-0 border-t border-slate-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="flex items-baseline justify-between mb-3">
           <span className="text-sm font-bold text-slate-500">Total de la mesa</span>
-          <span className="font-black font-mono text-2xl text-slate-900">S/ {totalTicket.toFixed(2)}</span>
+          <span className="font-black text-xl tabular-nums text-slate-900">S/ {totalTicket.toFixed(2)}</span>
         </div>
         <button
           type="button"
           onClick={enviarACocina}
           disabled={enviando || cantNuevos === 0}
-          className="w-full h-14 rounded-2xl bg-amber-500 text-slate-950 font-black text-base flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25 active:scale-[0.98] transition-transform disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none cursor-pointer"
+          className="w-full h-12 rounded-2xl bg-amber-500 text-slate-950 font-black text-[15px] flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25 active:scale-[0.98] transition-transform disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none cursor-pointer"
         >
           {enviando
             ? <span className="w-5 h-5 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" />

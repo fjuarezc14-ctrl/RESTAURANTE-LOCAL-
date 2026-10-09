@@ -41,7 +41,7 @@ export function MenuAccionesMesa({ mesa, onUnir, onPrecuenta, onAnular, onReclam
         aria-label="Más acciones de la mesa"
         aria-haspopup="menu"
         aria-expanded={abierto}
-        className="w-11 h-11 rounded-xl bg-slate-800 text-slate-200 flex items-center justify-center active:scale-95 cursor-pointer"
+        className="w-10 h-10 rounded-xl bg-slate-800 text-slate-200 flex items-center justify-center active:scale-95 cursor-pointer"
       >
         <MoreVertical className="w-5 h-5" />
       </button>
