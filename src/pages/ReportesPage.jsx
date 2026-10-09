@@ -187,7 +187,7 @@ export default function ReportesPage() {
     const mensaje = `Hola *${v.nombreCliente || 'Estimado cliente'}*, el total de su consumo en *${COMPANY_CONFIG.name}* fue de *S/ ${totalSafe}* (ticket de venta N° ${v.id}).\n\n¡Gracias por su preferencia!`;
     
     const waURL = `https://api.whatsapp.com/send?phone=51${cleanedPhone}&text=${encodeURIComponent(mensaje)}`;
-    window.open(waURL, '_blank');
+    window.open(waURL, '_blank', 'noopener,noreferrer');
   };
 
 

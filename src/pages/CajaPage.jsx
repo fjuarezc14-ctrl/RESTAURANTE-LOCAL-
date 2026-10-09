@@ -278,7 +278,7 @@ export default function CajaPage({ currentUser }) {
     if (!telefono) return;
     const cleanedPhone = telefono.replace(/\D/g, '');
     
-    window.open(enlaceWhatsAppVenta(v, cleanedPhone, COMPANY_CONFIG.name), '_blank');
+    window.open(enlaceWhatsAppVenta(v, cleanedPhone, COMPANY_CONFIG.name), '_blank', 'noopener,noreferrer');
   };
 
 
