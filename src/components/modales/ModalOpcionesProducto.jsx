@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Sparkles } from 'lucide-react';
+import { X, Sparkles, Check } from 'lucide-react';
 import { Dialog, useAviso } from '../ui';
 import { resolverComplementos } from '../../utils/combos';
 
@@ -166,15 +166,56 @@ export default function ModalOpcionesProducto({
           </p>
         </div>
 
+        {currentStep.tipo === 'complementos' ? (
+          <div className="space-y-2">
+            <p className="text-[10px] text-slate-400">
+              Toca para quitar lo que el cliente no quiere o agregar un extra. Quitar algo incluido no cambia el precio.
+            </p>
+            {(currentStep.complementos || []).map(c => {
+              const sel = selections.complementos || { quitados: [], agregados: [] };
+              const activo = c.incluido ? !(sel.quitados || []).includes(c.nombre) : (sel.agregados || []).includes(c.nombre);
+              const alternar = () => setSelections(prev => {
+                const actual = prev.complementos || { quitados: [], agregados: [] };
+                const lista = c.incluido ? 'quitados' : 'agregados';
+                const items = actual[lista] || [];
+                const nuevos = items.includes(c.nombre) ? items.filter(n => n !== c.nombre) : [...items, c.nombre];
+                return { ...prev, complementos: { quitados: [], agregados: [], ...actual, [lista]: nuevos } };
+              });
+              return (
+                <button
+                  key={c.nombre}
+                  type="button"
+                  onClick={alternar}
+                  className={`w-full p-3 rounded-2xl border text-left flex items-center gap-3 transition-all ${
+                    activo
+                      ? 'bg-emerald-500/10 border-emerald-500/40 text-white'
+                      : 'bg-slate-800/40 border-slate-800 text-slate-400 line-through decoration-rose-500/70'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 ${activo ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-500'}`}>
+                    {activo ? <Check className="w-3.5 h-3.5 stroke-[3px]" /> : <X className="w-3.5 h-3.5 stroke-[3px]" />}
+                  </span>
+                  <span className="font-bold text-xs flex-1">{c.nombre}</span>
+                  {c.incluido
+                    ? <span className="text-[10px] font-bold text-slate-500 uppercase">Incluido</span>
+                    : <span className={`text-[11px] font-black ${activo ? 'text-emerald-300' : 'text-slate-500'}`}>+ S/ {c.precio.toFixed(2)}</span>}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {(currentStep.options || []).map((opt) => {
-            const optNombre = typeof opt === 'string' ? opt : opt.nombre;
-            const optValor = typeof opt === 'string' ? opt : (opt.id || opt.nombre);
-            const seleccionada = seleccionActual === optValor;
+          {(currentStep.options || []).map((opt, idx) => {
+            // Opciones { label, value }: value es texto, o el producto elegido en las variantes agrupadas
+            const optNombre = typeof opt === 'string' ? opt : opt.label;
+            const optValor = typeof opt === 'string' ? opt : opt.value;
+            const seleccionada = seleccionActual != null && (
+              typeof optValor === 'object' ? seleccionActual?.id === optValor?.id : seleccionActual === optValor
+            );
 
             return (
               <button
-                key={optValor}
+                key={idx}
                 type="button"
                 onClick={() => handleSelectOption(optValor)}
                 className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
@@ -193,6 +234,7 @@ export default function ModalOpcionesProducto({
             );
           })}
         </div>
+        )}
 
         {/* Notas adicionales */}
         {esUltimoPaso && (
