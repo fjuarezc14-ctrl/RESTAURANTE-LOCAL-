@@ -251,7 +251,7 @@ export default function SalonPage({ currentUser }) {
     const okSep = await confirmar({
       titulo: 'Separar Mesas',
       mensaje: texto,
-      textoConfirmar: 'Separar',
+      botonConfirmar: 'Separar',
       peligro: true
     });
     if (okSep) {
@@ -360,7 +360,7 @@ export default function SalonPage({ currentUser }) {
     const okDel = await confirmar({
       titulo: 'Eliminar Mesa',
       mensaje: `¿Estás seguro de que deseas eliminar la Mesa ${numero}? Esta acción no se puede deshacer.`,
-      textoConfirmar: 'Eliminar Mesa',
+      botonConfirmar: 'Eliminar Mesa',
       peligro: true
     });
     if (!okDel) return;

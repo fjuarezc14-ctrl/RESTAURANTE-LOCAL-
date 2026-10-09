@@ -56,7 +56,7 @@ export function usePedidoMesa({
       confirmar({
         titulo: 'Mesa Unida',
         mensaje: `La Mesa ${m.num} está unida a la Mesa ${mesaPrincipalNum}. Todo el consumo se registra en la Mesa ${mesaPrincipalNum}.\n\n¿Deseas separar la Mesa ${m.num}?`,
-        textoConfirmar: 'Separar Mesa',
+        botonConfirmar: 'Separar Mesa',
       }).then(ok => {
         if (!ok) return;
         api.separarMesas(mesaPrincipalNum, m.num)

@@ -295,7 +295,7 @@ export default function CajaPage({ currentUser }) {
     const ok = await confirmar({
       titulo: 'Confirmar Entrega',
       mensaje: `¿Confirmas la entrega del pedido ${codigo}?`,
-      textoConfirmar: 'Confirmar Entrega',
+      botonConfirmar: 'Confirmar Entrega',
     });
     if (!ok) return;
     try {
