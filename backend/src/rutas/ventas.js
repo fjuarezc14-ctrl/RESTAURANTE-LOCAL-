@@ -437,6 +437,47 @@ router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), idempotente
   }
 });
 
+// Auto-registro silencioso en el Directorio de Clientes (consumo, sin crédito). Va DESPUÉS del cobro y fuera
+// de su transacción: si falla, en PostgreSQL abortaría la transacción y el cobro fallaría con un error confuso.
+async function registrarClienteDeConsumo({ nombreCliente, numDocumento, clienteDireccion }) {
+  const cleanNom = String(nombreCliente || '').trim();
+  const esNombreGenerico = !cleanNom || ['PÚBLICO GENERAL', 'CONSUMIDOR FINAL', 'PEDIDOS YA', 'CONSUMO PERSONAL / CORTESÍA'].includes(cleanNom.toUpperCase());
+  const cleanDoc = numDocumento && String(numDocumento).trim().length >= 8 && !['S/D', '00000000', '0'].includes(String(numDocumento).trim())
+    ? String(numDocumento).trim()
+    : null;
+
+  if (!esNombreGenerico) {
+    let cExistente = null;
+    if (cleanDoc) {
+      cExistente = await prisma.cliente.findFirst({ where: { numDoc: cleanDoc } });
+    }
+    if (!cExistente) {
+      cExistente = await prisma.cliente.findFirst({
+        where: { nombre: { equals: cleanNom, mode: 'insensitive' } }
+      });
+    }
+
+    if (!cExistente) {
+      await prisma.cliente.create({
+        data: {
+          nombre: cleanNom,
+          tipoDoc: cleanDoc ? (cleanDoc.length === 11 ? 'RUC' : 'DNI') : 'DNI',
+          numDoc: cleanDoc || null,
+          direccion: clienteDireccion ? String(clienteDireccion).trim() : null,
+          tieneCredito: false, // Cliente regular de consumo
+          esTrabajador: false,
+          activo: true,
+        }
+      });
+    } else if (!cExistente.direccion && clienteDireccion) {
+      await prisma.cliente.update({
+        where: { id: cExistente.id },
+        data: { direccion: String(clienteDireccion).trim() }
+      });
+    }
+  }
+}
+
 // POST /api/ventas → Cobrar mesa (acepta pedidoIds array o pedidoId simple)
 router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body: cobro }), async (req, res, next) => {
   const {
@@ -701,44 +742,6 @@ router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body:
         },
       });
 
-      // Auto-registro silencioso en Directorio de Clientes (Consumo, sin crédito)
-      const cleanNom = String(nombreCliente || '').trim();
-      const esNombreGenerico = !cleanNom || ['PÚBLICO GENERAL', 'CONSUMIDOR FINAL', 'PEDIDOS YA', 'CONSUMO PERSONAL / CORTESÍA'].includes(cleanNom.toUpperCase());
-      const cleanDoc = numDocumento && String(numDocumento).trim().length >= 8 && !['S/D', '00000000', '0'].includes(String(numDocumento).trim())
-        ? String(numDocumento).trim()
-        : null;
-
-      if (!esNombreGenerico) {
-        let cExistente = null;
-        if (cleanDoc) {
-          cExistente = await tx.cliente.findFirst({ where: { numDoc: cleanDoc } });
-        }
-        if (!cExistente) {
-          cExistente = await tx.cliente.findFirst({
-            where: { nombre: { equals: cleanNom, mode: 'insensitive' } }
-          });
-        }
-
-        if (!cExistente) {
-          await tx.cliente.create({
-            data: {
-              nombre: cleanNom,
-              tipoDoc: cleanDoc ? (cleanDoc.length === 11 ? 'RUC' : 'DNI') : 'DNI',
-              numDoc: cleanDoc || null,
-              direccion: clienteDireccion ? String(clienteDireccion).trim() : null,
-              tieneCredito: false, // Cliente regular de consumo
-              esTrabajador: false,
-              activo: true,
-            }
-          }).catch(() => null);
-        } else if (!cExistente.direccion && clienteDireccion) {
-          await tx.cliente.update({
-            where: { id: cExistente.id },
-            data: { direccion: String(clienteDireccion).trim() }
-          }).catch(() => null);
-        }
-      }
-
       // Marcar TODOS los pedidos de la mesa como Cobrado (con la fecha de la venta, también los adicionales)
       await tx.pedido.updateMany({
         where: { id: { in: idsAPagar } },
@@ -789,6 +792,9 @@ router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body:
         yaCobrado: true
       });
     }
+
+    await registrarClienteDeConsumo({ nombreCliente, numDocumento, clienteDireccion })
+      .catch((err) => console.warn('[cobro] No se pudo registrar al cliente en el directorio:', err.message));
 
     res.json({ ok: true, ventaId: venta.id, estadoNubefact: venta.estadoSunat, serie: venta.serie || null, numero: venta.numero || null });
   } catch (err) {
