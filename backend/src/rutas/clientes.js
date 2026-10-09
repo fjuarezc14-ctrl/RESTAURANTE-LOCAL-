@@ -472,39 +472,12 @@ router.get('/api/clientes/consulta/:doc', requierePermiso('Creditos'), async (re
     console.warn("[Consulta Offline BD Local]:", errDb.message);
   }
 
-  // Fallbacks rápidos locales para pruebas rápidas en desarrollo
-  if (cleaned === '20613857321') {
-    return res.json({
-      razonSocial: 'FIRST FISH S.A.C.',
-      direccion: 'LT. 05 DPTO. LIMA MZ. J COOP. CAJABAMBA - LIMA LIMA LOS OLIVOS',
-      tipo: 'Factura'
-    });
-  } else if (cleaned === '10404040404') {
-    return res.json({
-      nombre: 'JUAN PEREZ SOTO',
-      direccion: 'CALLE SAN MARTÍN 109',
-      tipo: 'Boleta'
-    });
-  }
-
   const token = process.env.APIS_NET_PE_TOKEN;
 
-  // Si no hay token configurado, proveemos fallbacks dinámicos inteligentes para simulación
-  if (!token || token.includes('tu_token') || token === '') {
+  // Sin token configurado no se inventan datos (terminarían en el ticket y en el directorio): se escriben a mano
+  if (!token || token.includes('tu_token')) {
     const esRuc = cleaned.length === 11;
-    if (esRuc) {
-      return res.json({
-        razonSocial: `CLIENTE RUC ${cleaned}`,
-        direccion: `DIRECCIÓN LOCAL N° ${cleaned.substring(4, 7)}`,
-        tipo: 'Factura'
-      });
-    } else {
-      return res.json({
-        nombre: `CLIENTE DNI ${cleaned}`,
-        direccion: `CALLE LOCAL N° ${cleaned.substring(3, 6)}`,
-        tipo: 'Boleta'
-      });
-    }
+    return res.json({ razonSocial: '', nombre: '', direccion: '', tipo: esRuc ? 'Factura' : 'Boleta' });
   }
 
   try {

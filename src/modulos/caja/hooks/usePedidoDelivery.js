@@ -65,18 +65,6 @@ export function usePedidoDelivery({
     if (!deliveryNumDocumento) return;
     setIsBuscando(true);
     const doc = deliveryNumDocumento.trim();
-    
-    if (doc === '20613857321') {
-      setDeliveryClienteNombre('FIRST FISH S.A.C.');
-      setDeliveryDireccion('LT. 05 DPTO. LIMA MZ. J COOP. CAJABAMBA - LIMA LIMA LOS OLIVOS');
-      setIsBuscando(false);
-      return;
-    } else if (doc === '10404040404') {
-      setDeliveryClienteNombre('JUAN PEREZ SOTO');
-      setDeliveryDireccion('CALLE SAN MARTÍN 109');
-      setIsBuscando(false);
-      return;
-    }
 
     try {
       const data = await api.consultarCliente(doc);

@@ -45,16 +45,6 @@ export function useCobroMesa({
 
   const handleDocumentoChange = (val) => {
     setNumDocumento(val);
-    const cleaned = val.trim();
-    if (cleaned === '20613857321') {
-      setClienteNombre('FIRST FISH S.A.C.');
-      setClienteDireccion('LT. 05 DPTO. LIMA MZ. J COOP. CAJABAMBA - LIMA LIMA LOS OLIVOS');
-      setTipoComprobante('Factura');
-    } else if (cleaned === '10404040404') {
-      setClienteNombre('JUAN PEREZ SOTO');
-      setClienteDireccion('CALLE SAN MARTÍN 109');
-      setTipoComprobante('Boleta');
-    }
   };
 
   const procesarCobroYFacturar = async () => {
