@@ -22,23 +22,25 @@ function Contador({ cantidad, agotado, onMenos, onMas, ancho = false }) {
       </button>
     );
   }
+  // En las tarjetas los botones se achican hasta caber (en celulares angostos el ancho fijo cortaba el "+")
+  const tamBoton = ancho ? 'h-9 flex-1 min-w-0 max-w-10' : tam;
   return (
-    <div className={`flex items-center gap-1 ${ancho ? 'w-full justify-between' : 'shrink-0'}`} onClick={(e) => e.stopPropagation()}>
+    <div className={`flex items-center gap-1 ${ancho ? 'w-full min-w-0 justify-between' : 'shrink-0'}`} onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         onClick={onMenos}
         aria-label="Quitar uno"
-        className={`${tam} rounded-xl bg-slate-100 border border-slate-200 text-slate-800 flex items-center justify-center active:scale-95 transition-transform cursor-pointer`}
+        className={`${tamBoton} rounded-xl bg-slate-100 border border-slate-200 text-slate-800 flex items-center justify-center active:scale-95 transition-transform cursor-pointer`}
       >
         <Minus className="w-5 h-5" strokeWidth={3} />
       </button>
-      <span className="min-w-6 text-center font-black text-base text-slate-900 tabular-nums">{cantidad}</span>
+      <span className="shrink-0 min-w-5 px-0.5 text-center font-black text-base text-slate-900 tabular-nums">{cantidad}</span>
       <button
         type="button"
         disabled={agotado}
         onClick={onMas}
         aria-label="Agregar uno"
-        className={`${tam} rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-sm active:scale-95 transition-transform disabled:bg-slate-200 disabled:text-slate-400 cursor-pointer`}
+        className={`${tamBoton} rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-sm active:scale-95 transition-transform disabled:bg-slate-200 disabled:text-slate-400 cursor-pointer`}
       >
         <Plus className="w-5 h-5" strokeWidth={3} />
       </button>
