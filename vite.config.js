@@ -46,6 +46,10 @@ export default defineConfig({
     allowedHosts: true,
     host: true, // Listen on all local IPs (needed for Docker)
     port: 5188,
+    // En desarrollo, las pantallas se preparan al arrancar y no en el primer clic (más lento con Docker en Windows)
+    warmup: {
+      clientFiles: ['./src/pages/*.jsx'],
+    },
     watch: {
       usePolling: true
     },
