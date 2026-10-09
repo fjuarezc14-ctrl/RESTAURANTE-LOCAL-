@@ -236,9 +236,11 @@ export function AvisoProvider({ children }) {
       </div>
 
       {/* --- MODAL DE CONFIRMACIÓN (useConfirmar) --- */}
+      {/* Por encima de todo lo demás (modal del pedido, campana del Salón), menos los avisos flotantes */}
       <Dialog
         open={confirmDialog.abierto}
         onClose={() => responderConfirmacion(false)}
+        capa="z-[300]"
         className="max-w-md"
       >
         <DialogHeader
@@ -273,6 +275,7 @@ export function AvisoProvider({ children }) {
       <Dialog
         open={promptDialog.abierto}
         onClose={() => responderPrompt(false)}
+        capa="z-[300]"
         className="max-w-md"
       >
         <DialogHeader
