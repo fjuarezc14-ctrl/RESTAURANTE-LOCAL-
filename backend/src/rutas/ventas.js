@@ -349,8 +349,9 @@ router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), idempotente
     const now = new Date();
 
     const ventaAnulada = await prisma.$transaction(async (tx) => {
-      const vUpdated = await tx.venta.update({
-        where: { id: venta.id },
+      // Solo si sigue sin anular: dos anulaciones a la vez no devuelven dos veces el stock ni el efectivo
+      const marcada = await tx.venta.updateMany({
+        where: { id: venta.id, anulado: false },
         data: {
           anulado: true,
           motivoAnulacion: motivoFinal,
@@ -367,6 +368,8 @@ router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), idempotente
           descuentoAplicado: 0.00
         }
       });
+      if (marcada.count !== 1) throw new ErrorApp('CONFLICTO', 'Esta venta ya se encuentra anulada / devuelta.');
+      const vUpdated = await tx.venta.findUnique({ where: { id: venta.id } });
 
       if (venta.pedidoId) {
         await tx.pedido.update({

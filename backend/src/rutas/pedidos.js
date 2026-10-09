@@ -353,10 +353,12 @@ router.patch('/api/pedidos/:id/cancelar', requierePermiso('Salon', 'Caja'), idem
     const quien = canceladoPor || 'Sin especificar';
 
     const estadoMesa = await prisma.$transaction(async (tx) => {
-      await tx.pedido.update({
-        where: { id },
+      // Solo si sigue como se leyó: dos cancelaciones a la vez no devuelven dos veces el stock
+      const marcado = await tx.pedido.updateMany({
+        where: { id, estado: pedido.estado },
         data: { estado: 'Cancelado', canceladoPor: quien, motivoCancela: motivoFinal, canceladoEn: now },
       });
+      if (marcado.count !== 1) throw new ErrorApp('CONFLICTO', 'El pedido cambió mientras se cancelaba. Actualiza y vuelve a intentarlo.');
 
       // Si tiene venta (delivery o ya cobrado), se anula también
       await tx.venta.updateMany({
@@ -442,6 +444,13 @@ router.patch('/api/pedidos/:id/cancelar-item', requierePermiso('Salon', 'Caja'),
     const quien = canceladoPor || 'Sin especificar';
 
     const estadoMesa = await prisma.$transaction(async (tx) => {
+      // El pedido y el ítem siguen como se leyeron (la fila queda bloqueada hasta terminar): dos cancelaciones
+      // a la vez del mismo ítem no devuelven dos veces el stock
+      const pedidoVigente = await tx.pedido.updateMany({ where: { id, estado: pedido.estado }, data: { estado: pedido.estado } });
+      const itemVigente = await tx.itemPedido.updateMany({ where: { id: item.id, cantidad: item.cantidad }, data: { cantidad: item.cantidad } });
+      if (pedidoVigente.count !== 1 || itemVigente.count !== 1) {
+        throw new ErrorApp('CONFLICTO', 'El pedido cambió mientras se cancelaba. Actualiza y vuelve a intentarlo.');
+      }
       if (item.producto?.tipoStock === 'limitado') {
         await tx.producto.update({ where: { id: item.productoId }, data: { stock: { increment: cantidad } } });
       }
