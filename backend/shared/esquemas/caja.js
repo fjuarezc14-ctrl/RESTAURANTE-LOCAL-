@@ -19,23 +19,12 @@ export const movimientoCaja = z.looseObject({
   cajeroNombre: textoOpcional(LARGO.nombre),
 });
 
-// Lo contado lo escribe el cajero; los demás totales los calcula la pantalla.
-// diferencia puede ser negativa (faltante) y además el servidor la recalcula
+// Lo contado lo escribe el cajero; los totales y lo esperado en gaveta los calcula el servidor
+// (si llegan otros campos, como los que mandaban versiones anteriores de la pantalla, se ignoran)
 export const cierreCaja = z.looseObject({
   cajeroNombre: nombre,
-  montoInicial: montoOpcional,
-  efectivoVentas: montoCalculadoOpcional,
-  efectivoEsperado: montoCalculadoOpcional,
   efectivoContado: montoOpcional,
-  totalTarjeta: montoCalculadoOpcional,
-  totalYape: montoCalculadoOpcional,
   totalConsumo: montoCalculadoOpcional,
-  totalPedidosYa: montoCalculadoOpcional,
-  egresosEfectivo: montoCalculadoOpcional,
-  abonosEfectivo: montoCalculadoOpcional,
-  diferencia: desdeTexto(z.number().optional()),
-  fechaApertura: textoOpcional(40),
-  fechaCierre: textoOpcional(40),
   nota: textoOpcional(LARGO.nota),
 });
 

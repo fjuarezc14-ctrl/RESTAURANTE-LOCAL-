@@ -16,7 +16,6 @@ function momentoDeCierre(ventas) {
   const ultima = ventas.length > 0 ? Math.max(...ventas.map((v) => new Date(v.createdAt).getTime())) : Date.now();
   return new Date(ultima + 1000).toISOString();
 }
-const haceHoras = (horas) => new Date(Date.now() - horas * 3600 * 1000).toISOString();
 
 // El contenido se monta de nuevo cada vez que se abre: los campos empiezan limpios (sin efecto que los reinicie)
 export function ModalCierreCaja(props) {
@@ -173,9 +172,11 @@ function ModalCierreCajaContenido({
   const egresosEfectivo = retirosCaja;
   const ingresosCaja = Math.max(0, Number(cajaEstado.resumenEnVivo?.ingresosExtra || 0));
 
+  // Lo esperado en gaveta: el del servidor (es el que se guarda al cerrar); si aún no llegó, el calculado aquí
   const totalEfectivoEsperado = Math.max(
     0,
-    Math.round((fondoInicialTurno + totalEfectivo + ingresosCaja - egresosEfectivo) * 100) / 100
+    cajaEstado.resumenEnVivo?.efectivoEsperadoEnGaveta
+      ?? Math.round((fondoInicialTurno + totalEfectivo + ingresosCaja - egresosEfectivo) * 100) / 100
   );
   const totalCalculado = Math.max(
     0,
@@ -264,57 +265,33 @@ function ModalCierreCajaContenido({
 
     setGuardandoCierre(true);
     try {
-      const abonosEfectivoTotal = Math.max(
-        0,
-        abonosFiltrados.reduce((s, a) => s + (parseFloat(a.montoEfectivo) || 0), 0)
-      );
-      const contadoFinal = Math.max(0, tieneConteoFisico ? montoFisicoNum : totalEfectivoEsperado);
-      const esperadoFinal = Math.max(0, totalEfectivoEsperado);
-
-      await api.registrarCierre({
-        fechaApertura: ultimoCierre || haceHoras(8),
-        fechaCierre: newCierreISO,
+      // Los totales del turno y lo esperado los calcula el servidor; aquí solo va lo que aporta el cajero
+      const respuesta = await api.registrarCierre({
         cajeroNombre: cajeroNombre || 'Cajero',
-        montoInicial: Math.max(0, fondoInicialTurno),
-        efectivoVentas: Math.max(0, totalEfectivo),
-        efectivoEsperado: esperadoFinal,
-        efectivoContado: contadoFinal,
-        diferencia: Math.round((contadoFinal - esperadoFinal) * 100) / 100,
-        totalTarjeta: Math.max(0, totalTarjeta),
-        totalYape: Math.max(0, totalYape),
+        ...(tieneConteoFisico ? { efectivoContado: montoFisicoNum } : {}),
         totalConsumo: Math.max(0, totalConsumoClientes + totalConsumoPlanilla),
-        totalPedidosYa: Math.max(0, totalPedidosYa),
-        egresosEfectivo: Math.max(0, egresosEfectivo),
-        abonosEfectivo: abonosEfectivoTotal,
-        nota: tieneConteoFisico
-          ? `Conteo físico: S/ ${contadoFinal.toFixed(2)}. Diferencia: S/ ${(
-              Math.round((contadoFinal - esperadoFinal) * 100) / 100
-            ).toFixed(2)}.${textoConteo}`
-          : null,
+        nota: tieneConteoFisico ? `Conteo físico: S/ ${montoFisicoNum.toFixed(2)}.${textoConteo}` : null,
       });
+      const fechaCierreServidor = respuesta?.cierre?.fechaCierre
+        ? new Date(respuesta.cierre.fechaCierre).toISOString()
+        : newCierreISO;
 
-      localStorage.setItem('ultimoCierre', newCierreISO);
+      localStorage.setItem('ultimoCierre', fechaCierreServidor);
 
       if (onCierreExitoso) {
-        await onCierreExitoso(newCierreISO);
+        await onCierreExitoso(fechaCierreServidor);
       }
 
+      const esperadoServidor = Number(respuesta?.cierre?.efectivoEsperado ?? totalEfectivoEsperado);
       aviso.exito(
-        `Turno cerrado exitosamente. Gaveta esperada: S/ ${totalEfectivoEsperado.toFixed(2)}${
+        `Turno cerrado exitosamente. Gaveta esperada: S/ ${esperadoServidor.toFixed(2)}${
           tieneConteoFisico ? ` | Contado: S/ ${montoFisicoNum.toFixed(2)}` : ''
         }`
       );
       onCerrar();
     } catch (err) {
-      // Fallback local por seguridad ante micro-desconexiones
-      localStorage.setItem('ultimoCierre', newCierreISO);
-      if (onCierreExitoso) {
-        await onCierreExitoso(newCierreISO);
-      }
-      aviso.advertencia(
-        `El turno se cerró localmente (sincronización con base de datos falló: ${err.message || 'error de conexión'}).`
-      );
-      onCerrar();
+      // El turno sigue abierto en el servidor: no se marca como cerrado aquí
+      aviso.error(`No se pudo cerrar el turno: ${err.message || 'error de conexión'}. Vuelve a intentarlo.`);
     } finally {
       setGuardandoCierre(false);
     }

@@ -1,7 +1,7 @@
 // Rutas de caja: apertura, movimientos, arqueo en vivo y cierre
 const express = require('express');
 const { prisma } = require('../db');
-const { obtenerMontosVenta } = require('../servicios/dinero');
+const { resumenDelTurno, redondear } = require('../servicios/caja');
 const { ErrorApp } = require('../middlewares/errores');
 const { usuarioPorPinAutorizado } = require('../servicios/autorizacion');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
@@ -39,99 +39,14 @@ router.get('/api/caja/estado', requierePermiso('Caja', 'Dashboard'), async (req,
       });
     }
 
-    // Si hay un turno abierto, calcular métricas en vivo desde fechaApertura
-    const desde = turnoAbierto.fechaApertura;
-    const [ventas, movimientos, abonos] = await Promise.all([
-      prisma.venta.findMany({
-        where: {
-          createdAt: { gte: desde },
-          anulado: false,
-          pedido: { estado: { not: 'Cancelado' } },
-        },
-        select: {
-          total: true,
-          montoEfectivo: true,
-          montoTarjeta: true,
-          montoYape: true,
-          montoCredito: true,
-          metodoPago: true,
-          anulado: true,
-          pedido: { select: { estado: true } }
-        },
-      }),
-      prisma.movimientoCaja.findMany({
-        where: {
-          OR: [
-            { turnoId: turnoAbierto.id },
-            { creadoEn: { gte: desde } },
-          ],
-        },
-        orderBy: { creadoEn: 'desc' },
-      }),
-      prisma.abonoCredito.findMany({
-        where: {
-          creadoEn: { gte: desde },
-        },
-        select: { montoEfectivo: true, montoTarjeta: true, montoYape: true, monto: true, metodoPago: true },
-      }),
-    ]);
-
-    let ventasEfectivo = 0;
-    let ventasTarjeta = 0;
-    let ventasYape = 0;
-    let ventasPedidosYa = 0;
-    let ventasConsumo = 0;
-    let totalVentas = 0;
-
-    for (const v of ventas) {
-      totalVentas += Number(v.total) || 0;
-      const { efec, tarj, yape } = obtenerMontosVenta(v);
-      ventasEfectivo += efec;
-      ventasTarjeta += tarj;
-      ventasYape += yape;
-      if (v.metodoPago === 'PedidosYa') ventasPedidosYa += Number(v.total) || 0;
-      if (v.metodoPago === 'Consumo' || v.metodoPago === 'Cortesía') ventasConsumo += Number(v.total) || 0;
-    }
-
-    const retirosCaja = movimientos.filter(m => m.tipo === 'RETIRO').reduce((s, m) => s + (Number(m.monto) || 0), 0);
-    const ingresosExtra = movimientos.filter(m => m.tipo === 'INGRESO').reduce((s, m) => s + (Number(m.monto) || 0), 0);
-
-    // Sumar abonos a todos los métodos para coincidencia exacta con el arqueo
-    const abonosEfectivo = abonos.reduce((s, a) => s + (Number(a.montoEfectivo) || (a.metodoPago === 'Efectivo' ? Number(a.monto) : 0)), 0);
-    const abonosTarjeta = abonos.reduce((s, a) => s + (Number(a.montoTarjeta) || (a.metodoPago === 'Tarjeta' ? Number(a.monto) : 0)), 0);
-    const abonosYape = abonos.reduce((s, a) => s + (Number(a.montoYape) || (a.metodoPago === 'Yape' ? Number(a.monto) : 0)), 0);
-
-    ventasTarjeta += abonosTarjeta;
-    ventasYape += abonosYape;
-
-    const fondoInicial = Number(turnoAbierto.montoInicial) || 0;
-    const efectivoEsperadoEnGaveta = Math.max(0, fondoInicial + ventasEfectivo + abonosEfectivo + ingresosExtra - retirosCaja);
+    const resumen = await resumenDelTurno(turnoAbierto);
 
     res.json({
       ok: true,
       abierto: true,
       turno: turnoAbierto,
       ultimoCierre: ultimoCerrado,
-      resumenEnVivo: {
-        montoInicial: fondoInicial,
-        cajeroNombre: turnoAbierto.cajeroNombre,
-        fechaApertura: turnoAbierto.fechaApertura,
-        ventasEfectivo,
-        ventasTarjeta,
-        ventasYape,
-        ventasPedidosYa,
-        ventasConsumo,
-        totalVentas,
-        cantidadVentas: ventas.length,
-        egresosEfectivo: retirosCaja,
-        retirosCaja,
-        ingresosExtra,
-        movimientos,
-        abonosEfectivo,
-        abonosTarjeta,
-        abonosYape,
-        efectivoEsperadoEnGaveta,
-      },
+      resumenEnVivo: resumen,
     });
   } catch (err) {
     next(err);
@@ -274,27 +189,15 @@ router.post('/api/caja/apertura', requierePermiso('Caja'), idempotente, validar(
 // POST /api/caja/cierre → Registrar un arqueo y cierre de turno
 router.post('/api/caja/cierre', requierePermiso('Caja'), idempotente, validar({ body: cierreCaja }), async (req, res, next) => {
   try {
-    const {
-      fechaCierre,
-      cajeroNombre,
-      montoInicial,
-      efectivoVentas,
-      efectivoEsperado,
-      efectivoContado,
-      totalTarjeta,
-      totalYape,
-      totalConsumo,
-      totalPedidosYa,
-      egresosEfectivo,
-      abonosEfectivo,
-      nota,
-    } = req.body;
+    // Del cajero solo se toma lo que él aporta: su nombre, el efectivo que contó y la nota.
+    // Los totales del turno y lo esperado en gaveta los calcula el servidor (antes llegaban de la pantalla
+    // y alterándolos se podía ocultar un faltante). totalConsumo es informativo: no entra en el efectivo.
+    const { cajeroNombre, efectivoContado, totalConsumo, nota } = req.body;
 
     if (!cajeroNombre) {
       return next(new ErrorApp('VALIDACION', 'El nombre del cajero es obligatorio.', { campo: 'cajeroNombre' }));
     }
 
-    // Buscar si hay un turno ABIERTO para cerrarlo
     const turnoAbierto = await prisma.cierreCaja.findFirst({
       where: { estado: 'ABIERTO' },
       orderBy: { fechaApertura: 'desc' },
@@ -304,57 +207,37 @@ router.post('/api/caja/cierre', requierePermiso('Caja'), idempotente, validar({ 
       return next(new ErrorApp('CAJA_CERRADA', 'No hay un turno de caja abierto para cerrar. Debe abrir la caja primero.'));
     }
 
-    // Validación de que ningún valor monetario sea negativo
-    const camposMonetarios = [
-      { nombre: 'Monto inicial', val: montoInicial },
-      { nombre: 'Efectivo ventas', val: efectivoVentas },
-      { nombre: 'Efectivo esperado', val: efectivoEsperado },
-      { nombre: 'Efectivo contado', val: efectivoContado },
-      { nombre: 'Total tarjeta', val: totalTarjeta },
-      { nombre: 'Total yape', val: totalYape },
-      { nombre: 'Total consumo', val: totalConsumo },
-      { nombre: 'Total PedidosYa', val: totalPedidosYa },
-      { nombre: 'Egresos de efectivo', val: egresosEfectivo },
-      { nombre: 'Abonos de efectivo', val: abonosEfectivo },
-    ];
-
-    const campoInvalido = camposMonetarios.find(c => c.val !== undefined && c.val !== null && parseFloat(c.val) < 0);
-    if (campoInvalido) {
-      return next(new ErrorApp('VALIDACION', `El valor de "${campoInvalido.nombre}" no puede ser negativo. Debe ser 0 o mayor a cero.`));
-    }
-
-    const mInicial = Math.max(0, parseFloat(montoInicial !== undefined && montoInicial !== null ? montoInicial : turnoAbierto.montoInicial || 0));
-    const efecVentas = Math.max(0, parseFloat(efectivoVentas || 0));
-    const efecEsperado = Math.max(0, parseFloat(efectivoEsperado || 0));
-    const efecContado = Math.max(0, parseFloat(efectivoContado || 0));
-    const totTarjeta = Math.max(0, parseFloat(totalTarjeta || 0));
-    const totYape = Math.max(0, parseFloat(totalYape || 0));
-    const totConsumo = Math.max(0, parseFloat(totalConsumo || 0));
-    const totPedidosYa = Math.max(0, parseFloat(totalPedidosYa || 0));
-    const egresosEfec = Math.max(0, parseFloat(egresosEfectivo || 0));
-    const abonosEfec = Math.max(0, parseFloat(abonosEfectivo || 0));
-    const difCalculada = Math.round((efecContado - efecEsperado) * 100) / 100;
-
+    const fechaCierre = new Date();
     const cierre = await prisma.$transaction(async (tx) => {
+      // Solo si sigue abierto: dos cierres a la vez no lo cierran dos veces
+      const marcado = await tx.cierreCaja.updateMany({
+        where: { id: turnoAbierto.id, estado: 'ABIERTO' },
+        data: { estado: 'CERRADO', fechaCierre },
+      });
+      if (marcado.count !== 1) throw new ErrorApp('CAJA_CERRADA', 'Este turno ya fue cerrado.');
+
+      const r = await resumenDelTurno(turnoAbierto, { hasta: fechaCierre, cliente: tx });
+      const esperado = r.efectivoEsperadoEnGaveta;
+      // Sin conteo físico se da por bueno lo esperado (sin diferencia)
+      const contado = efectivoContado !== undefined && efectivoContado !== null ? Math.max(0, Number(efectivoContado)) : esperado;
+
       const cerrado = await tx.cierreCaja.update({
-      where: { id: turnoAbierto.id },
-      data: {
-        estado: 'CERRADO',
-        fechaCierre: fechaCierre ? new Date(fechaCierre) : new Date(),
-        cajeroNombre: String(cajeroNombre).trim(),
-        montoInicial: mInicial,
-        efectivoVentas: efecVentas,
-        efectivoEsperado: efecEsperado,
-        efectivoContado: efecContado,
-        diferencia: difCalculada,
-        totalTarjeta: totTarjeta,
-        totalYape: totYape,
-        totalConsumo: totConsumo,
-        totalPedidosYa: totPedidosYa,
-        egresosEfectivo: egresosEfec,
-        abonosEfectivo: abonosEfec,
-        nota: nota ? String(nota).trim() : null,
-      },
+        where: { id: turnoAbierto.id },
+        data: {
+          cajeroNombre: String(cajeroNombre).trim(),
+          montoInicial: r.montoInicial,
+          efectivoVentas: redondear(r.ventasEfectivo + r.abonosEfectivo),
+          efectivoEsperado: esperado,
+          efectivoContado: contado,
+          diferencia: redondear(contado - esperado),
+          totalTarjeta: redondear(r.ventasTarjeta),
+          totalYape: redondear(r.ventasYape),
+          totalConsumo: Math.max(0, Number(totalConsumo) || 0),
+          totalPedidosYa: redondear(r.ventasPedidosYa),
+          egresosEfectivo: redondear(r.retirosCaja),
+          abonosEfectivo: redondear(r.abonosEfectivo),
+          nota: nota ? String(nota).trim() : null,
+        },
       });
       await registrarAuditoria(tx, req, {
         accion: 'CAJA_CERRADA', entidad: 'CierreCaja', entidadId: cerrado.id, nombreDeclarado: cerrado.cajeroNombre,
