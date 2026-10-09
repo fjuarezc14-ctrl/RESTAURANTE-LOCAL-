@@ -93,7 +93,9 @@ export function ListaPlatosMesa({ agregarAlTicket, alterarCantidad, menuFiltrado
   const compacto = modoVista === 'compacto';
 
   return (
-    <div className={`flex-1 overflow-y-auto overscroll-contain custom-scrollbar p-3 pb-28 md:pb-4 content-start ${
+    // auto-rows-max: cada fila mide lo que su contenido (si no, con la lista de alto fijo el navegador
+    // achicaba las filas y cortaba el contador de las tarjetas con nombres de dos líneas)
+    <div className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain custom-scrollbar p-3 pb-28 md:pb-4 content-start auto-rows-max ${
       compacto ? 'grid grid-cols-1 lg:grid-cols-2 gap-2' : 'grid grid-cols-2 sm:grid-cols-3 gap-2.5 md:gap-3'
     }`}>
       {menuFiltrado.map((prod) => {
@@ -131,7 +133,7 @@ export function ListaPlatosMesa({ agregarAlTicket, alterarCantidad, menuFiltrado
               aria-disabled={agotado}
               onClick={agregar}
               onKeyDown={(e) => { if (e.key === 'Enter') agregar(); }}
-              className={`min-h-[60px] rounded-2xl border px-3 py-2 flex items-center gap-2.5 transition-colors select-none overflow-hidden ${estado}`}
+              className={`min-h-[60px] rounded-2xl border px-3 py-2 flex items-center gap-2.5 transition-colors select-none ${estado}`}
             >
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-sm leading-snug text-slate-900 line-clamp-2 break-words">{prod.nombre}</p>
@@ -153,7 +155,7 @@ export function ListaPlatosMesa({ agregarAlTicket, alterarCantidad, menuFiltrado
             aria-disabled={agotado}
             onClick={agregar}
             onKeyDown={(e) => { if (e.key === 'Enter') agregar(); }}
-            className={`min-w-0 min-h-[120px] rounded-2xl border p-2.5 flex flex-col justify-between gap-2 transition-colors select-none overflow-hidden ${estado}`}
+            className={`min-w-0 min-h-[120px] rounded-2xl border p-2.5 flex flex-col justify-between gap-2 transition-colors select-none ${estado}`}
           >
             <div className="min-w-0">
               <p className="font-bold text-[13px] leading-snug text-slate-900 line-clamp-3 break-words">{prod.nombre}</p>

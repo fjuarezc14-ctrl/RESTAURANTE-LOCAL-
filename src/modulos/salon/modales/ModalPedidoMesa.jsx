@@ -195,10 +195,10 @@ export default function ModalPedidoMesa({
 
       <div className="flex flex-1 min-h-0 bg-slate-50">
         {/* Carta */}
-        <div className="flex-1 md:w-3/5 md:flex-none flex flex-col min-h-0 relative md:border-r md:border-slate-200">
+        <div className="flex-1 min-w-0 md:w-3/5 md:flex-none flex flex-col min-h-0 relative md:border-r md:border-slate-200">
           <div className="shrink-0 bg-white border-b border-slate-200 px-3 pt-3 pb-2.5 space-y-2.5">
             <div className="flex items-center gap-2">
-              <div className="relative flex-1">
+              <div className="relative flex-1 min-w-0">
                 <Search className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   ref={searchInputRef}
@@ -209,7 +209,7 @@ export default function ModalPedidoMesa({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                  className="w-full h-10 pl-10 pr-10 rounded-xl bg-slate-100 border border-transparent text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-amber-400 [&::-webkit-search-cancel-button]:hidden"
+                  className="w-full min-w-0 h-10 pl-10 pr-10 rounded-xl bg-slate-100 border border-transparent text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-amber-400 [&::-webkit-search-cancel-button]:hidden"
                 />
                 {searchQuery && (
                   <button
