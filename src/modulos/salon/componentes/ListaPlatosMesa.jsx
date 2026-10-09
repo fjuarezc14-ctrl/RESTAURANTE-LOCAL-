@@ -2,7 +2,7 @@
 // Pensado para el celular del mozo: todo lo que se toca mide al menos 44 px y el texto se lee sin forzar la vista.
 import { Tag, Plus, Minus, ChevronRight, SearchX } from 'lucide-react';
 
-const precioDe = (prod) => (prod.precioOferta !== null && prod.precioOferta !== undefined ? prod.precioOferta : prod.precio);
+const precioDe = (prod) => Number(prod.precioOferta !== null && prod.precioOferta !== undefined ? prod.precioOferta : prod.precio) || 0;
 const tieneOferta = (prod) => prod.precioOferta !== null && prod.precioOferta !== undefined;
 
 // − cantidad + (o solo + si aún no se pidió). Los toques no llegan a la fila (que también agrega).
@@ -70,12 +70,12 @@ function Etiquetas({ prod, agotado, stockDisponible }) {
 
 function Precio({ prod }) {
   if (prod.esAgrupado) {
-    return <span className="font-black text-sm text-emerald-700 tabular-nums whitespace-nowrap">desde S/ {prod.precioMin.toFixed(2)}</span>;
+    return <span className="font-black text-sm text-emerald-700 tabular-nums whitespace-nowrap">desde S/ {(Number(prod.precioMin) || 0).toFixed(2)}</span>;
   }
   return (
     <span className="flex items-baseline gap-1.5 flex-wrap min-w-0">
       <span className="font-black text-sm text-emerald-700 tabular-nums whitespace-nowrap">S/ {precioDe(prod).toFixed(2)}</span>
-      {tieneOferta(prod) && <span className="line-through text-slate-400 text-[11px] font-semibold whitespace-nowrap">S/ {prod.precio.toFixed(2)}</span>}
+      {tieneOferta(prod) && <span className="line-through text-slate-400 text-[11px] font-semibold whitespace-nowrap">S/ {(Number(prod.precio) || 0).toFixed(2)}</span>}
     </span>
   );
 }

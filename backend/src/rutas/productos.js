@@ -22,7 +22,12 @@ router.get('/api/productos', async (req, res, next) => {
 
     // Las ofertas por temporada se retiraron del sistema: los productos se venden a su precio normal.
     // (Se mantienen precioOferta/ofertaNombre en null por compatibilidad con Salón y Caja.)
-    const productosEnriquecidos = productos.map(p => ({ ...p, precioOferta: null, ofertaNombre: null }));
+    const productosEnriquecidos = productos.map(p => ({
+      ...p,
+      precio: Number(p.precio),
+      precioOferta: p.precioOferta != null ? Number(p.precioOferta) : null,
+      ofertaNombre: null
+    }));
 
     res.json(productosEnriquecidos);
   } catch (err) {

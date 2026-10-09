@@ -36,6 +36,7 @@ export const ORDEN_PRIORIDADES_CATEGORIAS = [
   'Menú Ejecutivo',
   'Combos',
   'Parrillas y Carnes',
+  'Platos de Fondo',
   'Platos Criollos y Fondos',
   'Ceviches y Pescados',
   'Pastas y Tallarines',

@@ -166,8 +166,8 @@ export function usePedidoMesa({
         return prevItems;
       }
       
-      const precioBase = prod.precioOferta !== null && prod.precioOferta !== undefined ? prod.precioOferta : prod.precio;
-      const precioFinal = precioBase + precioExtra;
+      const precioBase = Number(prod.precioOferta !== null && prod.precioOferta !== undefined ? prod.precioOferta : prod.precio) || 0;
+      const precioFinal = precioBase + (Number(precioExtra) || 0);
       
       if (index >= 0) {
         nuevosItems[index] = {

@@ -223,6 +223,8 @@ export default function SalonPage({ currentUser }) {
 
   // Mesas al instante (SSE): pedidos de otros mozos, cobros en caja, platos listos
   useEventos(['mesas', 'pedidos'], fetchMesas);
+  // Actualización de carta en tiempo real (SSE): cambios de precios, productos nuevos o dados de baja
+  useEventos(['carta'], fetchProductos);
 
   const handleUnirMesa = async (numToJoin) => {
     try {
