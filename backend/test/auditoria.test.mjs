@@ -157,17 +157,17 @@ describe('ventas', () => {
 
   it('descuento y cortesía de un ítem', async () => {
     const ventaId = await ventaDeMesa(1, (items) => ({
-      descuentoAplicado: 4.5, ofertaDescripcion: 'Promo martes', motivoCortesia: 'Cliente frecuente',
+      descuentoAplicado: 4.5, ofertaDescripcion: 'Promo martes', motivoCortesia: 'Cliente frecuente', autorizacion: { pin: PIN_CAJERO },
       cortesiaItemIds: items.filter((i) => i.producto.nombre === 'Inca Kola').map((i) => i.id),
     }));
     const [desc] = await registros({ accion: 'DESCUENTO' });
     expect(desc).toMatchObject({ entidadId: String(ventaId), motivo: 'Promo martes', despues: { descuento: 4.5 }, usuarioNombre: 'Carla Caja (sin sesión)' });
     const [cort] = await registros({ accion: 'CORTESIA' });
-    expect(cort).toMatchObject({ motivo: 'Cliente frecuente', despues: { montoRegalado: 3.5, cortesiaTotal: false } });
+    expect(cort).toMatchObject({ motivo: 'Cliente frecuente', autorizadoPor: 'Carla Caja', despues: { montoRegalado: 3.5, cortesiaTotal: false } });
   });
 
   it('cortesía de todo el pedido', async () => {
-    await ventaDeMesa(2, { metodoPago: 'Cortesía', motivoCortesia: 'Cumpleaños del dueño' });
+    await ventaDeMesa(2, { metodoPago: 'Cortesía', motivoCortesia: 'Cumpleaños del dueño', autorizacion: { pin: PIN_CAJERO } });
     const [cort] = await registros({ accion: 'CORTESIA' });
     expect(cort.despues).toMatchObject({ montoRegalado: 54.5, total: 0, cortesiaTotal: true });
     expect(await registros({ accion: 'DESCUENTO' })).toHaveLength(0);

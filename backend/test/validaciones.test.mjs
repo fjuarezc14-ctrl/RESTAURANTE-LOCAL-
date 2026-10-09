@@ -1,7 +1,7 @@
 // Validación de entrada (tarea 5): esquemas zod, límites y reglas de dinero
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  abrirCaja, api, cobrar, crearBase, crearCliente, esperarError, item, limpiarBD, mesaListaParaCobrar, prisma,
+  PIN_CAJERO, abrirCaja, api, cobrar, crearBase, crearCliente, esperarError, item, limpiarBD, mesaListaParaCobrar, prisma,
 } from './helpers.mjs';
 
 let carta;
@@ -75,7 +75,7 @@ describe('cobro', () => {
     const mesa1 = await pedidoDeMesa(1);
     const mesa2 = await pedidoDeMesa(2);
     const platoAjeno = await prisma.itemPedido.findFirst({ where: { pedidoId: mesa2, productoId: carta.lomo.id } });
-    const res = await cobrar(mesa1, { cortesiaItemIds: [platoAjeno.id] });
+    const res = await cobrar(mesa1, { cortesiaItemIds: [platoAjeno.id], autorizacion: { pin: PIN_CAJERO } });
     expect(res.status).toBe(200);
     expect((await prisma.venta.findUnique({ where: { id: res.body.ventaId } })).total).toBe(54.5);
     expect((await prisma.itemPedido.findUnique({ where: { id: platoAjeno.id } })).precio).toBe(25.5);
@@ -142,9 +142,11 @@ describe('delivery', () => {
   const llevar = (datos) => api().post('/api/pedidos/llevar').send({ tipoDelivery: 'ParaLlevar', cajero: 'Carla', ...datos });
   const itemsDelivery = () => [{ nombre: 'Lomo Saltado', precio: 25.5, cant: 2 }]; // S/ 51
 
-  it('acepta una cortesía (precio 0 con la marca) y rechaza un precio 0 sin ella', async () => {
+  it('acepta una cortesía (precio 0 con la marca) autorizada con PIN y rechaza un precio 0 sin ella', async () => {
     await abrirCaja();
-    const cortesia = await llevar({ metodoPago: 'Efectivo', items: [...itemsDelivery(), { nombre: 'Inca Kola', precio: 0, cant: 1, notas: '[CORTESÍA]' }] });
+    const itemsCortesia = [...itemsDelivery(), { nombre: 'Inca Kola', precio: 0, cant: 1, notas: '[CORTESÍA]' }];
+    esperarError(await llevar({ metodoPago: 'Efectivo', items: itemsCortesia }), 403, 'AUTORIZACION_REQUERIDA', 'pin');
+    const cortesia = await llevar({ metodoPago: 'Efectivo', items: itemsCortesia, autorizacion: { pin: PIN_CAJERO } });
     expect(cortesia.status).toBe(200);
     esperarError(await llevar({ metodoPago: 'Efectivo', items: [{ nombre: 'Inca Kola', precio: 0, cant: 1 }] }), 400, 'VALIDACION', 'items');
   });

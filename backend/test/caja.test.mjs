@@ -96,13 +96,12 @@ describe('arqueo en vivo', () => {
 });
 
 describe('cierre', () => {
-  it('cierra el turno con la diferencia entre lo contado y lo esperado', async () => {
+  it('cierra el turno con la diferencia entre lo contado y lo esperado (calculado por el servidor)', async () => {
     await abrirCaja(100);
-    const res = await api().post('/api/caja/cierre').send({
-      cajeroNombre: 'Carla Caja', efectivoEsperado: 149.5, efectivoContado: 150, efectivoVentas: 54.5,
-    });
+    await cobrar(await pedidoDeMesa()); // S/ 54.50 en efectivo
+    const res = await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla Caja', efectivoContado: 150 });
     expect(res.status).toBe(200);
-    expect(res.body.cierre).toMatchObject({ estado: 'CERRADO', efectivoEsperado: 149.5, efectivoContado: 150, diferencia: 0.5 });
+    expect(res.body.cierre).toMatchObject({ estado: 'CERRADO', efectivoVentas: 54.5, efectivoEsperado: 154.5, efectivoContado: 150, diferencia: -4.5 });
     expect((await estado()).abierto).toBe(false);
   });
 
@@ -112,12 +111,17 @@ describe('cierre', () => {
     expect(res.body.cierre.diferencia).toBe(-12.7);
   });
 
-  // Hoy el servidor guarda el esperado que calcula la pantalla. Cuando se calcule en el servidor (§5 del plan),
-  // esta prueba debe cambiar para exigir el valor del arqueo en vivo.
-  it('hoy guarda el efectivo esperado que envía la pantalla', async () => {
+  it('ignora el esperado y los totales que mande la pantalla: usa los del arqueo en vivo', async () => {
     await abrirCaja(100);
-    const res = await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoEsperado: 999, efectivoContado: 100 });
-    expect(res.body.cierre).toMatchObject({ efectivoEsperado: 999, diferencia: -899 });
+    const enVivo = (await estado()).resumenEnVivo.efectivoEsperadoEnGaveta;
+    const res = await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla', efectivoEsperado: 999, totalTarjeta: 500, efectivoContado: 100 });
+    expect(res.body.cierre).toMatchObject({ efectivoEsperado: enVivo, totalTarjeta: 0, diferencia: 0 });
+  });
+
+  it('sin conteo físico no queda diferencia', async () => {
+    await abrirCaja(100);
+    const res = await api().post('/api/caja/cierre').send({ cajeroNombre: 'Carla' });
+    expect(res.body.cierre).toMatchObject({ efectivoEsperado: 100, efectivoContado: 100, diferencia: 0 });
   });
 
   it('rechaza montos negativos', async () => {

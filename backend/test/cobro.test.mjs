@@ -1,7 +1,7 @@
 // Cobro de mesas: POST /api/ventas
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  abrirCaja, api, cobrar, crearBase, crearCliente, enviarPedido, esperarError, item, limpiarBD, mesaListaParaCobrar, prisma,
+  PIN_CAJERO, abrirCaja, api, cobrar, crearBase, crearCliente, enviarPedido, esperarError, item, limpiarBD, mesaListaParaCobrar, prisma,
 } from './helpers.mjs';
 
 let carta;
@@ -147,7 +147,7 @@ describe('medios de pago', () => {
 describe('cortesías', () => {
   it('cortesía total: la venta queda en 0 y el descuento es el total del pedido', async () => {
     await abrirCaja();
-    const res = await cobrar(await pedidoDeMesa(), { metodoPago: 'Cortesía', motivoCortesia: 'Cumpleaños' });
+    const res = await cobrar(await pedidoDeMesa(), { metodoPago: 'Cortesía', motivoCortesia: 'Cumpleaños', autorizacion: { pin: PIN_CAJERO } });
     const venta = await prisma.venta.findUnique({ where: { id: res.body.ventaId } });
     expect(venta).toMatchObject({ total: 0, montoEfectivo: 0, descuentoAplicado: 54.5 });
     expect(venta.ofertaDescripcion).toBe('Cortesía total del pedido (Cumpleaños)');
@@ -157,10 +157,18 @@ describe('cortesías', () => {
     await abrirCaja();
     const pedidoId = await pedidoDeMesa();
     const gaseosa = await prisma.itemPedido.findFirst({ where: { pedidoId, productoId: carta.gaseosa.id } });
-    const res = await cobrar(pedidoId, { cortesiaItemIds: [gaseosa.id] });
+    const res = await cobrar(pedidoId, { cortesiaItemIds: [gaseosa.id], autorizacion: { pin: PIN_CAJERO } });
     const venta = await prisma.venta.findUnique({ where: { id: res.body.ventaId } });
     expect(venta).toMatchObject({ total: 51, montoEfectivo: 51, descuentoAplicado: 3.5 });
     expect((await prisma.itemPedido.findUnique({ where: { id: gaseosa.id } })).precio).toBe(0);
+  });
+
+  it('sin el PIN de un Administrador o Cajero, la cortesía y el consumo se rechazan y no se cobra', async () => {
+    await abrirCaja();
+    const pedidoId = await pedidoDeMesa();
+    esperarError(await cobrar(pedidoId, { metodoPago: 'Cortesía' }), 403, 'AUTORIZACION_REQUERIDA', 'pin');
+    esperarError(await cobrar(pedidoId, { metodoPago: 'Consumo', autorizacion: { pin: '0000' } }), 401, 'PIN_INCORRECTO', 'pin');
+    expect(await prisma.venta.count()).toBe(0);
   });
 });
 

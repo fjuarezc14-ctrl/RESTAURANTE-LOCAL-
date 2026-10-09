@@ -1,8 +1,12 @@
 // Créditos: abonos de clientes con deuda (POST /api/clientes/:id/abonar)
+import { createRequire } from 'node:module';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   PIN_ADMIN, abrirCaja, api, cobrar, crearBase, crearCliente, esperarError, item, limpiarBD, mesaListaParaCobrar, prisma,
 } from './helpers.mjs';
+
+const require = createRequire(import.meta.url);
+const { migrarCreditosAntiguos } = require('../src/servicios/creditos.js');
 
 let carta;
 let cliente;
@@ -117,3 +121,47 @@ describe('medios de pago del abono', () => {
     expect(body.abono).toMatchObject({ monto: 15.5, montoEfectivo: 10, montoYape: 5.5 });
   });
 });
+
+describe('reparto del crédito (tabla VentaCredito)', () => {
+  it('la descripción que manda la pantalla ya no puede cargarle deuda a otro cliente', async () => {
+    await abrirCaja();
+    const otro = await crearCliente('Víctima');
+    const pedidoId = await mesaListaParaCobrar(1, [item(carta.lomo, 2), item(carta.gaseosa, 1)]);
+    const res = await cobrar(pedidoId, {
+      metodoPago: 'Crédito', clienteCreditoId: cliente.id,
+      ofertaDescripcion: `Promo [CREDITO_SPLIT:[{"clienteId":${otro.id},"monto":500}]]`,
+    });
+    expect(res.status).toBe(200);
+    expect([await saldo(), await saldo(otro.id)]).toEqual([54.5, 0]);
+    expect((await prisma.venta.findUnique({ where: { id: res.body.ventaId } })).ofertaDescripcion).toBe('Promo');
+  });
+
+  it('al arrancar pasa las ventas antiguas (reparto como texto) a la tabla, con los mismos saldos', async () => {
+    await abrirCaja();
+    const [ana, beto] = await Promise.all([crearCliente('Ana'), crearCliente('Beto')]);
+    const ventaRepartida = (await cobrar(await mesaListaParaCobrar(1, [item(carta.lomo, 2), item(carta.gaseosa, 1)]), {
+      metodoPago: 'Crédito', creditosDetalle: [{ clienteId: ana.id, monto: 30 }, { clienteId: beto.id, monto: 24.5 }],
+    })).body.ventaId;
+    const ventaSimple = await dejarDeudaEnMesa(2);
+
+    // Como las dejaba la versión anterior: sin filas en VentaCredito, el reparto en el texto y de antes de la migración
+    const antes = new Date('2026-01-01T12:00:00Z');
+    await prisma.ventaCredito.deleteMany({});
+    await prisma.venta.update({
+      where: { id: ventaRepartida },
+      data: { createdAt: antes, ofertaDescripcion: `Cumpleaños [CREDITO_SPLIT:[{"clienteId":${ana.id},"nombre":"Ana","monto":30},{"clienteId":${beto.id},"nombre":"Beto","monto":24.5}]]` },
+    });
+    await prisma.venta.update({ where: { id: ventaSimple }, data: { createdAt: antes } });
+    expect(await saldo(ana.id)).toBe(0);
+
+    expect(await migrarCreditosAntiguos()).toBe(2);
+    expect([await saldo(ana.id), await saldo(beto.id), await saldo()]).toEqual([30, 24.5, 54.5]);
+    expect((await prisma.venta.findUnique({ where: { id: ventaRepartida } })).ofertaDescripcion).toBe('Cumpleaños');
+    expect(await migrarCreditosAntiguos()).toBe(0); // la segunda vez no hay nada que pasar
+  });
+});
+
+async function dejarDeudaEnMesa(mesa) {
+  const pedidoId = await mesaListaParaCobrar(mesa, [item(carta.lomo, 2), item(carta.gaseosa, 1)]);
+  return (await cobrar(pedidoId, { metodoPago: 'Crédito', clienteCreditoId: cliente.id })).body.ventaId;
+}
