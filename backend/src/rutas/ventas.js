@@ -4,7 +4,7 @@ const { las3DeLima, inicioJornadaActual } = require('../servicios/jornada');
 const { prisma } = require('../db');
 const { calcularSubtotalEIgv, limpiarCodigoPago, obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
-const { usuarioPorPinAutorizado } = require('../servicios/autorizacion');
+const { autorizarConPin, usuarioPorPinAutorizado } = require('../servicios/autorizacion');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { anulacion, cobro, correccionDatosCliente, correccionMetodoPago, correccionTipoEntrega } = require('../../shared/esquemas/ventas.js');
 const { consultaDesde, rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
@@ -525,6 +525,12 @@ router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body:
       });
     }
 
+    // Cortesía (total o de ítems) o consumo de personal: lo autoriza un Administrador o Cajero con su PIN
+    const hayCortesia = metodoPago === 'Cortesía' || metodoPago === 'Consumo' || (Array.isArray(cortesiaItemIds) && cortesiaItemIds.length > 0);
+    const autorizadoPor = hayCortesia
+      ? await autorizarConPin(req, req.body.autorizacion?.pin, metodoPago === 'Consumo' ? 'un consumo de personal' : 'una cortesía')
+      : null;
+
     // 1.0 Una mesa de salón no se cobra mientras tenga platos en preparación:
     // al pasar a "Cobrado" desaparecerían de los monitores de cocina y barra sin prepararse.
     const enPreparacion = await prisma.pedido.findMany({
@@ -772,10 +778,10 @@ router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body:
           despues: { descuento: descuentoManual, total: ventaCreada.total, metodoPago },
         });
       }
-      if (cortesia > 0) {
+      if (cortesia > 0 || metodoPago === 'Consumo') {
         await registrarAuditoria(tx, req, {
-          ...baseAuditoria, accion: 'CORTESIA', motivo: motivoCortesia ? String(motivoCortesia).trim() : null,
-          despues: { montoRegalado: cortesia, total: ventaCreada.total, cortesiaTotal: metodoPago === 'Cortesía' },
+          ...baseAuditoria, accion: 'CORTESIA', autorizadoPor, motivo: motivoCortesia ? String(motivoCortesia).trim() : null,
+          despues: { montoRegalado: cortesia, total: ventaCreada.total, cortesiaTotal: metodoPago === 'Cortesía', metodoPago },
         });
       }
 

@@ -1,8 +1,11 @@
 // Esquemas de ventas: cobro, correcciones y anulación
 import { z } from 'zod';
 import {
-  LARGO, TIPOS_COMPROBANTE, desdeTexto, id, idOpcional, metodoPago, montoCalculado, montoCalculadoOpcional, pinOpcional, textoOpcional,
+  LARGO, TIPOS_COMPROBANTE, desdeTexto, id, idOpcional, metodoPago, montoCalculado, montoCalculadoOpcional, pin, pinOpcional, textoOpcional,
 } from './comunes.js';
+
+// Cortesía o consumo de personal: PIN de un Administrador o Cajero (el backend lo valida)
+const autorizacion = z.looseObject({ pin }).optional();
 
 export const creditoDetalle = z.looseObject({
   clienteId: id,
@@ -11,6 +14,7 @@ export const creditoDetalle = z.looseObject({
 });
 
 export const cobro = z.looseObject({
+  autorizacion,
   pedidoId: idOpcional,
   pedidoIds: z.array(id).min(1).max(20).optional(),
   metodoPago: z.enum(metodoPago.options, { error: 'Método de pago inválido.' }),

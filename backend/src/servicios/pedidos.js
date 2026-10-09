@@ -76,11 +76,12 @@ function rangoDePrecio(producto) {
   return { base, min: Math.max(0, min), max };
 }
 
-// Una cortesía de delivery llega con precio 0 y la marca [CORTESÍA] en las notas
+// Una cortesía de delivery llega con precio 0 y la marca [CORTESÍA] en las notas. Solo vale si la ruta
+// ya la autorizó con el PIN de un Administrador o Cajero (permitirCortesia); si no, se valida el precio como cualquier ítem.
 const esCortesia = (item) => Number(item.precio) === 0 && String(item.notas || '').includes('[CORTESÍA]');
 
-function verificarPrecioItem(item, producto) {
-  if (esCortesia(item)) return;
+function verificarPrecioItem(item, producto, permitirCortesia) {
+  if (permitirCortesia && esCortesia(item)) return;
   const precio = Number(item.precio);
   const { base, min, max } = rangoDePrecio(producto);
   if (precio >= min - 0.01 && precio <= max + 0.01) return;
@@ -90,7 +91,7 @@ function verificarPrecioItem(item, producto) {
   });
 }
 
-async function expandPedidoItemsForDb(itemsList) {
+async function expandPedidoItemsForDb(itemsList, { permitirCortesia = false } = {}) {
   const expandedList = [];
   const defaultProduct = await prisma.producto.findFirst({ where: { activo: true }, orderBy: { id: 'asc' } });
   if (!defaultProduct) {
@@ -115,7 +116,7 @@ async function expandPedidoItemsForDb(itemsList) {
     if (!validProd) {
       throw new ErrorApp('VALIDACION', `"${i.nombre || 'El producto'}" no está en la carta.`, { campo: 'items' });
     }
-    verificarPrecioItem(i, validProd);
+    verificarPrecioItem(i, validProd, permitirCortesia);
 
     const prodId = validProd.id;
     const prodNombre = String(i.nombre || validProd.nombre);
@@ -345,4 +346,4 @@ async function expandPedidoItemsForDb(itemsList) {
   return expandedList;
 }
 
-module.exports = { LIMITE_CANCELACION_MS, MIX_PRODUCTS_DECOMPOSITION, parseSelectionsFromNotes, parseJsonSafe, expandPedidoItemsForDb };
+module.exports = { LIMITE_CANCELACION_MS, MIX_PRODUCTS_DECOMPOSITION, parseSelectionsFromNotes, parseJsonSafe, expandPedidoItemsForDb, esCortesia };

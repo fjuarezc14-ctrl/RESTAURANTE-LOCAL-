@@ -31,6 +31,8 @@ export const pedidoMesa = z.looseObject({
 
 export const pedidoLlevar = z.looseObject({
   items: listaItems,
+  // Cortesía o consumo de personal: PIN de un Administrador o Cajero (el backend lo valida)
+  autorizacion,
   total: montoCalculadoOpcional,
   metodoPago: z.enum(metodoPago.options, { error: 'Método de pago inválido.' }).optional(),
   tipoDelivery: textoOpcional(30),

@@ -439,6 +439,8 @@ export function usePedidoDelivery({
         descuentoMonto: descEsPct ? 0 : descuentoMonto,
         descuentoDescripcion: descuentoFinal > 0 ? `Descuento manual ${descuentoEtiqueta}` : null,
         motivoCortesia: deliveryMotivoCortesia.trim() || null,
+        // El backend vuelve a validar el PIN de quien autorizó la cortesía o el consumo
+        ...(tieneCortesias ? { autorizacion: { pin: pinAdminDelivery.trim() } } : {}),
         codigoPago: deliveryCodigoPago.trim() || null,
       };
 

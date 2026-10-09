@@ -2,7 +2,9 @@
 const express = require('express');
 const { prisma } = require('../db');
 const { calcularSubtotalEIgv, limpiarCodigoPago, verificarPagoMixto } = require('../servicios/dinero');
-const { expandPedidoItemsForDb } = require('../servicios/pedidos');
+const { esCortesia, expandPedidoItemsForDb } = require('../servicios/pedidos');
+const { autorizarConPin } = require('../servicios/autorizacion');
+const { registrarAuditoria } = require('../servicios/auditoria');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { pedidoLlevar } = require('../../shared/esquemas/pedidos.js');
@@ -10,6 +12,13 @@ const { requierePermiso } = require('../middlewares/permisos');
 const { idempotente } = require('../middlewares/idempotencia');
 
 const router = express.Router();
+
+// Nombre de quien autorizó si el pedido lleva cortesía o consumo de personal; null si no hace falta
+async function autorizarCortesiaDelivery(req, metodoPago, items) {
+  const hayCortesia = metodoPago === 'Cortesía' || metodoPago === 'Consumo' || (items || []).some(esCortesia);
+  if (!hayCortesia) return null;
+  return autorizarConPin(req, req.body.autorizacion?.pin, metodoPago === 'Consumo' ? 'un consumo de personal' : 'una cortesía');
+}
 validarIdsEnUrl(router);
 
 router.post('/api/pedidos/llevar', requierePermiso('Caja'), idempotente, validar({ body: pedidoLlevar }), async (req, res, next) => {
@@ -70,7 +79,9 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), idempotente, validar
       return next(new ErrorApp('VALIDACION', 'Debe seleccionar un cliente para registrar la venta a crédito.', { campo: 'clienteCreditoId' }));
     }
 
-    const expandedItems = await expandPedidoItemsForDb(items);
+    // Cortesía (total o de ítems) o consumo de personal: lo autoriza un Administrador o Cajero con su PIN
+    const autorizadoPor = await autorizarCortesiaDelivery(req, finalMetodoPago, items);
+    const expandedItems = await expandPedidoItemsForDb(items, { permitirCortesia: Boolean(autorizadoPor) });
 
     const { subtotal, igv } = calcularSubtotalEIgv(grandTotal);
 
@@ -186,6 +197,14 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), idempotente, validar
         },
       });
 
+      if (autorizadoPor) {
+        await registrarAuditoria(tx, req, {
+          accion: 'CORTESIA', entidad: 'Venta', entidadId: ventaCreada.id, autorizadoPor,
+          motivo: motivoCortesia ? String(motivoCortesia).trim() : null,
+          despues: { metodoPago: finalMetodoPago, total: ventaCreada.total, descuento: ventaCreada.descuentoAplicado },
+        });
+      }
+
       // Delivery se cobra al tomarlo: esa es su fecha de cobro para los reportes
       await tx.pedido.update({ where: { id: pedidoCreado.id }, data: { cobradoEn: ventaCreada.createdAt } });
       return { pedido: pedidoCreado, venta: ventaCreada };
@@ -294,7 +313,9 @@ router.put('/api/pedidos/llevar/:id', requierePermiso('Caja'), validar({ body: p
     let grandTotal = finalMetodoPago === 'Cortesía' ? 0.00 : (totalConDescuento + shippingFee);
     const descuentoFinal = finalMetodoPago === 'Cortesía' ? itemsBruto : descuentoMonto;
 
-    const expandedItems = await expandPedidoItemsForDb(items);
+    // Cortesía (total o de ítems) o consumo de personal: lo autoriza un Administrador o Cajero con su PIN
+    const autorizadoPor = await autorizarCortesiaDelivery(req, finalMetodoPago, items);
+    const expandedItems = await expandPedidoItemsForDb(items, { permitirCortesia: Boolean(autorizadoPor) });
 
     // 1. Obtener pedido actual
     const pedido = await prisma.pedido.findUnique({

@@ -72,7 +72,8 @@ export function useCobroMesa({
     const tieneCortesiasIndividuales = cortesiaItemIds.length > 0;
 
     // Si es Consumo o Cortesía (total o individual), requerir PIN de supervisor/cajero en el modal
-    if (metodoPago === 'Consumo' || metodoPago === 'Cortesía' || tieneCortesiasIndividuales) {
+    const requiereAutorizacion = metodoPago === 'Consumo' || metodoPago === 'Cortesía' || tieneCortesiasIndividuales;
+    if (requiereAutorizacion) {
       if (!consumoPin.trim()) {
         setConsumoPinError(`El PIN es requerido para autorizar la Cortesía / Consumo.`);
         return;
@@ -187,6 +188,8 @@ export function useCobroMesa({
       clienteDireccion: clienteDireccion || '',
       cortesiaItemIds: cortesiaItemIds,
       motivoCortesia: motivoCortesia.trim() || null,
+      // El backend vuelve a validar el PIN de quien autorizó la cortesía o el consumo
+      ...(requiereAutorizacion ? { autorizacion: { pin: consumoPin.trim() } } : {}),
       cajeroNombre: usuarioOperador,
       codigoPago: codigoPago.trim() || null,
     };
