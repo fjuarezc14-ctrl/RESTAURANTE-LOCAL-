@@ -163,6 +163,17 @@ describe('cortesías', () => {
     expect((await prisma.itemPedido.findUnique({ where: { id: gaseosa.id } })).precio).toBe(0);
   });
 
+  it('el listado de ventas informa el valor de lo regalado (cortesía de ítems a precio de carta)', async () => {
+    await abrirCaja();
+    const pedidoId = await pedidoDeMesa();
+    const gaseosa = await prisma.itemPedido.findFirst({ where: { pedidoId, productoId: carta.gaseosa.id } });
+    const { ventaId } = (await cobrar(pedidoId, { cortesiaItemIds: [gaseosa.id], autorizacion: { pin: PIN_CAJERO } })).body;
+    const total = (await cobrar(await pedidoDeMesa(2), { metodoPago: 'Cortesía', autorizacion: { pin: PIN_CAJERO } })).body.ventaId;
+    const lista = (await api().get('/api/ventas')).body;
+    expect(lista.find((v) => v.id === ventaId).montoCortesia).toBe(3.5);
+    expect(lista.find((v) => v.id === total).montoCortesia).toBe(54.5);
+  });
+
   it('sin el PIN de un Administrador o Cajero, la cortesía y el consumo se rechazan y no se cobra', async () => {
     await abrirCaja();
     const pedidoId = await pedidoDeMesa();

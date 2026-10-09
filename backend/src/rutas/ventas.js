@@ -481,6 +481,15 @@ async function registrarClienteDeConsumo({ nombreCliente, numDocumento, clienteD
   }
 }
 
+// Valor de lo regalado en una venta (referencial): la cortesía total es lo descontado; en la cortesía de ítems
+// cada ítem queda en S/ 0 con la marca [CORTESÍA] en la nota, así que se valora con el precio de la carta
+function montoCortesiaDeVenta(v) {
+  if (v.anulado || v.pedido?.estado === 'Cancelado') return 0;
+  if (v.metodoPago === 'Cortesía') return Number(v.descuentoAplicado) || 0;
+  const items = (v.pedido?.items || []).filter((i) => !i.esComponente && String(i.notas || '').includes('[CORTESÍA]'));
+  return Math.round(items.reduce((s, i) => s + (Number(i.producto?.precio) || 0) * i.cantidad, 0) * 100) / 100;
+}
+
 // POST /api/ventas → Cobrar mesa (acepta pedidoIds array o pedidoId simple)
 router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body: cobro }), async (req, res, next) => {
   const {
@@ -850,7 +859,7 @@ router.get('/api/ventas', requierePermiso('Caja', 'Reportes'), validar({ query: 
       include: {
         pedido: {
           include: {
-            items: true,
+            items: { include: { producto: { select: { precio: true } } } },
             mesa: true,
           },
         },
@@ -877,6 +886,7 @@ router.get('/api/ventas', requierePermiso('Caja', 'Reportes'), validar({ query: 
       clienteCreditoId: v.clienteCreditoId || null,
       ofertaDescripcion: v.ofertaDescripcion || null,
       descuentoAplicado: v.descuentoAplicado || 0,
+      montoCortesia: montoCortesiaDeVenta(v),
       creditoSplit: creditosDeVenta(v),
       anulado: v.anulado || v.pedido?.estado === 'Cancelado',
       motivoAnulacion: v.motivoAnulacion || v.pedido?.motivoCancela || null,

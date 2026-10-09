@@ -183,11 +183,14 @@ function ModalCierreCajaContenido({
     totalEfectivoEsperado + Math.max(0, totalTarjeta) + Math.max(0, totalYape)
   );
 
+  // Cortesías totales y de ítems (montoCortesia lo calcula el servidor; sin él, solo las totales)
   const totalCortesias = Math.max(
     0,
     ventasFiltradas
-      .filter((v) => v.metodoPago === 'Cortesía')
-      .reduce((s, v) => s + (v.descuentoAplicado || v.total || 0), 0)
+      .filter((v) => !v.anulado)
+      .reduce((s, v) => s + (v.montoCortesia !== undefined
+        ? Number(v.montoCortesia) || 0
+        : (v.metodoPago === 'Cortesía' ? (v.descuentoAplicado || v.total || 0) : 0)), 0)
   );
 
   const montoFisicoNum = Math.max(0, parseFloat(efectivoFisicoContado || 0));

@@ -115,3 +115,15 @@ describe('listaVentasTurno(): lista filtrada', () => {
     expect(listaVentasTurno({ ...base, filtroMetodoPago: 'Todos', busquedaVentas: 'rosa' }).ventasLista.map(f => f.venta.id)).toEqual([10]);
   });
 });
+
+describe('cortesías de ítems', () => {
+  it('suma lo regalado en ventas cobradas con otro método (montoCortesia del servidor)', () => {
+    const ventas = [
+      { id: 1, metodoPago: 'Efectivo', total: 40, montoCortesia: 12.5, createdAt: '2026-10-09T15:00:00Z' },
+      { id: 2, metodoPago: 'Cortesía', total: 0, descuentoAplicado: 30, montoCortesia: 30, createdAt: '2026-10-09T15:05:00Z' },
+      { id: 3, metodoPago: 'Yape', total: 20, montoCortesia: 8, anulado: true, createdAt: '2026-10-09T15:10:00Z' },
+    ];
+    const r = resumenTurno({ ventas, abonos: [], clientes: [], ultimoCierre: null, mostrarTodoElDia: false });
+    expect(r.activeCortesias).toBe(42.5);
+  });
+});

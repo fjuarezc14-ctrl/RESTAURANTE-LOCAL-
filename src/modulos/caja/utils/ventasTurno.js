@@ -106,9 +106,14 @@ export function resumenTurno({ ventas, abonos, clientes, ultimoCierre, mostrarTo
     activeYape += a.montoYape || 0;
   });
   const activeIngresosCaja = activeEfectivo + activeTarjeta + activeYape;
+  // Cortesías totales y de ítems (montoCortesia lo calcula el servidor); sin él, solo las totales
   const activeCortesias = ventasTurno
-    .filter(v => v.metodoPago === 'Cortesía' && !v.anulado && v.estadoPedido !== 'Cancelado')
-    .reduce((sum, v) => sum + (parseFloat(v.descuentoAplicado || v.total) || (v.items?.reduce((s, i) => s + (i.cant * i.precio), 0) || 0)), 0);
+    .filter(v => !v.anulado && v.estadoPedido !== 'Cancelado')
+    .reduce((sum, v) => sum + (v.montoCortesia !== undefined
+      ? Number(v.montoCortesia) || 0
+      : (v.metodoPago === 'Cortesía'
+        ? (parseFloat(v.descuentoAplicado || v.total) || (v.items?.reduce((s, i) => s + (i.cant * i.precio), 0) || 0))
+        : 0)), 0);
 
   const clienteEsTrabajador = new Map(clientes.map(c => [c.id, c.esTrabajador]));
   let activeConsumoPlanilla = 0;
