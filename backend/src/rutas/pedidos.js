@@ -344,7 +344,7 @@ router.patch('/api/pedidos/:id/cancelar', requierePermiso('Salon', 'Caja'), idem
     if (!force && pedido.estado !== 'Cocina') {
       return next(new ErrorApp('CONFLICTO', 'Este pedido ya no puede cancelarse. Solo se cancelan pedidos en estado "Cocina".'));
     }
-    const autorizadoPor = await autorizarCancelacion(pedido, req.body, {
+    const autorizadoPor = await autorizarCancelacion(req, pedido, {
       forzada: Boolean(force), itemListo: pedido.items.some((i) => i.historial),
     });
 
@@ -434,7 +434,7 @@ router.patch('/api/pedidos/:id/cancelar-item', requierePermiso('Salon', 'Caja'),
     if (cantidad > item.cantidad) {
       return next(new ErrorApp('VALIDACION', 'La cantidad a cancelar supera la cantidad pedida.', { campo: 'cantidadACancelar' }));
     }
-    const autorizadoPor = await autorizarCancelacion(pedido, req.body, { forzada: Boolean(force), itemListo: Boolean(item.historial) });
+    const autorizadoPor = await autorizarCancelacion(req, pedido, { forzada: Boolean(force), itemListo: Boolean(item.historial) });
 
     const nuevaCantidad = item.cantidad - cantidad;
     // Componentes de un combo o plato compuesto: se cancelan junto con él

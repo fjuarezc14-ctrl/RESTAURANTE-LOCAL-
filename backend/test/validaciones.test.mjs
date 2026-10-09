@@ -179,7 +179,7 @@ describe('carta, usuarios, compras y configuración', () => {
   });
 
   it('login: un PIN que no son 4 dígitos → VALIDACION', async () => {
-    esperarError(await api().post('/api/usuarios/login').send({ pin: 'abcd' }), 400, 'VALIDACION', 'pin');
+    esperarError(await api().post('/api/auth/login').send({ pin: 'abcd' }), 400, 'VALIDACION', 'pin');
   });
 
   it('compras: RUC inválido → VALIDACION; acepta el XML de SUNAT aunque pase de 100 KB', async () => {
@@ -212,13 +212,6 @@ describe('restricciones de la base de datos', () => {
   });
 });
 
-describe('compatibilidad', () => {
-  it('check de sesión con un ID inválido sigue respondiendo exists:false (la pantalla cierra la sesión)', async () => {
-    const res = await api().get('/api/usuarios/check/undefined');
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ exists: false });
-  });
-});
 
 describe('rango de fechas junto a campos que se convierten a número', () => {
   it('/api/caja/movimientos?turnoId=5 ya no falla con "Unmergable intersection"', async () => {

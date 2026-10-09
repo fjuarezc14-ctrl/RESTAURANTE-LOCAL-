@@ -94,7 +94,7 @@ async function revocarDispositivo(dispositivoId, cliente = prisma) {
   await cliente.sesion.updateMany({ where: { dispositivoId, cerradaEn: null }, data: { cerradaEn: new Date(), motivoCierre: 'REVOCADA' } });
 }
 
-// Sesión de la petición con su usuario y dispositivo. { sesion } si es válida; { motivo } si no
+// Sesión de la petición con su usuario y dispositivo. { sesion } si es válida; { motivo, motivoCierre? } si no
 async function validarSesion(req) {
   const token = tokenDeSesion(req);
   if (!token) return { motivo: 'SIN_COOKIE' };
@@ -102,11 +102,12 @@ async function validarSesion(req) {
     where: { tokenHash: hashToken(token) },
     include: { usuario: true, dispositivo: true },
   });
-  if (!sesion || sesion.cerradaEn) return { motivo: 'CERRADA' };
+  if (!sesion) return { motivo: 'CERRADA' };
+  if (sesion.cerradaEn) return { motivo: 'CERRADA', motivoCierre: sesion.motivoCierre };
   if (sesion.dispositivo.revocadoEn) return { motivo: 'DISPOSITIVO_REVOCADO' };
   if (!sesion.usuario.activo) {
     await cerrarSesion(sesion.id, 'USUARIO_DESACTIVADO');
-    return { motivo: 'CERRADA' };
+    return { motivo: 'CERRADA', motivoCierre: 'USUARIO_DESACTIVADO' };
   }
   const limite = sesion.usuario.inactividadMin;
   if (limite && Date.now() - sesion.ultimaActividad.getTime() > limite * MINUTO_MS) {

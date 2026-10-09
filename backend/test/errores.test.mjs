@@ -1,7 +1,7 @@
 // Formato único de errores (ACUERDOS §1): { error: { codigo, mensaje, campo?, datos? } }
 import { createRequire } from 'node:module';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { app, api, crearBase, esperarError, limpiarBD } from './helpers.mjs';
+import { app, api, crearBase, esperarError, limpiarBD, navegadorConSesion } from './helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const { ErrorApp, traducirError } = require('../src/middlewares/errores.js');
@@ -59,12 +59,24 @@ describe('respuestas de la API', () => {
   });
 
   it('PIN incorrecto → 401 PIN_INCORRECTO; tras 5 fallos → 429 con los segundos de espera', async () => {
+    const nav = await navegadorConSesion();
     for (let i = 0; i < 5; i += 1) {
-      esperarError(await api().post('/api/usuarios/login').send({ pin: '0000' }), 401, 'PIN_INCORRECTO', 'pin');
+      esperarError(await nav.post('/api/auth/login').send({ pin: '0000' }), 401, 'PIN_INCORRECTO', 'pin');
     }
-    const bloqueado = await api().post('/api/usuarios/login').send({ pin: '0000' });
+    const bloqueado = await nav.post('/api/auth/login').send({ pin: '0000' });
     esperarError(bloqueado, 429, 'DEMASIADOS_INTENTOS');
     expect(bloqueado.body.error.datos.reintentarEnSeg).toBeGreaterThan(0);
+  });
+
+  it('los PIN de autorización comparten el límite: anular, cierre forzado y autorizar', async () => {
+    const nav = await navegadorConSesion();
+    esperarError(await nav.post('/api/auth/autorizar').send({ pin: '0000' }), 401, 'PIN_INCORRECTO', 'pin');
+    esperarError(await nav.patch('/api/ventas/1/anular').send({ pin: '0001', motivo: 'x' }), 401, 'PIN_INCORRECTO', 'pin');
+    esperarError(await nav.post('/api/caja/cierre-forzado').send({ adminPin: '0002', motivo: 'x' }), 403, 'SIN_PERMISO', 'pin');
+    esperarError(await nav.post('/api/auth/autorizar').send({ pin: '0003' }), 401, 'PIN_INCORRECTO', 'pin');
+    esperarError(await nav.patch('/api/ventas/1/anular').send({ pin: '0004', motivo: 'x' }), 401, 'PIN_INCORRECTO', 'pin');
+    // Ni el PIN correcto pasa mientras dura el bloqueo
+    esperarError(await nav.post('/api/auth/autorizar').send({ pin: '1234' }), 429, 'DEMASIADOS_INTENTOS');
   });
 });
 

@@ -26,42 +26,21 @@ export const apiUsuarios = {
     method: 'PUT', body: JSON.stringify(body)
   }),
   login: async (pin) => {
-    try {
-      const res = await apiRequest('/api/auth/login', {
-        method: 'POST', body: JSON.stringify({ pin })
-      });
-      return { ok: true, user: res.usuario };
-    } catch (err) {
-      if (err.codigo === 'DISPOSITIVO_NO_ACTIVADO') {
-        throw err;
-      }
-      if (err.codigo === 'PIN_INCORRECTO' || err.codigo === 'DEMASIADOS_INTENTOS') {
-        throw err;
-      }
-      return apiRequest('/api/usuarios/login', {
-        method: 'POST', body: JSON.stringify({ pin })
-      });
-    }
+    const res = await apiRequest('/api/auth/login', {
+      method: 'POST', body: JSON.stringify({ pin })
+    });
+    return { ok: true, user: res.usuario };
   },
+  // PIN de un Administrador o Cajero para autorizar (anular, cortesía, consumo); el backend lo vuelve a validar
   validateAuth: async (pin) => {
-    try {
-      const res = await apiRequest('/api/auth/autorizar', {
-        method: 'POST', body: JSON.stringify({ pin })
-      });
-      return {
-        ok: true,
-        nombre: res.autorizadoPor?.nombre,
-        rol: res.autorizadoPor?.rol,
-        autorizadoPor: res.autorizadoPor
-      };
-    } catch (err) {
-      if (err.codigo === 'PIN_INCORRECTO' || err.codigo === 'SIN_PERMISO') {
-        throw err;
-      }
-      return apiRequest('/api/usuarios/validate-auth', {
-        method: 'POST', body: JSON.stringify({ pin })
-      });
-    }
+    const res = await apiRequest('/api/auth/autorizar', {
+      method: 'POST', body: JSON.stringify({ pin })
+    });
+    return {
+      ok: true,
+      nombre: res.autorizadoPor?.nombre,
+      rol: res.autorizadoPor?.rol,
+      autorizadoPor: res.autorizadoPor
+    };
   },
-  checkUserStatus: (id) => apiRequest(`/api/usuarios/check/${id}`).catch(() => ({ exists: true, activo: true })),
 };

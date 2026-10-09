@@ -11,18 +11,25 @@ const { borrarCookieSesion, registrarActividad, validarSesion } = require('../se
 const RUTAS_PUBLICAS = ['/api/auth/marca', '/api/auth/activar', '/api/auth/login', '/api/status'];
 const authObligatoria = () => process.env.AUTH_OBLIGATORIA === 'true';
 
-function errorDeSesion(motivo) {
+// motivoCierre: por qué se cerró la sesión (ver servicios/sesiones.js), para avisarle al usuario
+const MENSAJES_CIERRE = {
+  PIN_CAMBIADO: 'El administrador cambió tu PIN. Ingresa con tu PIN nuevo.',
+  USUARIO_DESACTIVADO: 'Tu usuario fue desactivado. Habla con el administrador.',
+  INACTIVIDAD: 'Tu sesión se cerró por inactividad. Ingresa tu PIN.',
+};
+
+function errorDeSesion(motivo, motivoCierre) {
   if (motivo === 'DISPOSITIVO_REVOCADO') {
     return new ErrorApp('DISPOSITIVO_NO_ACTIVADO', 'Este dispositivo fue desactivado. Actívalo de nuevo con tu usuario y contraseña.');
   }
-  if (motivo === 'CERRADA') return new ErrorApp('SESION_EXPIRADA', 'Tu sesión terminó. Ingresa tu PIN de nuevo.');
+  if (motivo === 'CERRADA') return new ErrorApp('SESION_EXPIRADA', MENSAJES_CIERRE[motivoCierre] || 'Tu sesión terminó. Ingresa tu PIN de nuevo.');
   return new ErrorApp('NO_AUTENTICADO', 'Ingresa tu PIN para continuar.');
 }
 
 async function cargarSesion(req, res, next) {
   if (!req.path.startsWith('/api/')) return next();
   try {
-    const { sesion, motivo } = await validarSesion(req);
+    const { sesion, motivo, motivoCierre } = await validarSesion(req);
     if (sesion) {
       req.sesion = sesion;
       req.usuario = sesion.usuario;
@@ -32,9 +39,10 @@ async function cargarSesion(req, res, next) {
       return next();
     }
     req.motivoSesion = motivo;
+    req.motivoCierre = motivoCierre;
     if (motivo !== 'SIN_COOKIE') borrarCookieSesion(res);
     if (!authObligatoria() || RUTAS_PUBLICAS.includes(req.path)) return next();
-    return next(errorDeSesion(motivo));
+    return next(errorDeSesion(motivo, motivoCierre));
   } catch (err) {
     return next(err);
   }
@@ -43,7 +51,7 @@ async function cargarSesion(req, res, next) {
 // Para rutas que siempre necesitan sesión, aunque AUTH_OBLIGATORIA esté apagada (ej. /api/auth/yo)
 function requiereSesion(req, res, next) {
   if (req.usuario) return next();
-  return next(errorDeSesion(req.motivoSesion));
+  return next(errorDeSesion(req.motivoSesion, req.motivoCierre));
 }
 
 module.exports = { cargarSesion, requiereSesion };

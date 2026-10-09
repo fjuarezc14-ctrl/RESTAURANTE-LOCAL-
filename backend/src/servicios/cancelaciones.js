@@ -7,7 +7,7 @@
 // ============================================================
 const { prisma } = require('../db');
 const { ErrorApp } = require('../middlewares/errores');
-const { buscarUsuarioPorPin } = require('./auth');
+const { usuarioPorPinAutorizado } = require('./autorizacion');
 const { LIMITE_CANCELACION_MS } = require('./pedidos');
 
 const ROLES_QUE_AUTORIZAN = ['Administrador', 'Cajero'];
@@ -19,10 +19,10 @@ const HORAS_AVISO = 2; // los avisos sin confirmar se dejan de mostrar a las 2 h
  * el backend lo valida aquí (lo que la pantalla validó antes no cuenta).
  * @returns {Promise<string|null>} nombre de quien autorizó, o null si no hizo falta
  */
-async function autorizarCancelacion(pedido, body, { forzada = false, itemListo = false } = {}) {
+async function autorizarCancelacion(req, pedido, { forzada = false, itemListo = false } = {}) {
   const vencido = Date.now() - new Date(pedido.createdAt).getTime() > LIMITE_CANCELACION_MS;
   const requiere = forzada || itemListo || pedido.estado !== 'Cocina' || vencido;
-  const pin = body?.autorizacion?.pin;
+  const pin = req.body?.autorizacion?.pin;
   if (!requiere && !pin) return null;
   if (!pin) {
     if (vencido && !forzada && !itemListo && pedido.estado === 'Cocina') {
@@ -30,7 +30,7 @@ async function autorizarCancelacion(pedido, body, { forzada = false, itemListo =
     }
     throw new ErrorApp('AUTORIZACION_REQUERIDA', 'Hace falta el PIN de un Administrador o Cajero para anular.', { campo: 'pin' });
   }
-  const usuario = await buscarUsuarioPorPin(pin);
+  const usuario = await usuarioPorPinAutorizado(req, pin);
   if (!usuario) throw new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' });
   if (!ROLES_QUE_AUTORIZAN.includes(usuario.rol)) {
     throw new ErrorApp('SIN_PERMISO', 'Se requiere el PIN de un Administrador o Cajero.', { campo: 'pin' });

@@ -7,6 +7,7 @@ const { crearLimitador } = require('../middlewares/limiteLogin');
 const { requiereSesion } = require('../middlewares/sesion');
 const { validar } = require('../middlewares/validar');
 const { buscarUsuarioPorPin, usuarioPublico } = require('../servicios/auth');
+const { limitadorPinAutorizacion, usuarioPorPinAutorizado } = require('../servicios/autorizacion');
 const { getEmpresaConfig } = require('../servicios/empresa');
 const {
   abrirSesion, activarDispositivo, borrarCookieDispositivo, borrarCookieSesion, cerrarSesion, dispositivoDe,
@@ -21,7 +22,6 @@ const ROLES_QUE_AUTORIZAN = ['Administrador', 'Cajero'];
 
 const limitadorActivacion = crearLimitador();
 const limitadorPin = crearLimitador();
-const limitadorAutorizacion = crearLimitador((req) => `sesion:${req.sesion?.id}`);
 
 // GET /api/auth/marca → nombre del restaurante para la pantalla de login (pública)
 router.get('/api/auth/marca', async (req, res, next) => {
@@ -117,18 +117,14 @@ router.get('/api/auth/yo', requiereSesion, (req, res) => {
 });
 
 // POST /api/auth/autorizar → valida el PIN de un Administrador o Cajero (anular, cortesía, descuento)
-router.post('/api/auth/autorizar', requiereSesion, limitadorAutorizacion.middleware, validar({ body: loginPin }), async (req, res, next) => {
+router.post('/api/auth/autorizar', requiereSesion, validar({ body: loginPin }), async (req, res, next) => {
   try {
-    const user = await buscarUsuarioPorPin(req.body.pin);
-    if (!user) {
-      limitadorAutorizacion.fallo(req);
-      return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
-    }
+    const user = await usuarioPorPinAutorizado(req, req.body.pin);
+    if (!user) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (!ROLES_QUE_AUTORIZAN.includes(user.rol)) {
-      limitadorAutorizacion.fallo(req);
+      limitadorPinAutorizacion.fallo(req);
       return next(new ErrorApp('SIN_PERMISO', 'Se requiere el PIN de un Administrador o Cajero.', { campo: 'pin' }));
     }
-    limitadorAutorizacion.exito(req);
     res.json({ autorizadoPor: { id: user.id, nombre: user.nombre, rol: user.rol } });
   } catch (err) {
     next(err);

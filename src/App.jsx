@@ -3,7 +3,6 @@ import { Lock } from 'lucide-react';
 import { useState, useEffect, useRef, lazy } from 'react';
 import { api, esErrorDeSesion, onSesionPerdida } from './api';
 import { useEventos } from './hooks/useEventos';
-import { useAviso } from './components/ui';
 import { AuthGate } from './components/acceso/AuthGate';
 import { Layout } from './components/layout/Layout';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
@@ -63,7 +62,6 @@ const aplicaInactividad = (user) => !!user && !ROLES_SIN_CIERRE_POR_INACTIVIDAD.
 
 // === APP MAIN ENTRY ===
 function App() {
-  const aviso = useAviso();
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [necesitaActivacion, setNecesitaActivacion] = useState(false);
@@ -97,6 +95,7 @@ function App() {
       localStorage.removeItem(SESSION_KEY);
 
       // 1. Validar sesión activa en el backend mediante cookie httpOnly (/api/auth/yo)
+      let errorYo = null;
       try {
         const sesionActual = await api.getSesionYo();
         if (sesionActual && sesionActual.usuario) {
@@ -114,71 +113,37 @@ function App() {
           setLoading(false);
           return;
         }
+        errorYo = err;
       }
 
-      // 2. Si no hay sesión httpOnly activa o está offline, verificar sessionStorage
+      // 2. El servidor no respondió (reinicio, WiFi caído): se conserva la sesión de esta pestaña;
+      //    la próxima consulta al servidor la vuelve a validar. Si el servidor dijo que no hay sesión, al PIN.
       const saved = sessionStorage.getItem(SESSION_KEY);
-      if (saved) {
+      if (saved && errorYo && !esErrorDeSesion(errorYo)) {
         try {
           const parsed = JSON.parse(saved);
           const ultima = leerUltimaActividad();
           if (aplicaInactividad(parsed) && ultima && Date.now() - ultima >= INACTIVIDAD_MS) {
             borrarSesion();
             setAvisoLogin('Tu sesión se cerró por inactividad. Ingresa tu PIN.');
-            setLoading(false);
-            return;
-          }
-        } catch { /* se valida abajo */ }
-      }
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed && parsed.id) {
-            // Validar directamente contra el servidor
-            const status = await api.checkUserStatus(parsed.id);
-            if (!status || !status.exists || !status.activo) {
-              borrarSesion();
-              setCurrentUser(null);
-            } else if (parsed.pinSignature && status.pinSignature && parsed.pinSignature !== status.pinSignature) {
-              borrarSesion();
-              setCurrentUser(null);
-              aviso.advertencia('La contraseña/PIN de tu cuenta ha sido modificada por el administrador. Por favor, inicia sesión con tu nuevo PIN.');
-            } else {
-              // Sincronizar roles y permisos actualizados de la BD
-              const updatedUser = {
-                ...parsed,
-                nombre: status.nombre || parsed.nombre,
-                rol: status.rol || parsed.rol,
-                permisos: status.permisos || parsed.permisos || [],
-                pinSignature: status.pinSignature || parsed.pinSignature,
-              };
-              setCurrentUser(updatedUser);
-              guardarSesion(updatedUser);
-            }
+          } else if (parsed?.id) {
+            setCurrentUser(parsed);
           } else {
             borrarSesion();
-            setCurrentUser(null);
           }
-        } catch (e) {
-          console.error('Error inicializando sesión:', e);
-          // Sin sesión en el servidor no se restaura la guardada: onSesionPerdida ya lleva al PIN
-          if (esErrorDeSesion(e)) {
-            borrarSesion();
-            setLoading(false);
-            return;
-          }
-          try {
-            setCurrentUser(JSON.parse(saved));
-          } catch (err) {
-            borrarSesion();
-          }
+        } catch {
+          borrarSesion();
         }
+      } else {
+        borrarSesion();
+        // Ej. "El administrador cambió tu PIN": el servidor dice por qué se cerró la sesión
+        if (errorYo?.codigo === 'SESION_EXPIRADA') setAvisoLogin(errorYo.message);
       }
       setLoading(false);
     };
 
     initSession();
-  }, [aviso]); // aviso es estable: solo corre al iniciar
+  }, []); // solo al iniciar
 
   const handleLoginSuccess = (user) => {
     sessionStorage.setItem(ACTIVIDAD_KEY, String(Date.now()));
@@ -255,31 +220,25 @@ function App() {
     };
   }, [currentUser?.id, aplicaCierrePorInactividad]);
 
-  // Detectar si el usuario fue eliminado, desactivado o si cambió su PIN/rol: al recibir el aviso en vivo
-  // de que cambiaron los usuarios (SSE), y cada 60 s como respaldo
+  // Cuando cambian los usuarios (aviso en vivo), se vuelve a pedir la sesión: si el administrador cambió el PIN
+  // o desactivó al usuario, el servidor ya la cerró y se vuelve al PIN con el motivo; si cambió el rol
+  // o los permisos, se actualizan
   useEventos(['usuarios'], async () => {
     if (!currentUser || !currentUser.id) return;
     try {
-      const res = await api.checkUserStatus(currentUser.id);
-      if (!res || !res.exists || !res.activo) {
-        handleLogout();
-        aviso.advertencia('Tu usuario ha sido eliminado o desactivado. Sesión cerrada.');
-      } else if (currentUser.pinSignature && res.pinSignature && currentUser.pinSignature !== res.pinSignature) {
-        handleLogout();
-        aviso.advertencia('La contraseña/PIN de tu cuenta fue modificada por el administrador. Sesión cerrada.');
-      } else if (res.rol !== currentUser.rol || JSON.stringify(res.permisos) !== JSON.stringify(currentUser.permisos)) {
-        const syncedUser = {
-          ...currentUser,
-          nombre: res.nombre,
-          rol: res.rol,
-          permisos: res.permisos,
-          pinSignature: res.pinSignature,
-        };
-        setCurrentUser(syncedUser);
-        guardarSesion(syncedUser);
+      const { usuario } = await api.getSesionYo();
+      if (usuario.rol !== currentUser.rol || usuario.nombre !== currentUser.nombre
+        || JSON.stringify(usuario.permisos) !== JSON.stringify(currentUser.permisos)) {
+        setCurrentUser(usuario);
+        guardarSesion(usuario);
       }
-    } catch {
-      // Ignorar errores de red 502 temporales durante reinicios del servidor
+    } catch (err) {
+      if (!esErrorDeSesion(err)) return; // reinicio del servidor o WiFi: se reintenta en el próximo aviso
+      setCurrentUser(null);
+      setSegundosParaCierre(null);
+      borrarSesion();
+      setNecesitaActivacion(err.codigo === 'DISPOSITIVO_NO_ACTIVADO');
+      setAvisoLogin(err.message);
     }
   }, { activo: Boolean(currentUser?.id) });
 

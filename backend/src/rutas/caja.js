@@ -3,7 +3,7 @@ const express = require('express');
 const { prisma } = require('../db');
 const { obtenerMontosVenta } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
-const { buscarUsuarioPorPin } = require('../servicios/auth');
+const { usuarioPorPinAutorizado } = require('../servicios/autorizacion');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { aperturaCaja, cierreCaja, cierreForzado, consultaCierres, consultaMovimientos, movimientoCaja } = require('../../shared/esquemas/caja.js');
 const { requierePermiso } = require('../middlewares/permisos');
@@ -385,7 +385,7 @@ router.post('/api/caja/cierre-forzado', requierePermiso('Caja', 'Dashboard'), id
     }
 
     // Validar PIN de administrador
-    const admin = await buscarUsuarioPorPin(adminPin, { rol: 'Administrador' });
+    const admin = await usuarioPorPinAutorizado(req, adminPin, { rol: 'Administrador' });
 
     if (!admin) {
       return next(new ErrorApp('SIN_PERMISO', 'PIN de Administrador inválido o no autorizado.', { campo: 'pin' }));

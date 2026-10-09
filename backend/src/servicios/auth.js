@@ -78,11 +78,6 @@ function usuarioPublico(u) {
   return { id, nombre, rol, permisos, activo, creadoEn, usuario, correo, inactividadMin };
 }
 
-// Firma corta del PIN: la pantalla la compara para cerrar la sesión si cambió el PIN
-function generarPinSignature(pinHash, userId) {
-  return crypto.createHash('sha256').update(`${pinHash || ''}_${userId}_salt_hernandez_auth`).digest('hex').substring(0, 16);
-}
-
 module.exports = {
-  hashPin, buscarUsuarioPorPin, migrarPinesAHash, asegurarAccesoAdministrador, restablecerContrasenaAdmin, usuarioPublico, generarPinSignature,
+  hashPin, buscarUsuarioPorPin, migrarPinesAHash, asegurarAccesoAdministrador, restablecerContrasenaAdmin, usuarioPublico,
 };

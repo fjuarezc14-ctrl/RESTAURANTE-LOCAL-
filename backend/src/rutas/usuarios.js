@@ -1,14 +1,15 @@
-// Rutas de usuarios, login por PIN y autorizaciones
+// Rutas de usuarios (el login por PIN y las autorizaciones están en rutas/auth.js)
 const express = require('express');
 const { prisma } = require('../db');
-const { loginRateLimiter, registerLoginFailure, registerLoginSuccess } = require('../middlewares/limiteLogin');
 const bcrypt = require('bcryptjs');
-const { buscarUsuarioPorPin, generarPinSignature, hashPin, usuarioPublico } = require('../servicios/auth');
+const { buscarUsuarioPorPin, hashPin, usuarioPublico } = require('../servicios/auth');
 const { cerrarSesionesDeUsuario } = require('../servicios/sesiones');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
-const { loginPin, usuarioEdicion, usuarioNuevo } = require('../../shared/esquemas/usuarios.js');
+const { usuarioEdicion, usuarioNuevo } = require('../../shared/esquemas/usuarios.js');
 const { soloAdmin } = require('../middlewares/permisos');
+const { requiereSesion } = require('../middlewares/sesion');
+const { esAdmin, tienePermiso } = require('../../shared/permisos.js');
 const { registrarAuditoria } = require('../servicios/auditoria');
 
 const router = express.Router();
@@ -18,10 +19,18 @@ validarIdsEnUrl(router);
 // USUARIOS
 // ============================================================
 
-router.get('/api/usuarios', async (req, res, next) => {
+// Lista del personal (selector de mozos, cajeros…). Siempre con sesión; el usuario y el correo de acceso
+// solo los ve quien administra el personal
+router.get('/api/usuarios', requiereSesion, async (req, res, next) => {
   try {
     const usuarios = await prisma.usuario.findMany({ where: { activo: true } });
-    res.json(usuarios.map(usuarioPublico));
+    const veAccesos = esAdmin(req.usuario) || tienePermiso(req.usuario, 'Usuarios');
+    res.json(usuarios.map((u) => {
+      const publico = usuarioPublico(u);
+      if (veAccesos) return publico;
+      const { usuario, correo, ...resto } = publico;
+      return resto;
+    }));
   } catch (err) {
     next(err);
   }
@@ -142,66 +151,6 @@ router.put('/api/usuarios/:id', soloAdmin, validar({ body: usuarioEdicion }), as
     res.json(usuarioPublico(user));
   } catch (err) {
     next(err);
-  }
-});
-
-router.post('/api/usuarios/login', loginRateLimiter, validar({ body: loginPin }), async (req, res, next) => {
-  const { pin } = req.body;
-  try {
-    const user = await buscarUsuarioPorPin(pin);
-    if (!user) {
-      registerLoginFailure(req);
-      return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto. Inténtalo de nuevo.', { campo: 'pin' }));
-    }
-    registerLoginSuccess(req);
-    const safeUser = { ...usuarioPublico(user), pinSignature: generarPinSignature(user.pinHash, user.id) };
-    res.json({ ok: true, user: safeUser });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post('/api/usuarios/validate-auth', validar({ body: loginPin }), async (req, res, next) => {
-  const { pin } = req.body;
-  try {
-    const user = await buscarUsuarioPorPin(pin);
-    if (!user) {
-      return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
-    }
-    // Solo Administrador o Cajero pueden autorizar cancelaciones/cortesías
-    const rolesAutorizados = ['Administrador', 'Cajero'];
-    if (!rolesAutorizados.includes(user.rol)) {
-      return next(new ErrorApp('AUTORIZACION_REQUERIDA', 'Acceso denegado. Se requiere PIN de Administrador o Cajero.', { campo: 'pin' }));
-    }
-    res.json({ ok: true, nombre: user.nombre, rol: user.rol });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// :usuarioId (no :id) para no pasar por validarIdsEnUrl: con un ID inválido responde exists:false y la pantalla
-// cierra la sesión (si respondiera error, la pantalla asumiría que el usuario sigue activo). Se reemplaza en la tarea 7.
-router.get('/api/usuarios/check/:usuarioId', async (req, res) => {
-  try {
-    const id = parseInt(req.params.usuarioId);
-    if (isNaN(id)) return res.json({ exists: false });
-    const user = await prisma.usuario.findUnique({
-      where: { id }
-    });
-    if (!user || !user.activo) {
-      return res.json({ exists: false });
-    }
-    res.json({
-      exists: true,
-      activo: user.activo,
-      id: user.id,
-      nombre: user.nombre,
-      rol: user.rol,
-      permisos: user.permisos,
-      pinSignature: generarPinSignature(user.pinHash, user.id)
-    });
-  } catch (err) {
-    res.json({ exists: false, error: err.message });
   }
 });
 

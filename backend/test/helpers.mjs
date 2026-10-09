@@ -25,6 +25,18 @@ export function esperarError(res, status, codigo, campo) {
 
 export const PIN_ADMIN = '1234';
 export const PIN_CAJERO = '2222';
+export const CONTRASENA_ADMIN = 'clave-segura-1';
+
+// Un "navegador" con el equipo activado y la sesión del Administrador abierta (guarda las cookies).
+// Requiere crearBase() y AUTH_OBLIGATORIA apagada para poner la contraseña.
+export async function navegadorConSesion() {
+  const admin = await prisma.usuario.findFirst({ where: { rol: 'Administrador' } });
+  await api().put(`/api/usuarios/${admin.id}`).send({ usuario: 'admin', contrasena: CONTRASENA_ADMIN });
+  const nav = request.agent(app);
+  const res = await nav.post('/api/auth/activar').send({ usuario: 'admin', contrasena: CONTRASENA_ADMIN, nombreDispositivo: 'Pruebas' });
+  expect(res.status).toBe(200);
+  return nav;
+}
 
 export async function limpiarBD() {
   reiniciarLimitadores(); // los contadores de intentos son por IP y en las pruebas todo viene de 127.0.0.1

@@ -14,14 +14,19 @@ const ipDe = (req) => req.ip || req.connection?.remoteAddress || 'local';
 function crearLimitador(clave = ipDe) {
   const intentos = new Map(); // clave -> { count, firstAttempt, blockedUntil }
 
-  function middleware(req, res, next) {
+  // El error a devolver si esta clave está bloqueada, o null
+  function bloqueo(req) {
     const intento = intentos.get(clave(req));
     const ahora = Date.now();
     if (intento && intento.blockedUntil && ahora < intento.blockedUntil) {
       const segundos = Math.ceil((intento.blockedUntil - ahora) / 1000);
-      return next(new ErrorApp('DEMASIADOS_INTENTOS', `Demasiados intentos fallidos. Acceso temporalmente bloqueado por ${segundos} segundos.`, { datos: { reintentarEnSeg: segundos } }));
+      return new ErrorApp('DEMASIADOS_INTENTOS', `Demasiados intentos fallidos. Acceso temporalmente bloqueado por ${segundos} segundos.`, { datos: { reintentarEnSeg: segundos } });
     }
-    next();
+    return null;
+  }
+
+  function middleware(req, res, next) {
+    next(bloqueo(req) || undefined);
   }
 
   function fallo(req) {
@@ -49,13 +54,10 @@ function crearLimitador(clave = ipDe) {
     }
   }, 10 * VENTANA_MS).unref();
 
-  const limitador = { middleware, fallo, exito, reiniciar: () => intentos.clear() };
+  const limitador = { middleware, bloqueo, fallo, exito, reiniciar: () => intentos.clear() };
   limitadores.push(limitador);
   return limitador;
 }
-
-// Login por PIN antiguo (/api/usuarios/login)
-const limitadorLogin = crearLimitador();
 
 const reiniciarLimitadores = () => limitadores.forEach((l) => l.reiniciar());
 
@@ -63,7 +65,4 @@ module.exports = {
   crearLimitador,
   reiniciarLimitadores,
   ipDe,
-  loginRateLimiter: limitadorLogin.middleware,
-  registerLoginFailure: limitadorLogin.fallo,
-  registerLoginSuccess: limitadorLogin.exito,
 };

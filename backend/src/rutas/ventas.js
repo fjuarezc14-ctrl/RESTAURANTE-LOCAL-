@@ -4,7 +4,7 @@ const { las3DeLima, inicioJornadaActual } = require('../servicios/jornada');
 const { prisma } = require('../db');
 const { calcularSubtotalEIgv, limpiarCodigoPago, obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
-const { buscarUsuarioPorPin } = require('../servicios/auth');
+const { usuarioPorPinAutorizado } = require('../servicios/autorizacion');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { anulacion, cobro, correccionDatosCliente, correccionMetodoPago, correccionTipoEntrega } = require('../../shared/esquemas/ventas.js');
 const { consultaDesde, rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
@@ -34,7 +34,7 @@ router.patch('/api/ventas/:ventaId/metodo-pago', requierePermiso('Caja'), valida
 
   try {
     // Validar PIN
-    const admin = await buscarUsuarioPorPin(pin);
+    const admin = await usuarioPorPinAutorizado(req, pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar el método de pago.'));
@@ -157,7 +157,7 @@ router.patch('/api/ventas/:ventaId/tipo-entrega', requierePermiso('Caja'), valid
 
   try {
     // Validar PIN
-    const admin = await buscarUsuarioPorPin(pin);
+    const admin = await usuarioPorPinAutorizado(req, pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar el tipo de entrega.'));
@@ -263,7 +263,7 @@ router.patch('/api/ventas/:ventaId/datos-cliente', requierePermiso('Caja'), vali
 
   try {
     // Validar PIN
-    const admin = await buscarUsuarioPorPin(pin);
+    const admin = await usuarioPorPinAutorizado(req, pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede cambiar los datos del cliente.'));
@@ -323,7 +323,7 @@ router.patch('/api/ventas/:ventaId/anular', requierePermiso('Caja'), idempotente
   }
 
   try {
-    const admin = await buscarUsuarioPorPin(pin);
+    const admin = await usuarioPorPinAutorizado(req, pin);
     if (!admin) return next(new ErrorApp('PIN_INCORRECTO', 'PIN incorrecto.', { campo: 'pin' }));
     if (admin.rol !== 'Administrador') {
       return next(new ErrorApp('SIN_PERMISO', 'Solo el Administrador puede anular o registrar devolución de ventas.'));
