@@ -87,9 +87,9 @@ router.get('/api/clientes/directorio', requierePermiso('Creditos'), validar({ qu
     const docs = clientes.map(c => c.numDoc).filter(Boolean);
     const ids = clientes.map(c => c.id);
 
-    // Lo que consumió cada cliente (ventas no anuladas): su parte del crédito y, lo pagado al contado,
-    // el cliente del documento (o el único cliente a crédito). Antes se sumaba el total de la venta: en un
-    // reparto el primer cliente se llevaba la cuenta entera, y una venta podía contarse a dos clientes.
+    // Lo que consumió cada cliente (ventas no anuladas): su parte del crédito y lo pagado al contado con su
+    // documento. Lo pagado al contado sin documento no se le atribuye a nadie (no se sabe quién pagó).
+    // Antes se sumaba el total de la venta: en un reparto el primer cliente se llevaba la cuenta entera.
     const ventas = await prisma.venta.findMany({
       where: {
         OR: [
@@ -115,8 +115,7 @@ router.get('/api/clientes/directorio', requierePermiso('Creditos'), validar({ qu
       for (const parte of v.creditos) porCliente.set(parte.clienteId, (porCliente.get(parte.clienteId) || 0) + Number(parte.monto));
       const resto = Math.max(0, Number(v.total) - v.creditos.reduce((s, c) => s + Number(c.monto), 0));
       const delDocumento = v.numDocumento ? clientes.find(c => c.numDoc === v.numDocumento)?.id : null;
-      const duenoDelResto = delDocumento || (porCliente.size === 1 ? [...porCliente.keys()][0] : null);
-      if (duenoDelResto && resto > 0) porCliente.set(duenoDelResto, (porCliente.get(duenoDelResto) || 0) + resto);
+      if (delDocumento && resto > 0) porCliente.set(delDocumento, (porCliente.get(delDocumento) || 0) + resto);
       for (const [clienteId, monto] of porCliente) sumar(clienteId, monto, v.createdAt);
     }
 

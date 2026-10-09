@@ -183,4 +183,15 @@ describe('directorio de clientes', () => {
     expect(de(ana.id)).toMatchObject({ totalConsumido: 30, visitas: 1 });
     expect(de(beto.id)).toMatchObject({ totalConsumido: 28, visitas: 2 });
   });
+
+  it('en un pago mixto sin documento solo cuenta la parte a crédito (lo del contado no se sabe quién lo pagó)', async () => {
+    await abrirCaja();
+    // S/ 54.50: 20 a crédito del cliente y el resto en efectivo
+    await cobrar(await mesaListaParaCobrar(1, [item(carta.lomo, 2), item(carta.gaseosa, 1)]), {
+      metodoPago: 'Mixto', montoEfectivo: 34.5, montoCredito: 20, clienteCreditoId: cliente.id,
+    });
+    const { clientes } = (await api().get('/api/clientes/directorio?search=')).body;
+    expect(clientes.find((c) => c.id === cliente.id).totalConsumido).toBe(20);
+    expect(await saldo()).toBe(20);
+  });
 });
