@@ -325,7 +325,7 @@ export default function CreditosPage({ currentUser }) {
                   <th className="py-3 px-4">Documento</th>
                   <th className="py-3 px-4">Teléfono & Dirección</th>
                   <th className="py-3 px-4 text-center">Frecuencia</th>
-                  <th className="py-3 px-4 text-right">Total Consumido</th>
+                  <th className="py-3 px-4 text-right">Consumido</th>
                   <th className="py-3 px-4 text-center">Última Visita</th>
                   <th className="py-3 px-4 text-center">Tipo</th>
                 </tr>

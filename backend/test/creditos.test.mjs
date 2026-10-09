@@ -165,3 +165,22 @@ async function dejarDeudaEnMesa(mesa) {
   const pedidoId = await mesaListaParaCobrar(mesa, [item(carta.lomo, 2), item(carta.gaseosa, 1)]);
   return (await cobrar(pedidoId, { metodoPago: 'Crédito', clienteCreditoId: cliente.id })).body.ventaId;
 }
+
+describe('directorio de clientes', () => {
+  it('"consumido" es lo de cada cliente: su parte del crédito y lo pagado con su documento', async () => {
+    await abrirCaja();
+    const [ana, beto] = await Promise.all([crearCliente('Ana'), crearCliente('Beto')]);
+    await prisma.cliente.update({ where: { id: beto.id }, data: { numDoc: '44556677' } });
+    // Reparto: Ana 30, Beto 24.50
+    await cobrar(await mesaListaParaCobrar(1, [item(carta.lomo, 2), item(carta.gaseosa, 1)]), {
+      metodoPago: 'Crédito', creditosDetalle: [{ clienteId: ana.id, monto: 30 }, { clienteId: beto.id, monto: 24.5 }],
+    });
+    // Beto paga al contado con su DNI: S/ 3.50
+    await cobrar(await mesaListaParaCobrar(2, [item(carta.gaseosa, 1)]), { numDocumento: '44556677', nombreCliente: 'Beto' });
+
+    const { clientes } = (await api().get('/api/clientes/directorio?search=')).body;
+    const de = (id) => clientes.find((c) => c.id === id);
+    expect(de(ana.id)).toMatchObject({ totalConsumido: 30, visitas: 1 });
+    expect(de(beto.id)).toMatchObject({ totalConsumido: 28, visitas: 2 });
+  });
+});

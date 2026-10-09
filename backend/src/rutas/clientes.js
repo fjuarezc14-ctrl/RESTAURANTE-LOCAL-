@@ -87,44 +87,37 @@ router.get('/api/clientes/directorio', requierePermiso('Creditos'), validar({ qu
     const docs = clientes.map(c => c.numDoc).filter(Boolean);
     const ids = clientes.map(c => c.id);
 
-    // Calcular métricas históricas de consumo
+    // Lo que consumió cada cliente (ventas no anuladas): su parte del crédito y, lo pagado al contado,
+    // el cliente del documento (o el único cliente a crédito). Antes se sumaba el total de la venta: en un
+    // reparto el primer cliente se llevaba la cuenta entera, y una venta podía contarse a dos clientes.
     const ventas = await prisma.venta.findMany({
       where: {
         OR: [
           { clienteCreditoId: { in: ids } },
+          { creditos: { some: { clienteId: { in: ids } } } },
           ...(docs.length > 0 ? [{ numDocumento: { in: docs } }] : []),
         ],
         anulado: false,
       },
-      select: {
-        total: true,
-        clienteCreditoId: true,
-        numDocumento: true,
-        createdAt: true,
-      }
+      select: { total: true, numDocumento: true, createdAt: true, creditos: { select: { clienteId: true, monto: true } } },
     });
 
     const metricas = {};
+    const sumar = (clienteId, monto, fecha) => {
+      if (!ids.includes(clienteId)) return;
+      const m = metricas[clienteId] || (metricas[clienteId] = { total: 0, visitas: 0, ultimaVisita: null });
+      m.total += monto;
+      m.visitas += 1;
+      if (!m.ultimaVisita || new Date(fecha) > new Date(m.ultimaVisita)) m.ultimaVisita = fecha;
+    };
     for (const v of ventas) {
-      if (v.clienteCreditoId) {
-        if (!metricas[v.clienteCreditoId]) metricas[v.clienteCreditoId] = { total: 0, visitas: 0, ultimaVisita: null };
-        metricas[v.clienteCreditoId].total += Number(v.total) || 0;
-        metricas[v.clienteCreditoId].visitas += 1;
-        if (!metricas[v.clienteCreditoId].ultimaVisita || new Date(v.createdAt) > new Date(metricas[v.clienteCreditoId].ultimaVisita)) {
-          metricas[v.clienteCreditoId].ultimaVisita = v.createdAt;
-        }
-      }
-      if (v.numDocumento) {
-        const cMatch = clientes.find(c => c.numDoc === v.numDocumento);
-        if (cMatch && cMatch.id !== v.clienteCreditoId) {
-          if (!metricas[cMatch.id]) metricas[cMatch.id] = { total: 0, visitas: 0, ultimaVisita: null };
-          metricas[cMatch.id].total += Number(v.total) || 0;
-          metricas[cMatch.id].visitas += 1;
-          if (!metricas[cMatch.id].ultimaVisita || new Date(v.createdAt) > new Date(metricas[cMatch.id].ultimaVisita)) {
-            metricas[cMatch.id].ultimaVisita = v.createdAt;
-          }
-        }
-      }
+      const porCliente = new Map();
+      for (const parte of v.creditos) porCliente.set(parte.clienteId, (porCliente.get(parte.clienteId) || 0) + Number(parte.monto));
+      const resto = Math.max(0, Number(v.total) - v.creditos.reduce((s, c) => s + Number(c.monto), 0));
+      const delDocumento = v.numDocumento ? clientes.find(c => c.numDoc === v.numDocumento)?.id : null;
+      const duenoDelResto = delDocumento || (porCliente.size === 1 ? [...porCliente.keys()][0] : null);
+      if (duenoDelResto && resto > 0) porCliente.set(duenoDelResto, (porCliente.get(duenoDelResto) || 0) + resto);
+      for (const [clienteId, monto] of porCliente) sumar(clienteId, monto, v.createdAt);
     }
 
     const items = clientes.map(c => {
@@ -138,7 +131,7 @@ router.get('/api/clientes/directorio', requierePermiso('Creditos'), validar({ qu
         direccion: c.direccion,
         esTrabajador: c.esTrabajador,
         tieneCredito: c.tieneCredito,
-        totalConsumido: m.total,
+        totalConsumido: Math.round(m.total * 100) / 100,
         visitas: m.visitas,
         ultimaVisita: m.ultimaVisita || c.creadoEn,
         creadoEn: c.creadoEn,
