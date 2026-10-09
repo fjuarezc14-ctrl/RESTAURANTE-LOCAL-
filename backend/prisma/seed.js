@@ -8,6 +8,16 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Reiniciando e ingresando la carta oficial del Restaurante Señor Hernández...');
 
+  // Seed de demostración: BORRA ventas y pedidos. Nunca sobre una BD de producción o con ventas reales.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('seed.js es solo para desarrollo (NODE_ENV=production). No se tocó la base de datos.');
+  }
+  const ventas = await prisma.venta.count();
+  if (ventas > 0 && process.env.SEED_BORRAR_VENTAS !== 'si') {
+    throw new Error(`La base de datos tiene ${ventas} ventas y seed.js las borraría. No se tocó nada. `
+      + 'Si de verdad quieres reiniciarla, corre: SEED_BORRAR_VENTAS=si node prisma/seed.js');
+  }
+
   // ── 1. Limpieza de datos antiguos para evitar discrepancias ──
   console.log('🧹 Limpiando carta anterior...');
   await prisma.itemPedido.deleteMany({});

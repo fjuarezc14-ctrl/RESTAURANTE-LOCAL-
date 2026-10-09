@@ -25,6 +25,13 @@ const PERMISOS_POR_ROL = {
 async function main() {
   console.log('🚀 Iniciando puesta en marcha limpia para nuevo restaurante...');
 
+  // Borra TODO: solo sobre una base sin ventas (el instalador y iniciar-cliente ya lo comprueban antes)
+  const ventas = await prisma.venta.count();
+  if (ventas > 0 && process.env.SEED_BORRAR_VENTAS !== 'si') {
+    throw new Error(`La base de datos tiene ${ventas} ventas y seed-clean.js las borraría. No se tocó nada. `
+      + 'Si de verdad quieres reiniciarla, corre: SEED_BORRAR_VENTAS=si node prisma/seed-clean.js');
+  }
+
   // 1. Limpieza total de movimientos transaccionales previos
   console.log('🧹 Eliminando ventas, comandas, gastos y auditorías anteriores...');
   await prisma.abonoCredito.deleteMany({});
