@@ -85,6 +85,7 @@ model Cliente {
   creadoEn     DateTime @default(now())
 
   AbonosCredito AbonoCredito[]
+  creditosVenta VentaCredito[]
 
   @@index([numDoc])
   @@index([tieneCredito])
@@ -240,12 +241,28 @@ model Venta {
   anuladoEn         DateTime?
   montoOriginal     Decimal?  @db.Decimal(10, 2) // Guarda el monto cobrado originalmente antes de ser devuelto
   createdAt         DateTime  @default(now())
+  creditos          VentaCredito[] // A quién se le cargó la parte a crédito (uno o varios clientes)
 
   @@index([createdAt])
   @@index([estadoSunat])
   @@index([metodoPago])
   @@index([anulado])
   @@index([clienteCreditoId])
+}
+
+// Reparto de la parte a crédito de una venta entre clientes. Antes iba como texto
+// "[CREDITO_SPLIT:[…]]" dentro de Venta.ofertaDescripcion (servicios/creditos.js migra lo antiguo al arrancar).
+model VentaCredito {
+  id        Int      @id @default(autoincrement())
+  venta     Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  ventaId   Int
+  cliente   Cliente  @relation(fields: [clienteId], references: [id])
+  clienteId Int
+  monto     Decimal  @db.Decimal(10, 2)
+  creadoEn  DateTime @default(now())
+
+  @@index([ventaId])
+  @@index([clienteId])
 }
 
 // ============================================================

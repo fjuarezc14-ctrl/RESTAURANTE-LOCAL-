@@ -1,7 +1,7 @@
 // Rutas de clientes y créditos: directorio, deudas y abonos
 const express = require('express');
 const { prisma } = require('../db');
-const { parsearCreditoSplit } = require('../servicios/dinero');
+const { consumidoPorCliente } = require('../servicios/creditos');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { abono, clienteEdicion, clienteNuevo } = require('../../shared/esquemas/clientes.js');
@@ -25,31 +25,8 @@ router.get('/api/clientes', requierePermiso('Caja', 'Creditos', 'Reportes'), asy
       include: { AbonosCredito: { select: { monto: true } } },
     });
 
-    // Obtener todas las ventas con crédito o split de crédito
-    const ventasCredito = await prisma.venta.findMany({
-      where: {
-        OR: [
-          { clienteCreditoId: { not: null } },
-          { metodoPago: 'Crédito' },
-          { ofertaDescripcion: { contains: '[CREDITO_SPLIT:' } }
-        ],
-        anulado: false
-      },
-      select: { clienteCreditoId: true, montoCredito: true, total: true, ofertaDescripcion: true, metodoPago: true },
-    });
-
-    const consumoPorCliente = {};
-    ventasCredito.forEach(v => {
-      const splits = parsearCreditoSplit(v.ofertaDescripcion, v.clienteCreditoId, (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0)));
-      if (splits.length > 0) {
-        splits.forEach(s => {
-          consumoPorCliente[s.clienteId] = (consumoPorCliente[s.clienteId] || 0) + s.monto;
-        });
-      } else if (v.clienteCreditoId) {
-        const monto = v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0);
-        consumoPorCliente[v.clienteCreditoId] = (consumoPorCliente[v.clienteCreditoId] || 0) + monto;
-      }
-    });
+    // Lo cargado a crédito a cada cliente (ventas no anuladas)
+    const consumoPorCliente = await consumidoPorCliente(clientes.map((c) => c.id));
 
     const formateados = clientes.map(c => {
       const totalConsumido = Math.round((consumoPorCliente[c.id] || 0) * 100) / 100;
@@ -248,43 +225,20 @@ router.get('/api/clientes/:id', requierePermiso('Creditos'), async (req, res, ne
     });
     if (!cliente) return next(new ErrorApp('NO_ENCONTRADO', 'Cliente no encontrado.'));
 
-    // Buscar todas las ventas que contengan crédito para este cliente (directo o por split)
-    const ventasPosibles = await prisma.venta.findMany({
-      where: {
-        OR: [
-          { clienteCreditoId: id },
-          { ofertaDescripcion: { contains: '[CREDITO_SPLIT:' } }
-        ],
-        anulado: false
-      },
-      include: { pedido: true },
-      orderBy: { createdAt: 'desc' },
+    // Ventas (no anuladas) con una parte cargada a este cliente
+    const partes = await prisma.ventaCredito.findMany({
+      where: { clienteId: id, venta: { anulado: false } },
+      include: { venta: { include: { pedido: true } } },
+      orderBy: { venta: { createdAt: 'desc' } },
     });
-
-    const ventasCredito = [];
-    ventasPosibles.forEach(v => {
-      const splits = parsearCreditoSplit(v.ofertaDescripcion, v.clienteCreditoId, (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0)));
-      const miSplit = splits.find(s => s.clienteId === id);
-      if (miSplit) {
-        ventasCredito.push({
-          id: v.id,
-          fecha: v.createdAt.toISOString(),
-          total: v.total,
-          montoCredito: miSplit.monto,
-          estado: v.pedido?.estado || 'Pagado',
-          tipoComprobante: v.tipoComprobante,
-        });
-      } else if (v.clienteCreditoId === id && splits.length === 0) {
-        ventasCredito.push({
-          id: v.id,
-          fecha: v.createdAt.toISOString(),
-          total: v.total,
-          montoCredito: v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0),
-          estado: v.pedido?.estado || 'Pagado',
-          tipoComprobante: v.tipoComprobante,
-        });
-      }
-    });
+    const ventasCredito = partes.map(({ venta: v, monto }) => ({
+      id: v.id,
+      fecha: v.createdAt.toISOString(),
+      total: v.total,
+      montoCredito: Number(monto),
+      estado: v.pedido?.estado || 'Pagado',
+      tipoComprobante: v.tipoComprobante,
+    }));
 
     const totalConsumido = Math.round(ventasCredito.reduce((s, v) => s + v.montoCredito, 0) * 100) / 100;
     const totalAbonado = Math.round((cliente.AbonosCredito || []).reduce((s, a) => s + a.monto, 0) * 100) / 100;
@@ -324,33 +278,14 @@ router.post('/api/clientes/:id/abonar', requierePermiso('Creditos'), idempotente
     const montoNum = Math.round(parseFloat(monto) * 100) / 100;
 
     // 2. Calcular saldo adeudado del cliente para evitar saldos negativos huérfanos
-    const [ventasCliente, abonosCliente] = await Promise.all([
-      prisma.venta.findMany({
-        where: {
-          OR: [
-            { clienteCreditoId: id },
-            { ofertaDescripcion: { contains: '[CREDITO_SPLIT:' } }
-          ],
-          anulado: false
-        },
-        select: { clienteCreditoId: true, montoCredito: true, total: true, ofertaDescripcion: true, metodoPago: true }
-      }),
+    const [consumo, abonosCliente] = await Promise.all([
+      consumidoPorCliente([id]),
       prisma.abonoCredito.findMany({
         where: { clienteId: id },
         select: { monto: true }
       })
     ]);
-
-    let totalConsumido = 0;
-    ventasCliente.forEach(v => {
-      const splits = parsearCreditoSplit(v.ofertaDescripcion, v.clienteCreditoId, (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0)));
-      const miSplit = splits.find(s => s.clienteId === id);
-      if (miSplit) {
-        totalConsumido += miSplit.monto;
-      } else if (v.clienteCreditoId === id && splits.length === 0) {
-        totalConsumido += (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0));
-      }
-    });
+    const totalConsumido = consumo[id] || 0;
 
     const totalAbonado = abonosCliente.reduce((s, a) => s + a.monto, 0);
     const saldoPendiente = Math.round((totalConsumido - totalAbonado) * 100) / 100;

@@ -6,6 +6,7 @@ const { cerrarTodas: cerrarConexionesEnVivo } = require('./src/servicios/eventos
 const company = require('./config/company');
 
 const { asegurarAccesoAdministrador, migrarPinesAHash } = require('./src/servicios/auth');
+const { migrarCreditosAntiguos } = require('./src/servicios/creditos');
 
 const PORT = process.env.PORT || 3003;
 let server;
@@ -14,6 +15,10 @@ async function iniciar() {
   // Los PIN en texto plano (BD antiguas, seeds, instalador) se guardan como hash antes de atender
   const convertidos = await migrarPinesAHash();
   if (convertidos > 0) console.log(`🔐 ${convertidos} PIN(s) convertidos a hash`);
+
+  // Ventas a crédito antiguas (reparto como texto en la descripción) → tabla VentaCredito
+  const creditos = await migrarCreditosAntiguos();
+  if (creditos > 0) console.log(`💳 ${creditos} venta(s) a crédito pasadas a la tabla VentaCredito`);
 
   const acceso = await asegurarAccesoAdministrador();
   if (acceso) {

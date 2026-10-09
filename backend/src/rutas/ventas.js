@@ -2,7 +2,7 @@
 const express = require('express');
 const { las3DeLima, inicioJornadaActual } = require('../servicios/jornada');
 const { prisma } = require('../db');
-const { calcularSubtotalEIgv, limpiarCodigoPago, obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
+const { calcularSubtotalEIgv, limpiarCodigoPago, obtenerMontosVenta } = require('../servicios/dinero');
 const { ErrorApp } = require('../middlewares/errores');
 const { autorizarConPin, usuarioPorPinAutorizado } = require('../servicios/autorizacion');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
@@ -10,6 +10,7 @@ const { anulacion, cobro, correccionDatosCliente, correccionMetodoPago, correcci
 const { consultaDesde, rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
 const { requierePermiso } = require('../middlewares/permisos');
 const { registrarAuditoria } = require('../servicios/auditoria');
+const { INCLUIR_CREDITOS, creditosDeVenta, guardarCreditosVenta, limpiarDescripcion } = require('../servicios/creditos');
 const { idempotente } = require('../middlewares/idempotencia');
 
 const router = express.Router();
@@ -109,6 +110,8 @@ router.patch('/api/ventas/:ventaId/metodo-pago', requierePermiso('Caja'), valida
         clienteCreditoId: clienteCreditoId ? parseInt(clienteCreditoId) : null
       },
     });
+    // El crédito queda cargado a un solo cliente (o a ninguno si ya no es a crédito)
+    await guardarCreditosVenta(tx, actualizada.id, { clienteCreditoId, montoCredito: finalMontoCredito });
 
     await tx.pedido.update({
       where: { id: pedido.id },
@@ -701,7 +704,7 @@ router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body:
       const initEstadoSunat = 'NO_APLICA';
 
       let descAplicado = descuentoAplicado ? parseFloat(descuentoAplicado) : 0;
-      let descDescrip = ofertaDescripcion ? String(ofertaDescripcion) : null;
+      let descDescrip = limpiarDescripcion(ofertaDescripcion) || null;
       const motivoStr = motivoCortesia && String(motivoCortesia).trim() ? ` (${String(motivoCortesia).trim()})` : '';
       if (metodoPago === 'Cortesía' || metodoPago === 'Consumo') {
         descAplicado = nuevoTotalPedido;
@@ -709,12 +712,6 @@ router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body:
       } else if (itemsCortesiaDescuento > 0) {
         descAplicado += itemsCortesiaDescuento;
         descDescrip = descDescrip ? `${descDescrip} + Cortesía de ítems${motivoStr}` : `Cortesía de ítems${motivoStr}`;
-      }
-
-      // Si hay splits múltiples de crédito, anexar la etiqueta a ofertaDescripcion solo si aplica
-      if ((metodoPago === 'Crédito' || (metodoPago === 'Mixto' && finalMontoCredito > 0)) && validCreditosSplits.length > 0) {
-        const splitTag = `[CREDITO_SPLIT:${JSON.stringify(validCreditosSplits)}]`;
-        descDescrip = descDescrip ? `${descDescrip} ${splitTag}` : splitTag;
       }
 
       const ventaCreada = await tx.venta.create({
@@ -746,6 +743,11 @@ router.post('/api/ventas', requierePermiso('Caja'), idempotente, validar({ body:
           descuentoAplicado: descAplicado,
           cajeroNombre: cajeroNombre ? String(cajeroNombre).trim() : null,
         },
+      });
+
+      // A quién se le carga la parte a crédito (uno o varios clientes)
+      await guardarCreditosVenta(tx, ventaCreada.id, {
+        partes: validCreditosSplits, clienteCreditoId: finalClienteCreditoId, montoCredito: finalMontoCredito,
       });
 
       // Marcar TODOS los pedidos de la mesa como Cobrado (con la fecha de la venta, también los adicionales)
@@ -852,6 +854,7 @@ router.get('/api/ventas', requierePermiso('Caja', 'Reportes'), validar({ query: 
             mesa: true,
           },
         },
+        ...INCLUIR_CREDITOS,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -874,7 +877,7 @@ router.get('/api/ventas', requierePermiso('Caja', 'Reportes'), validar({ query: 
       clienteCreditoId: v.clienteCreditoId || null,
       ofertaDescripcion: v.ofertaDescripcion || null,
       descuentoAplicado: v.descuentoAplicado || 0,
-      creditoSplit: parsearCreditoSplit(v.ofertaDescripcion, v.clienteCreditoId, v.montoCredito || (v.metodoPago === 'Crédito' ? v.total : 0)),
+      creditoSplit: creditosDeVenta(v),
       anulado: v.anulado || v.pedido?.estado === 'Cancelado',
       motivoAnulacion: v.motivoAnulacion || v.pedido?.motivoCancela || null,
       anuladoPor: v.anuladoPor || v.pedido?.canceladoPor || null,
@@ -931,6 +934,7 @@ router.get('/api/ventas/resumen', requierePermiso('Caja', 'Dashboard'), validar(
           createdAt: { gte: filterDate },
           pedido: { estado: { not: 'Cancelado' } }
         },
+        include: { creditos: true },
       }),
       prisma.abonoCredito.findMany({
         where: {
@@ -975,7 +979,7 @@ router.get('/api/ventas/resumen', requierePermiso('Caja', 'Dashboard'), validar(
       if (v.metodoPago === 'Consumo') {
         consumoPlanilla += (v.descuentoAplicado || v.total);
       } else {
-        const splits = parsearCreditoSplit(v.ofertaDescripcion, v.clienteCreditoId, (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0)));
+        const splits = creditosDeVenta(v);
         if (splits.length > 0) {
           splits.forEach(s => {
             const esTrab = clienteMap.get(s.clienteId) || false;

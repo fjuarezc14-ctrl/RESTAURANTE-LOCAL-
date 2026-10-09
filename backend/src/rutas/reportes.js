@@ -2,7 +2,8 @@
 const express = require('express');
 const { inicioJornadaActual, inicioMesLima } = require('../servicios/jornada');
 const { prisma } = require('../db');
-const { obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
+const { obtenerMontosVenta } = require('../servicios/dinero');
+const { creditosDeVenta } = require('../servicios/creditos');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { consultaRotacion, rangoFechasOpcional } = require('../../shared/esquemas/comunes.js');
 const { requierePermiso } = require('../middlewares/permisos');
@@ -269,7 +270,8 @@ router.get('/api/reportes/contable', requierePermiso('Reportes'), validar({ quer
           createdAt: filtroFecha,
           anulado: false,
           pedido: { estado: { not: 'Cancelado' } }
-        }
+        },
+        include: { creditos: true },
       }),
       prisma.compra.findMany({ where: { creadoEn: filtroFecha } }),
       prisma.abonoCredito.findMany({ where: { creadoEn: filtroFecha } }),
@@ -309,7 +311,7 @@ router.get('/api/reportes/contable', requierePermiso('Reportes'), validar({ quer
       if (v.metodoPago === 'Consumo') {
         consumoPlanilla += (v.descuentoAplicado || v.total);
       } else {
-        const splits = parsearCreditoSplit(v.ofertaDescripcion, v.clienteCreditoId, (v.montoCredito > 0 ? v.montoCredito : (v.metodoPago === 'Crédito' ? v.total : 0)));
+        const splits = creditosDeVenta(v);
         if (splits.length > 0) {
           splits.forEach(s => {
             const esTrab = clienteMap.get(s.clienteId) || false;

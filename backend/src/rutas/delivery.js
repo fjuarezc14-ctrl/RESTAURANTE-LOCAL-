@@ -5,6 +5,7 @@ const { calcularSubtotalEIgv, limpiarCodigoPago, verificarPagoMixto } = require(
 const { esCortesia, expandPedidoItemsForDb } = require('../servicios/pedidos');
 const { autorizarConPin } = require('../servicios/autorizacion');
 const { registrarAuditoria } = require('../servicios/auditoria');
+const { guardarCreditosVenta, limpiarDescripcion } = require('../servicios/creditos');
 const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { pedidoLlevar } = require('../../shared/esquemas/pedidos.js');
@@ -183,7 +184,7 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), idempotente, validar
           numero: null,
           cajeroNombre: cajero ? String(cajero).trim() : null,
           descuentoAplicado: descuentoFinal,
-          ofertaDescripcion: (() => {
+          ofertaDescripcion: limpiarDescripcion((() => {
             const motivoStr = motivoCortesia && String(motivoCortesia).trim() ? ` (${String(motivoCortesia).trim()})` : '';
             if (finalMetodoPago === 'Cortesía') {
               return `Cortesía total${motivoStr}`;
@@ -193,9 +194,10 @@ router.post('/api/pedidos/llevar', requierePermiso('Caja'), idempotente, validar
               return `Cortesía de ítems${motivoStr}`;
             }
             return descuentoFinal > 0 ? (descuentoDescripcion || `Descuento manual ${descPct}%`) : null;
-          })(),
+          })()),
         },
       });
+      await guardarCreditosVenta(tx, ventaCreada.id, { clienteCreditoId, montoCredito: finalMontoCredito });
 
       if (autorizadoPor) {
         await registrarAuditoria(tx, req, {
@@ -442,9 +444,13 @@ router.put('/api/pedidos/llevar/:id', requierePermiso('Caja'), validar({ body: p
           // Al modificar un pedido sin reescribir el código, se conserva el que ya tenía
           codigoPago: limpiarCodigoPago(codigoPago, finalMetodoPago, finalMontoTarjeta, finalMontoYape) ?? undefined,
           descuentoAplicado: descuentoFinal,
-          ofertaDescripcion: descuentoFinal > 0 ? (descuentoDescripcion || `Descuento manual ${descPct}%`) : null
+          ofertaDescripcion: limpiarDescripcion(descuentoFinal > 0 ? (descuentoDescripcion || `Descuento manual ${descPct}%`) : null)
         }
       });
+      const ventaDelPedido = await tx.venta.findFirst({ where: { pedidoId: id }, select: { id: true } });
+      if (ventaDelPedido) {
+        await guardarCreditosVenta(tx, ventaDelPedido.id, { clienteCreditoId, montoCredito: finalMontoCredito });
+      }
     });
 
     const venta = await prisma.venta.findFirst({
