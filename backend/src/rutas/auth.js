@@ -38,16 +38,14 @@ router.get('/api/auth/marca', async (req, res, next) => {
   }
 });
 
-// POST /api/auth/activar → usuario o correo + contraseña: registra el dispositivo y abre la sesión
+// POST /api/auth/activar → usuario + contraseña de un Administrador: registra el dispositivo y abre la sesión
 router.post('/api/auth/activar', limitadorActivacion.middleware, validar({ body: activacion }), async (req, res, next) => {
   try {
     const { usuario, contrasena, nombreDispositivo } = req.body;
     const identificador = usuario.toLowerCase();
+    // Solo un administrador activa equipos; el resto del personal entra con su PIN en un equipo ya activado
     const user = await prisma.usuario.findFirst({
-      where: {
-        activo: true,
-        OR: [{ usuario: { equals: identificador, mode: 'insensitive' } }, { correo: { equals: identificador, mode: 'insensitive' } }],
-      },
+      where: { activo: true, rol: 'Administrador', usuario: { equals: identificador, mode: 'insensitive' } },
     });
     const valida = Boolean(user?.contrasenaHash) && await bcrypt.compare(contrasena, user.contrasenaHash);
     if (!valida) {

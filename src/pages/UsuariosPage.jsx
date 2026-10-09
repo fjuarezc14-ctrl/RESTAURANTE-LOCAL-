@@ -55,7 +55,7 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
 
   const abrirModalNuevo = () => {
     setEditingUser(null);
-    setNewUser({ nombre: '', rol: '', pin: '', permisos: [], usuario: '', correo: '', contrasena: '', inactividadMin: '' });
+    setNewUser({ nombre: '', rol: '', pin: '', permisos: [], usuario: '', contrasena: '', inactividadMin: '' });
     setModalOpen(true);
   };
 
@@ -67,7 +67,6 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
       pin: '',
       permisos: u.rol === 'Administrador' ? [...TODOS_LOS_PERMISOS] : (u.permisos || []),
       usuario: u.usuario || '',
-      correo: u.correo || '',
       contrasena: '',
       inactividadMin: u.inactividadMin ?? '',
     });
@@ -102,9 +101,9 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
       permisos: newUser.rol === 'Administrador' ? [...TODOS_LOS_PERMISOS] : newUser.permisos,
     };
     if (editingUser && !datos.pin) delete datos.pin;
-    if (!datos.usuario?.trim()) delete datos.usuario;
-    if (!datos.correo?.trim()) delete datos.correo;
-    if (!datos.contrasena?.trim()) delete datos.contrasena;
+    // Usuario y contraseña (para activar equipos) son solo del administrador
+    if (datos.rol !== 'Administrador' || !datos.usuario?.trim()) delete datos.usuario;
+    if (datos.rol !== 'Administrador' || !datos.contrasena?.trim()) delete datos.contrasena;
     // Vacío = sin límite: al editar se envía null para quitar el límite que tuviera
     if (String(datos.inactividadMin ?? '').trim() === '') {
       if (editingUser) datos.inactividadMin = null; else delete datos.inactividadMin;
@@ -343,47 +342,40 @@ export default function UsuariosPage({ currentUser: currentUserProp }) {
                 />
               </div>
 
-              {/* Acceso para vincular dispositivos (usuario, correo, contraseña) */}
+              {/* Usuario y contraseña para activar equipos: solo el administrador */}
               <div className="border-t border-slate-100 pt-4">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-xs font-black text-slate-800 uppercase tracking-wide">Acceso para Vincular Equipos</span>
-                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Opcional</span>
-                </div>
-                <p className="text-xs text-slate-500 mb-3">
-                  Permite activar tablets y PCs con este usuario y contraseña (recomendado para administradores).
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Usuario</label>
-                    <input 
-                      type="text"
-                      value={newUser.usuario || ''}
-                      onChange={e => setNewUser({ ...newUser, usuario: e.target.value })}
-                      placeholder="ej. admin"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Correo</label>
-                    <input 
-                      type="email"
-                      value={newUser.correo || ''}
-                      onChange={e => setNewUser({ ...newUser, correo: e.target.value })}
-                      placeholder="ej. admin@local.pe"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Contraseña</label>
-                    <input 
-                      type="password"
-                      value={newUser.contrasena || ''}
-                      onChange={e => setNewUser({ ...newUser, contrasena: e.target.value })}
-                      placeholder={editingUser ? 'Sin cambios' : 'Mínimo 8 caracteres'}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                </div>
+                {newUser.rol === 'Administrador' && (
+                  <>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-xs font-black text-slate-800 uppercase tracking-wide">Acceso para Vincular Equipos</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-3">
+                      Con este usuario y contraseña el administrador activa las tablets, celulares y PCs del restaurante.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">Usuario</label>
+                        <input
+                          type="text"
+                          value={newUser.usuario || ''}
+                          onChange={e => setNewUser({ ...newUser, usuario: e.target.value })}
+                          placeholder="ej. admin"
+                          className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">Contraseña</label>
+                        <input
+                          type="password"
+                          value={newUser.contrasena || ''}
+                          onChange={e => setNewUser({ ...newUser, contrasena: e.target.value })}
+                          placeholder={editingUser ? 'Sin cambios' : 'Mínimo 8 caracteres'}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <label htmlFor="inactividadMin" className="text-[11px] font-bold text-slate-600">Cerrar su sesión tras</label>
                   <input

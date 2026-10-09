@@ -72,7 +72,7 @@ describe('rutas antiguas del login por PIN', () => {
     expect((await nav[metodo](ruta).send({ pin: PIN_ADMIN })).status).toBe(404);
   });
 
-  it('la lista de usuarios pide sesión y solo muestra usuario y correo a quien administra el personal', async () => {
+  it('la lista de usuarios pide sesión y solo muestra el usuario de acceso a quien administra el personal', async () => {
     esperarError(await api().get('/api/usuarios'), 401, 'NO_AUTENTICADO');
     expect((await nav.get('/api/usuarios')).body.find((u) => u.rol === 'Administrador')).toHaveProperty('usuario', 'admin');
 
@@ -82,7 +82,6 @@ describe('rutas antiguas del login por PIN', () => {
     expect(vistaMozo.length).toBeGreaterThan(0);
     for (const u of vistaMozo) {
       expect(u).not.toHaveProperty('usuario');
-      expect(u).not.toHaveProperty('correo');
     }
   });
 });

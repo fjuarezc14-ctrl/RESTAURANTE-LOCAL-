@@ -74,8 +74,8 @@ async function restablecerContrasenaAdmin(identificador, contrasenaNueva) {
 // Lo único que la API devuelve de un usuario: nunca el PIN ni los hashes
 function usuarioPublico(u) {
   if (!u) return u;
-  const { id, nombre, rol, permisos, activo, creadoEn, usuario, correo, inactividadMin } = u;
-  return { id, nombre, rol, permisos, activo, creadoEn, usuario, correo, inactividadMin };
+  const { id, nombre, rol, permisos, activo, creadoEn, usuario, inactividadMin } = u;
+  return { id, nombre, rol, permisos, activo, creadoEn, usuario, inactividadMin };
 }
 
 module.exports = {

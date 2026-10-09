@@ -1,4 +1,4 @@
-// Activación del equipo con usuario o correo y contraseña
+// Activación del equipo con el usuario y la contraseña del administrador
 import { Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import logoUrl from '../../assets/logo.png';
@@ -23,7 +23,7 @@ export const ActivarDispositivoGate = ({ onLoginSuccess, onVolverPin, aviso }) =
   const handleSubmit = async (e) => {
     e?.preventDefault();
     if (!usuario.trim()) {
-      setError('Ingresa tu usuario o correo.');
+      setError('Ingresa tu usuario.');
       return;
     }
     if (!contrasena) {
@@ -101,14 +101,14 @@ export const ActivarDispositivoGate = ({ onLoginSuccess, onVolverPin, aviso }) =
           <form onSubmit={handleSubmit} className="space-y-3.5">
             <div>
               <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">
-                Usuario o Correo
+                Usuario
               </label>
               <input
                 type="text"
                 autoComplete="username"
                 value={usuario}
                 onChange={(e) => { setUsuario(e.target.value); setError(''); }}
-                placeholder="ej. admin o correo@empresa.com"
+                placeholder="ej. admin"
                 className="w-full bg-slate-800/90 border border-slate-700 focus:border-cyan-400 text-white text-sm rounded-xl px-3.5 py-2.5 outline-none transition-all placeholder:text-slate-500"
               />
             </div>

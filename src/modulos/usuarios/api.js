@@ -4,7 +4,7 @@ import { conMemoria, invalidarMemorias, yLuegoInvalidar } from '../../utils/cach
 
 // La lista del personal se comparte entre pantallas (Salón, Caja, Créditos…)
 const usuarios = conMemoria(() => apiRequest('/api/usuarios'), ['usuarios']);
-// Al entrar o salir cambia quién ve qué (ej. el correo del personal): se descarta todo lo guardado
+// Al entrar o salir cambia quién ve qué (ej. el usuario de acceso del personal): se descarta todo lo guardado
 const yLuegoOlvidar = (llamar) => async (...args) => {
   const res = await llamar(...args);
   invalidarMemorias();

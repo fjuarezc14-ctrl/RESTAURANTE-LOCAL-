@@ -20,7 +20,7 @@ async function main() {
     const admins = await prisma.usuario.findMany({
       where: { rol: 'Administrador', activo: true },
       orderBy: { id: 'asc' },
-      select: { id: true, nombre: true, usuario: true, correo: true, contrasenaHash: true },
+      select: { id: true, nombre: true, usuario: true, contrasenaHash: true },
     });
     if (admins.length === 0) return console.log('No hay administradores activos.');
     console.log('Administradores activos:\n');

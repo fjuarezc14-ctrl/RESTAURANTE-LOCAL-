@@ -26,7 +26,7 @@ beforeEach(async () => {
   await limpiarBD();
   await crearBase();
   admin = await prisma.usuario.findFirst({ where: { rol: 'Administrador' } });
-  await api().put(`/api/usuarios/${admin.id}`).send({ usuario: 'admin', correo: 'admin@restaurante.pe', contrasena: CONTRASENA });
+  await api().put(`/api/usuarios/${admin.id}`).send({ usuario: 'admin', contrasena: CONTRASENA });
   await api().post('/api/usuarios').send({ nombre: 'Mario Mozo', rol: 'Mozo', pin: PIN_MOZO, permisos: ['Salon'] });
 });
 
@@ -52,8 +52,14 @@ describe('activación del dispositivo', () => {
     expect((await nav.get('/api/auth/yo')).body).toMatchObject({ usuario: { id: admin.id }, dispositivo: { nombre: 'Tablet caja' } });
   });
 
-  it('también acepta el correo, sin importar mayúsculas', async () => {
-    expect((await activar(navegador(), { usuario: 'ADMIN@Restaurante.pe' })).status).toBe(200);
+  it('acepta el usuario sin importar mayúsculas', async () => {
+    expect((await activar(navegador(), { usuario: 'ADMIN' })).status).toBe(200);
+  });
+
+  it('solo un administrador activa equipos, aunque otro usuario tenga contraseña', async () => {
+    const cajera = await prisma.usuario.findFirst({ where: { rol: 'Cajero' } });
+    await api().put(`/api/usuarios/${cajera.id}`).send({ usuario: 'carla', contrasena: CONTRASENA });
+    esperarError(await activar(navegador(), { usuario: 'carla' }), 401, 'CREDENCIALES_INCORRECTAS', 'contrasena');
   });
 
   it('en la BD se guarda el hash del token, nunca el token', async () => {
@@ -189,7 +195,7 @@ describe('autorizar y contraseña', () => {
 
 describe('acceso inicial del administrador', () => {
   it('si ningún administrador tiene contraseña, el primero recibe el usuario "admin" y una contraseña', async () => {
-    await prisma.usuario.updateMany({ data: { usuario: null, correo: null, contrasenaHash: null } });
+    await prisma.usuario.updateMany({ data: { usuario: null, contrasenaHash: null } });
     const acceso = await asegurarAccesoAdministrador();
     expect(acceso).toMatchObject({ usuario: 'admin', generada: true });
     expect((await activar(navegador(), { contrasena: acceso.contrasena })).status).toBe(200);

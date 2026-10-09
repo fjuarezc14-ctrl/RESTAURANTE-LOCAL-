@@ -19,8 +19,8 @@ validarIdsEnUrl(router);
 // USUARIOS
 // ============================================================
 
-// Lista del personal (selector de mozos, cajeros…). Siempre con sesión; el usuario y el correo de acceso
-// solo los ve quien administra el personal
+// Lista del personal (selector de mozos, cajeros…). Siempre con sesión; el usuario de acceso
+// solo lo ve quien administra el personal
 router.get('/api/usuarios', requiereSesion, async (req, res, next) => {
   try {
     const usuarios = await prisma.usuario.findMany({ where: { activo: true } });
@@ -28,7 +28,7 @@ router.get('/api/usuarios', requiereSesion, async (req, res, next) => {
     res.json(usuarios.map((u) => {
       const publico = usuarioPublico(u);
       if (veAccesos) return publico;
-      const { usuario, correo, ...resto } = publico;
+      const { usuario, ...resto } = publico;
       return resto;
     }));
   } catch (err) {
@@ -36,18 +36,17 @@ router.get('/api/usuarios', requiereSesion, async (req, res, next) => {
   }
 });
 
-// Usuario, correo, contraseña e inactividad: solo se tocan si llegan (null los borra)
+// Usuario, contraseña e inactividad: solo se tocan si llegan (null los borra)
 async function datosDeAcceso(body) {
   const data = {};
   if (body.usuario !== undefined) data.usuario = body.usuario;
-  if (body.correo !== undefined) data.correo = body.correo;
   if (body.inactividadMin !== undefined) data.inactividadMin = body.inactividadMin;
   if (body.contrasena) data.contrasenaHash = await bcrypt.hash(body.contrasena, 10);
   return data;
 }
 
 // Lo que se guarda de un usuario en la auditoría: nunca el PIN ni la contraseña
-const CAMPOS_AUDITADOS = ['nombre', 'rol', 'permisos', 'activo', 'usuario', 'correo', 'inactividadMin'];
+const CAMPOS_AUDITADOS = ['nombre', 'rol', 'permisos', 'activo', 'usuario', 'inactividadMin'];
 const resumenUsuario = (u) => Object.fromEntries(CAMPOS_AUDITADOS.map((c) => [c, u[c] ?? null]));
 function cambiosDeUsuario(antes, despues) {
   const a = resumenUsuario(antes);

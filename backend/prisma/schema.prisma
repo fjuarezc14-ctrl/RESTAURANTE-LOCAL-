@@ -23,9 +23,8 @@ model Usuario {
   activo   Boolean  @default(true)
   creadoEn DateTime @default(now())
 
-  // Activación de dispositivos (usuario o correo + contraseña)
+  // Activación de dispositivos: usuario + contraseña (solo administradores)
   usuario        String? @unique
-  correo         String? @unique
   contrasenaHash String? // bcrypt
   inactividadMin Int? // minutos sin actividad para cerrar la sesión; null = sin límite
 
