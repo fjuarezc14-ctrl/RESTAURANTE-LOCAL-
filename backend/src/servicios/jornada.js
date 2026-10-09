@@ -20,4 +20,16 @@ function inicioJornadaActual(ahora = new Date()) {
   return las3DeLima(madrugada ? 1 : 0, ahora);
 }
 
-module.exports = { las3DeLima, inicioJornadaActual };
+/** Día 1 del mes en curso de Lima, a la `hora` de Lima (0 = medianoche, 3 = inicio de la jornada) */
+function inicioMesLima(hora = 0, ahora = new Date()) {
+  const lima = new Date(ahora.getTime() - DESFASE_LIMA_MS);
+  return new Date(Date.UTC(lima.getUTCFullYear(), lima.getUTCMonth(), 1, hora) + DESFASE_LIMA_MS);
+}
+
+/** Día 1 del mes en curso de Lima a las 00:00 UTC: para fechas de calendario que se filtran por día UTC */
+function inicioMesCalendario(ahora = new Date()) {
+  const lima = new Date(ahora.getTime() - DESFASE_LIMA_MS);
+  return new Date(Date.UTC(lima.getUTCFullYear(), lima.getUTCMonth(), 1));
+}
+
+module.exports = { las3DeLima, inicioJornadaActual, inicioMesLima, inicioMesCalendario };

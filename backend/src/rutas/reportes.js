@@ -1,6 +1,6 @@
 // Rutas de reportes
 const express = require('express');
-const { inicioJornadaActual } = require('../servicios/jornada');
+const { inicioJornadaActual, inicioMesLima } = require('../servicios/jornada');
 const { prisma } = require('../db');
 const { obtenerMontosVenta, parsearCreditoSplit } = require('../servicios/dinero');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
@@ -70,7 +70,7 @@ router.get('/api/reportes/cancelaciones', requierePermiso('Reportes'), validar({
         hora: fechaIncidencia ? new Date(fechaIncidencia).toLocaleTimeString('es-PE', {
           hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima',
         }) : '--:--',
-        fecha: fechaIncidencia ? new Date(fechaIncidencia).toLocaleDateString('es-PE') : '--/--/----',
+        fecha: fechaIncidencia ? new Date(fechaIncidencia).toLocaleDateString('es-PE', { timeZone: 'America/Lima' }) : '--/--/----',
         fechaRaw: fechaIncidencia,
         mesa: p.mesa?.numero || null,
         codigoPedidosYa: p.codigoPedidosYa,
@@ -105,7 +105,7 @@ router.get('/api/reportes/cancelaciones', requierePermiso('Reportes'), validar({
       ventaId: null,
       tipo: 'Plato Cancelado',
       hora: c.creadoEn.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' }),
-      fecha: c.creadoEn.toLocaleDateString('es-PE'),
+      fecha: c.creadoEn.toLocaleDateString('es-PE', { timeZone: 'America/Lima' }),
       fechaRaw: c.creadoEn,
       mesa: pedidosDePlatos.get(c.pedidoId)?.mesa?.numero || null,
       codigoPedidosYa: pedidosDePlatos.get(c.pedidoId)?.codigoPedidosYa || c.codigoPedidosYa || null,
@@ -260,9 +260,7 @@ router.get('/api/reportes/contable', requierePermiso('Reportes'), validar({ quer
         lte: new Date(nextDayStr + 'T02:59:59.999-05:00')
       };
     } else {
-      const ahora = new Date();
-      const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
-      filtroFecha = { gte: inicioMes };
+      filtroFecha = { gte: inicioMesLima(3) }; // desde la primera jornada del mes de Lima
     }
 
     const [ventas, compras, abonos, clientes] = await Promise.all([

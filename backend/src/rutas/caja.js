@@ -241,7 +241,7 @@ router.post('/api/caja/apertura', requierePermiso('Caja'), idempotente, validar(
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('apertura_caja'))`;
       const turnoExistente = await tx.cierreCaja.findFirst({ where: { estado: 'ABIERTO' } });
       if (turnoExistente) {
-        throw new ErrorApp('CAJA_YA_ABIERTA', `Ya existe un turno abierto por "${turnoExistente.cajeroNombre}" desde las ${new Date(turnoExistente.fechaApertura).toLocaleTimeString('es-PE')}. Debe cerrarse antes de abrir uno nuevo.`);
+        throw new ErrorApp('CAJA_YA_ABIERTA', `Ya existe un turno abierto por "${turnoExistente.cajeroNombre}" desde las ${new Date(turnoExistente.fechaApertura).toLocaleTimeString('es-PE', { timeZone: 'America/Lima' })}. Debe cerrarse antes de abrir uno nuevo.`);
       }
       const turno = await tx.cierreCaja.create({
       data: {

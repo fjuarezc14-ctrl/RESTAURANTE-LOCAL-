@@ -5,6 +5,7 @@ const { ErrorApp } = require('../middlewares/errores');
 const { validar, validarIdsEnUrl } = require('../middlewares/validar');
 const { categoriaCompra, compraEdicion, compraNueva, consultaCompras, sincronizacionSunat } = require('../../shared/esquemas/compras.js');
 const { requierePermiso } = require('../middlewares/permisos');
+const { inicioMesCalendario, inicioMesLima } = require('../servicios/jornada');
 
 const router = express.Router();
 validarIdsEnUrl(router);
@@ -36,10 +37,9 @@ router.get('/api/compras', requierePermiso('Compras', 'Caja', 'Reportes'), valid
       filtroEmision = { gte: new Date(`${d}T00:00:00.000Z`), ...(h ? { lt: new Date(`${h}T00:00:00.000Z`) } : {}) };
       filtroRegistro = { gte: new Date(`${d}T00:00:00.000-05:00`), ...(h ? { lt: new Date(`${h}T00:00:00.000-05:00`) } : {}) };
     } else {
-      const ahora = new Date();
-      const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
-      filtroEmision = { gte: inicioMes };
-      filtroRegistro = { gte: inicioMes };
+      // Mes en curso de Lima (no el del servidor, que en Docker está en UTC)
+      filtroEmision = { gte: inicioMesCalendario() };
+      filtroRegistro = { gte: inicioMesLima() };
     }
 
     conditions.push({
@@ -84,13 +84,11 @@ router.get('/api/compras', requierePermiso('Compras', 'Caja', 'Reportes'), valid
 // GET /api/compras/stats → KPIs del mes actual
 router.get('/api/compras/stats', requierePermiso('Compras'), async (req, res, next) => {
   try {
-    const ahora = new Date();
-    const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
     const compras = await prisma.compra.findMany({
       where: {
         OR: [
-          { fechaEmision: { gte: inicioMes } },
-          { fechaEmision: null, fecha: { gte: inicioMes } },
+          { fechaEmision: { gte: inicioMesCalendario() } },
+          { fechaEmision: null, fecha: { gte: inicioMesLima() } },
         ]
       },
     });
