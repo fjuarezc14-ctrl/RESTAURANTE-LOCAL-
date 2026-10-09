@@ -40,14 +40,17 @@ export const ModalCompartirDireccion = ({ onClose }) => {
     setTimeout(() => setCopiado(''), 2000);
   };
 
-  // Si la app ya se abrió con una IP/host de la red, esa dirección es la correcta.
-  // El puerto es el de la app abierta (en desarrollo difiere del backend).
+  // Si la app ya se abrió con una IP/host de la red (o un dominio, ej. un túnel https), esa dirección
+  // es la correcta tal cual, sin agregarle puerto. Para las IPs de la PC, el puerto es el de la app
+  // abierta (en desarrollo difiere del backend); si la página no tiene puerto, el del backend por http.
   const hostActual = window.location.hostname;
   const esLocal = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostActual);
   const puerto = window.location.port || datos?.puerto;
-  const aUrl = (host) => `${window.location.protocol}//${host}${puerto ? `:${puerto}` : ''}`;
+  const aUrl = (host) => window.location.port
+    ? `${window.location.protocol}//${host}:${window.location.port}`
+    : `http://${host}${puerto ? `:${puerto}` : ''}`;
   const ipsDetectadas = datos?.ips || (datos?.urls || []).map(u => ({ ip: new URL(u).hostname, virtual: false }));
-  const principal = datos ? (!esLocal ? aUrl(hostActual) : (ipsDetectadas[0] ? aUrl(ipsDetectadas[0].ip) : null)) : null;
+  const principal = datos ? (!esLocal ? window.location.origin : (ipsDetectadas[0] ? aUrl(ipsDetectadas[0].ip) : null)) : null;
   const otras = ipsDetectadas
     .map(i => ({ ...i, url: aUrl(i.ip) }))
     .filter(i => i.url !== principal);
